@@ -619,6 +619,37 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("rejects multiline dependency reasons before writing", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.addDep("cert-cleanup", {
+            type: "blocked-by",
+            id: "lease-core-t4",
+            reason: "waits\n- [ ] injected-q1 - bad",
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await expect(
+          b.store.create({
+            id: "new-q1",
+            title: "bad dep reason",
+            deps: [
+              {
+                type: "blocked-by",
+                id: "lease-core-t4",
+                reason: "waits\r- [ ] injected-q1 - bad",
+              },
+            ],
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("injected-q1");
+        expect(b.read()).not.toContain("new-q1");
+        expect(b.read()).not.toContain("waits");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects self-dependencies before writing", async () => {
       const b = makeBacklog();
       try {
