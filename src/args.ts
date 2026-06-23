@@ -157,6 +157,39 @@ export function getPositional(
   return undefined;
 }
 
+export function requireNoUnknownFlags(args: string[]): void {
+  const unknown = args.find((arg) => arg.startsWith("-"));
+  if (!unknown) return;
+  throw new AxiError(`Unknown flag: ${unknown}`, "VALIDATION_ERROR", [
+    "Run the command with --help to see supported flags",
+  ]);
+}
+
+export function requirePositionals(
+  args: string[],
+  min: number,
+  max: number,
+  usage: string,
+): string[] {
+  requireNoUnknownFlags(args);
+  const positionals = args.filter((arg) => !arg.startsWith("-"));
+  if (positionals.length >= min && positionals.length <= max) {
+    return positionals;
+  }
+
+  const expected =
+    min === max
+      ? min === 0
+        ? "no positional arguments"
+        : `${min} positional argument${min === 1 ? "" : "s"}`
+      : `${min}-${max} positional arguments`;
+  throw new AxiError(
+    `Expected ${expected}, got ${positionals.length}`,
+    "VALIDATION_ERROR",
+    [usage],
+  );
+}
+
 /** Require a positional id argument, throwing a structured error if missing. */
 export function requireId(raw: string | undefined, label = "id"): string {
   if (!raw || raw.trim() === "") {

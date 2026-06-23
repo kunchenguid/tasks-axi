@@ -2,9 +2,8 @@ import { isAbsolute, resolve } from "node:path";
 import { existsSync, statSync } from "node:fs";
 import { MarkdownStore } from "../backends/markdown.js";
 import {
-  getFlag,
-  getPositional,
   parseNonNegativeIntegerFlag,
+  requirePositionals,
   requireId,
   takeBoolFlag,
   takeFlag,
@@ -57,7 +56,13 @@ export async function startCommand(
   context?: TasksContext,
 ): Promise<string> {
   const { store } = requireCtx(context);
-  const id = requireId(getPositional([...rawArgs], 0), "id");
+  const positionals = requirePositionals(
+    [...rawArgs],
+    1,
+    1,
+    START_HELP.split("\n")[0],
+  );
+  const id = requireId(positionals[0], "id");
 
   const current = await store.get(id);
   if (!current) throw notFound(id);
@@ -94,7 +99,8 @@ export async function doneCommand(
   const note = takeFlag(args, "--note");
   const keepRaw = takeFlag(args, "--keep");
   const noPrune = takeBoolFlag(args, "--no-prune");
-  const id = requireId(getPositional(args, 0), "id");
+  const positionals = requirePositionals(args, 1, 1, DONE_HELP.split("\n")[0]);
+  const id = requireId(positionals[0], "id");
   const keep = parseNonNegativeIntegerFlag("--keep", keepRaw, config.doneKeep);
 
   const current = await store.get(id);
@@ -142,7 +148,13 @@ export async function reopenCommand(
   context?: TasksContext,
 ): Promise<string> {
   const { store } = requireCtx(context);
-  const id = requireId(getPositional([...rawArgs], 0), "id");
+  const positionals = requirePositionals(
+    [...rawArgs],
+    1,
+    1,
+    REOPEN_HELP.split("\n")[0],
+  );
+  const id = requireId(positionals[0], "id");
 
   const current = await store.get(id);
   if (!current) throw notFound(id);
@@ -184,7 +196,8 @@ export async function blockCommand(
   const { store } = requireCtx(context);
   const args = [...rawArgs];
   const by = requireBy(args);
-  const id = requireId(getPositional(args, 0), "id");
+  const positionals = requirePositionals(args, 1, 1, BLOCK_HELP.split("\n")[0]);
+  const id = requireId(positionals[0], "id");
 
   if (!(await store.get(id))) throw notFound(id);
   const dep: Dep = { type: "blocked-by", id: by };
@@ -209,7 +222,13 @@ export async function unblockCommand(
   const { store } = requireCtx(context);
   const args = [...rawArgs];
   const by = requireBy(args);
-  const id = requireId(getPositional(args, 0), "id");
+  const positionals = requirePositionals(
+    args,
+    1,
+    1,
+    UNBLOCK_HELP.split("\n")[0],
+  );
+  const id = requireId(positionals[0], "id");
 
   if (!(await store.get(id))) throw notFound(id);
   const removed = await store.removeDep(id, { type: "blocked-by", id: by });
@@ -232,7 +251,8 @@ export async function readyCommand(
 ): Promise<string> {
   const { store } = requireCtx(context);
   const args = [...rawArgs];
-  const repo = getFlag(args, "--repo");
+  const repo = takeFlag(args, "--repo");
+  requirePositionals(args, 0, 0, READY_HELP.split("\n")[0]);
 
   const all = (await store.list({})).items;
   let items = readyTasks(all);
@@ -292,7 +312,8 @@ export async function mvCommand(
       "Name the destination backlog, e.g. `--to ../other/data/backlog.md`",
     ]);
   }
-  const id = requireId(getPositional(args, 0), "id");
+  const positionals = requirePositionals(args, 1, 1, MV_HELP.split("\n")[0]);
+  const id = requireId(positionals[0], "id");
 
   if (!(await store.get(id))) throw notFound(id);
 

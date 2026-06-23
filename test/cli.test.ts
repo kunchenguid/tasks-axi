@@ -76,6 +76,17 @@ describe("CLI entrypoint", () => {
     expect(readFileSync(path, "utf8")).toMatch(/\*\*cert-cleanup\*\*/);
   });
 
+  it("rejects unknown mutation flags instead of shifting positionals", async () => {
+    const c = capture();
+    await main({
+      argv: ["add", "--repoo", "demo", "real-id", "title"],
+      stdout: c.stdout,
+    });
+    expect(c.read()).toContain("Unknown flag: --repoo");
+    expect(process.exitCode).toBe(2);
+    expect(readFileSync(path, "utf8")).not.toContain("- [ ] demo - real-id");
+  });
+
   it("accepts a global --file after the command", async () => {
     const other = join(dir, "other.md");
     writeFileSync(other, "# Backlog\n\n## Queued\n- [ ] solo-q1 - just me\n");

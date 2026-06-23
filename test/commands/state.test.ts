@@ -36,6 +36,18 @@ describe("state commands", () => {
         b.cleanup();
       }
     });
+
+    it("rejects extra positional arguments before mutating", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          startCommand(["cert-cleanup", "extra"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toContain("- [ ] cert-cleanup");
+      } finally {
+        b.cleanup();
+      }
+    });
   });
 
   describe("done", () => {
@@ -80,6 +92,18 @@ describe("state commands", () => {
       }
     });
 
+    it("rejects unknown flags before closing the task", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          doneCommand(["cert-cleanup", "--prr", "url"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toContain("- [ ] cert-cleanup");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects negative keep before closing the task", async () => {
       const b = makeBacklog();
       try {
@@ -110,6 +134,18 @@ describe("state commands", () => {
       try {
         const out = await reopenCommand(["lease-core-t4"], b.ctx);
         expect(out).toContain("state: queued");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects extra positional arguments before mutating", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          reopenCommand(["lease-core-t4", "extra"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toContain("- [x] lease-core-t4");
       } finally {
         b.cleanup();
       }
@@ -169,6 +205,18 @@ describe("state commands", () => {
         b.cleanup();
       }
     });
+
+    it("rejects extra positional arguments before changing dependencies", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          blockCommand(["cert-cleanup", "extra", "--by", "owns-widget-h7"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("blocked-by: owns-widget-h7");
+      } finally {
+        b.cleanup();
+      }
+    });
   });
 
   describe("ready", () => {
@@ -189,6 +237,17 @@ describe("state commands", () => {
       try {
         const out = await readyCommand([], b.ctx);
         expect(out).toContain("ready: 0 unblocked queued tasks");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects unknown flags", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          readyCommand(["--repoo", "demo"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
       } finally {
         b.cleanup();
       }
@@ -290,6 +349,21 @@ describe("state commands", () => {
         });
       } finally {
         b.cleanup();
+      }
+    });
+
+    it("rejects extra positional arguments before moving", async () => {
+      const b = makeBacklog();
+      const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      try {
+        await expect(
+          mvCommand(["cert-cleanup", "extra", "--to", target.path], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toContain("cert-cleanup");
+        expect(readFileSync(target.path, "utf8")).not.toContain("cert-cleanup");
+      } finally {
+        b.cleanup();
+        target.cleanup();
       }
     });
   });

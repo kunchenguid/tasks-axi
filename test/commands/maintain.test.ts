@@ -51,6 +51,18 @@ describe("maintenance commands", () => {
         b.cleanup();
       }
     });
+
+    it("rejects unknown flags before pruning", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          pruneCommand(["--keeep", "2"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.archive()).toBe("");
+      } finally {
+        b.cleanup();
+      }
+    });
   });
 
   describe("render", () => {
@@ -59,6 +71,17 @@ describe("maintenance commands", () => {
       try {
         const out = await renderCommand([], b.ctx);
         expect(out).toMatch(/normalized: \d+/);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects extra arguments before rendering", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          renderCommand(["extra"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
       } finally {
         b.cleanup();
       }

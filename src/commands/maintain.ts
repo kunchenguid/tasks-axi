@@ -1,6 +1,7 @@
 import {
   parseNonNegativeIntegerFlag,
   parseStateFlag,
+  requirePositionals,
   takeFlag,
 } from "../args.js";
 import { requireCtx, type TasksContext } from "../context.js";
@@ -34,6 +35,7 @@ export async function pruneCommand(
   const keepRaw = takeFlag(args, "--keep");
   const keep = parseNonNegativeIntegerFlag("--keep", keepRaw, config.doneKeep);
   const state = parseStateFlag("--state", takeFlag(args, "--state"), "done");
+  requirePositionals(args, 0, 0, PRUNE_HELP.split("\n")[0]);
 
   const result = await store.prune({ state, keep, archive: true });
 
@@ -53,10 +55,11 @@ export async function pruneCommand(
 }
 
 export async function renderCommand(
-  _rawArgs: string[],
+  rawArgs: string[],
   context?: TasksContext,
 ): Promise<string> {
   const { store } = requireCtx(context);
+  requirePositionals([...rawArgs], 0, 0, RENDER_HELP.split("\n")[0]);
   if (!store.render) {
     throw unsupported("render", store.capabilities().backend);
   }

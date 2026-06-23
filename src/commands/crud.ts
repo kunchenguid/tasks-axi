@@ -1,9 +1,7 @@
 import {
-  getFlag,
-  getPositional,
-  hasFlag,
   parseOptionalNonNegativeIntegerFlag,
   parseStateFlag,
+  requirePositionals,
   requireId,
   takeAllFlags,
   takeBoolFlag,
@@ -136,7 +134,12 @@ export async function addCommand(
   const prefix = takeFlag(args, "--prefix");
   const titleFlag = takeFlag(args, "--title");
 
-  const positionals = args.filter((a) => !a.startsWith("-"));
+  const positionals = requirePositionals(
+    args,
+    mint ? 0 : 1,
+    titleFlag === undefined ? (mint ? 1 : 2) : mint ? 0 : 1,
+    ADD_HELP.split("\n")[0],
+  );
   let id: string;
   let title: string;
   if (mint) {
@@ -199,14 +202,15 @@ export async function listCommand(
     takeFlag(args, "--fields"),
     LIST_EXTRA_FIELDS,
   );
-  const state = parseStateFlag("--state", getFlag(args, "--state"));
-  const repo = getFlag(args, "--repo");
-  const kind = getFlag(args, "--kind");
-  const onlyBlocked = hasFlag(args, "--blocked");
+  const state = parseStateFlag("--state", takeFlag(args, "--state"));
+  const repo = takeFlag(args, "--repo");
+  const kind = takeFlag(args, "--kind");
+  const onlyBlocked = takeBoolFlag(args, "--blocked");
   const limit = parseOptionalNonNegativeIntegerFlag(
     "--limit",
-    getFlag(args, "--limit"),
+    takeFlag(args, "--limit"),
   );
+  requirePositionals(args, 0, 0, LIST_HELP.split("\n")[0]);
 
   // The full set is needed to derive `blocked` (a dep-graph projection), so the
   // list command filters in the CLI rather than pushing every filter to the
@@ -223,7 +227,7 @@ export async function listCommand(
   const total = matched.length;
   const items =
     limit !== undefined && limit >= 0 ? matched.slice(0, limit) : matched;
-  const isEmpty = items.length === 0;
+  const isEmpty = total === 0;
 
   const countLine = formatCountLine({
     count: items.length,
@@ -266,7 +270,8 @@ export async function showCommand(
   const { store } = requireCtx(context);
   const args = [...rawArgs];
   const full = takeBoolFlag(args, "--full");
-  const id = requireId(getPositional(args, 0), "id");
+  const positionals = requirePositionals(args, 1, 1, SHOW_HELP.split("\n")[0]);
+  const id = requireId(positionals[0], "id");
 
   const task = await store.get(id);
   if (!task) throw notFound(id);
@@ -295,10 +300,13 @@ export async function updateCommand(
   const priority = parsePriority(takeFlag(args, "--priority"));
   const pr = takeFlag(args, "--pr");
   const report = takeFlag(args, "--report");
-  const id = requireId(
-    args.find((a) => !a.startsWith("-")),
-    "id",
+  const positionals = requirePositionals(
+    args,
+    1,
+    1,
+    UPDATE_HELP.split("\n")[0],
   );
+  const id = requireId(positionals[0], "id");
 
   const patch: TaskPatch = {};
   if (title !== undefined) patch.title = title;
@@ -331,7 +339,13 @@ export async function rmCommand(
   context?: TasksContext,
 ): Promise<string> {
   const { store } = requireCtx(context);
-  const id = requireId(getPositional([...rawArgs], 0), "id");
+  const positionals = requirePositionals(
+    [...rawArgs],
+    1,
+    1,
+    RM_HELP.split("\n")[0],
+  );
+  const id = requireId(positionals[0], "id");
 
   if (!(await store.get(id))) throw notFound(id);
   await store.remove(id);

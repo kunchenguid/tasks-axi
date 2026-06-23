@@ -68,6 +68,30 @@ describe("crud commands", () => {
       }
     });
 
+    it("rejects unknown flags before creating a task", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          addCommand(["--repoo", "demo", "real-id", "title"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("- [ ] demo - real-id");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects extra positional arguments", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          addCommand(["new-q1", "title", "extra"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("new-q1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects an invalid blocked-by id", async () => {
       const b = makeBacklog();
       try {
@@ -120,6 +144,18 @@ describe("crud commands", () => {
           b.ctx,
         );
         expect(out).toMatch(/count: 2 of \d+ total/);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("does not report an empty backlog when a zero limit hides matches", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await listCommand(["--limit", "0"], b.ctx);
+        expect(out).toMatch(/count: 0 of \d+ total/);
+        expect(out).not.toContain("0 tasks in this backlog");
+        expect(out).toContain("Run `tasks-axi show <id>`");
       } finally {
         b.cleanup();
       }
@@ -229,6 +265,17 @@ describe("crud commands", () => {
         b.cleanup();
       }
     });
+
+    it("rejects extra positional arguments", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          showCommand(["cert-cleanup", "extra"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      } finally {
+        b.cleanup();
+      }
+    });
   });
 
   describe("update", () => {
@@ -257,6 +304,18 @@ describe("crud commands", () => {
       }
     });
 
+    it("rejects extra positional arguments before updating", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          updateCommand(["cert-cleanup", "extra", "--append", "note"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("\n  note");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("persists updated priority through a fresh read", async () => {
       const b = makeBacklog();
       try {
@@ -277,6 +336,18 @@ describe("crud commands", () => {
         const out = await rmCommand(["cert-cleanup"], b.ctx);
         expect(out).toContain("removed:");
         expect(b.read()).not.toContain("cert-cleanup");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects extra positional arguments before removing", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          rmCommand(["cert-cleanup", "extra"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toContain("cert-cleanup");
       } finally {
         b.cleanup();
       }
