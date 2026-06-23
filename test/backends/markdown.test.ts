@@ -57,6 +57,18 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("rejects multiline titles", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.create({ id: "multi-q1", title: "first\nsecond" }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("multi-q1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("filters list by state, repo, and kind with a true total", async () => {
       const b = makeBacklog();
       try {
@@ -167,6 +179,20 @@ describe("MarkdownStore", () => {
       try {
         await expect(
           b.store.update("cert-cleanup", { title: "   " }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toContain(
+          "- [ ] cert-cleanup - port the post-upload cert pruning",
+        );
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects multiline replacement titles", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.update("cert-cleanup", { title: "first\r\nsecond" }),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         expect(b.read()).toContain(
           "- [ ] cert-cleanup - port the post-upload cert pruning",

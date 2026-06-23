@@ -52,11 +52,19 @@ function today(): string {
 }
 
 function normalizeTitle(title: string): string {
+  if (/[\r\n]/.test(title)) {
+    throw new AxiError("Task title must be a single line", "VALIDATION_ERROR");
+  }
   const trimmed = title.trim();
   if (trimmed === "") {
     throw new AxiError("Task title must not be empty", "VALIDATION_ERROR");
   }
   return trimmed;
+}
+
+function appendTitleText(title: string, text: string): string {
+  if (title.includes(text)) return title;
+  return normalizeTitle(`${title} ${text}`);
 }
 
 export class MarkdownStore implements Store {
@@ -187,7 +195,7 @@ export class MarkdownStore implements Store {
     let title = normalizeTitle(input.title);
     // Links live in the prose; fold any provided links into the title text.
     for (const link of input.links ?? []) {
-      if (!title.includes(link.url)) title = `${title} ${link.url}`.trim();
+      title = appendTitleText(title, link.url);
     }
     const task: Task = {
       id: validateId(input.id),
@@ -255,9 +263,7 @@ export class MarkdownStore implements Store {
       if (patch.priority !== undefined) task.priority = patch.priority;
       if (patch.meta) task.meta = { ...task.meta, ...patch.meta };
       for (const link of patch.addLinks ?? []) {
-        if (!task.title.includes(link.url)) {
-          task.title = `${task.title} ${link.url}`.trim();
-        }
+        task.title = appendTitleText(task.title, link.url);
       }
       task.links = deriveLinks(task.title);
       task.updated = this.now();
@@ -300,7 +306,7 @@ export class MarkdownStore implements Store {
 
       // Record links / notes before stamping so closureVerb sees them.
       for (const url of [opts.pr, opts.report].filter(Boolean) as string[]) {
-        if (!task.title.includes(url)) task.title = `${task.title} ${url}`.trim();
+        task.title = appendTitleText(task.title, url);
       }
       if (opts.note) {
         task.body = task.body ? `${task.body}\n${opts.note}` : opts.note;

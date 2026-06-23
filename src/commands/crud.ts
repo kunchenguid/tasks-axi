@@ -96,6 +96,9 @@ function parsePriority(raw: string | undefined): number | undefined {
 }
 
 function requireTitle(raw: string, message: string, suggestion: string): string {
+  if (/[\r\n]/.test(raw)) {
+    throw new AxiError("Task title must be a single line", "VALIDATION_ERROR");
+  }
   const title = raw.trim();
   if (title === "") {
     throw new AxiError(message, "VALIDATION_ERROR", [suggestion]);

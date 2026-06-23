@@ -40,6 +40,31 @@ describe("parseConfigToml", () => {
     const cfg = parseConfigToml('[sqlite]\npath = ".tasks.db"\n');
     expect(cfg.markdown).toBeUndefined();
   });
+
+  it("keeps # inside quoted values while stripping trailing comments", () => {
+    const cfg = parseConfigToml(
+      '[markdown]\npath = "data/back#log.md" # keep the hash\n',
+    );
+    expect(cfg.markdown?.path).toBe("data/back#log.md");
+  });
+
+  it("rejects an unquoted known string value", () => {
+    expect(() =>
+      parseConfigToml("[markdown]\npath = data/backlog.md\n"),
+    ).toThrow(/markdown\.path/);
+  });
+
+  it("rejects an unterminated quoted value", () => {
+    expect(() =>
+      parseConfigToml('[markdown]\npath = "data/backlog.md\n'),
+    ).toThrow(/unterminated/);
+  });
+
+  it("rejects a non-numeric done_keep value", () => {
+    expect(() =>
+      parseConfigToml("[markdown]\ndone_keep = many\n"),
+    ).toThrow(/done_keep/);
+  });
 });
 
 describe("resolveConfig", () => {

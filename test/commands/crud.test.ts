@@ -80,6 +80,18 @@ describe("crud commands", () => {
       }
     });
 
+    it("rejects a multiline title before creating a task", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          addCommand(["multi-q1", "first\nsecond"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("multi-q1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects a blank minted title", async () => {
       const b = makeBacklog();
       try {
@@ -344,6 +356,20 @@ describe("crud commands", () => {
       try {
         await expect(
           updateCommand(["cert-cleanup", "--title", "   "], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toContain(
+          "- [ ] cert-cleanup - port the post-upload cert pruning",
+        );
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects a multiline replacement title before updating", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          updateCommand(["cert-cleanup", "--title", "first\nsecond"], b.ctx),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         expect(b.read()).toContain(
           "- [ ] cert-cleanup - port the post-upload cert pruning",

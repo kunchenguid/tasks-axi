@@ -53,7 +53,7 @@ export function parseConfigToml(src: string): TomlConfig {
   let table: "" | "markdown" = "";
 
   for (const rawLine of src.split("\n")) {
-    const line = rawLine.replace(/#.*$/, "").trim();
+    const line = stripTomlComment(rawLine).trim();
     if (line === "") continue;
 
     const section = line.match(/^\[([^\]]+)\]$/);
@@ -62,34 +62,86 @@ export function parseConfigToml(src: string): TomlConfig {
       continue;
     }
 
-    const kv = line.match(/^([A-Za-z0-9_]+)\s*=\s*(.+)$/);
+    const kv = line.match(/^([A-Za-z0-9_]+)\s*=\s*(.*)$/);
     if (!kv) continue;
     const key = kv[1];
-    const value = parseTomlValue(kv[2]);
+    const source = configKeySource(table, key);
+    if (!source) continue;
+    const value = parseTomlValue(kv[2], source);
 
     if (table === "") {
-      if (key === "backend" && typeof value === "string")
-        config.backend = value;
+      config.backend = requireTomlString(value, source);
       continue;
     }
     config.markdown ??= {};
-    if (key === "path" && typeof value === "string")
-      config.markdown.path = value;
-    if (key === "archive" && typeof value === "string")
-      config.markdown.archive = value;
-    if (key === "done_keep" && typeof value === "number")
+    if (key === "path") config.markdown.path = requireTomlString(value, source);
+    if (key === "archive")
+      config.markdown.archive = requireTomlString(value, source);
+    if (key === "done_keep") {
+      if (typeof value !== "number") {
+        throw new AxiError(
+          "markdown.done_keep must be an integer",
+          "VALIDATION_ERROR",
+          ["Set `[markdown] done_keep = 10` in .tasks.toml"],
+        );
+      }
       config.markdown.done_keep = value;
+    }
   }
 
   return config;
 }
 
-function parseTomlValue(raw: string): string | number | undefined {
-  const trimmed = raw.trim();
-  const quoted = trimmed.match(/^"([^"]*)"$/) ?? trimmed.match(/^'([^']*)'$/);
-  if (quoted) return quoted[1];
-  if (/^-?\d+$/.test(trimmed)) return parseInt(trimmed, 10);
+function stripTomlComment(raw: string): string {
+  let quote: '"' | "'" | undefined;
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (quote) {
+      if (ch === quote) quote = undefined;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === "#") return raw.slice(0, i);
+  }
+  return raw;
+}
+
+function configKeySource(
+  table: "" | "markdown",
+  key: string,
+): string | undefined {
+  if (table === "" && key === "backend") return "backend";
+  if (
+    table === "markdown" &&
+    (key === "path" || key === "archive" || key === "done_keep")
+  ) {
+    return `markdown.${key}`;
+  }
   return undefined;
+}
+
+function parseTomlValue(raw: string, source: string): string | number {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('"') || trimmed.startsWith("'")) {
+    const quote = trimmed[0];
+    if (!trimmed.endsWith(quote) || trimmed.length === 1) {
+      throw new AxiError(
+        `${source} has an unterminated quoted value`,
+        "VALIDATION_ERROR",
+      );
+    }
+    return trimmed.slice(1, -1);
+  }
+  if (/^-?\d+$/.test(trimmed)) return parseInt(trimmed, 10);
+  throw new AxiError(`${source} has an invalid value`, "VALIDATION_ERROR");
+}
+
+function requireTomlString(value: string | number, source: string): string {
+  if (typeof value === "string") return value;
+  throw new AxiError(`${source} must be a quoted string`, "VALIDATION_ERROR");
 }
 
 function loadToml(path: string): TomlConfig {
@@ -162,7 +214,10 @@ export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
 
   const path = resolveMarkdownPath(explicitPath, tomlPath, cwd);
 
-  const archive = projectToml.markdown?.archive ?? homeToml.markdown?.archive;
+  const archive =
+    projectToml.markdown?.archive !== undefined
+      ? validatePathValue(projectToml.markdown.archive, "markdown.archive")
+      : validatePathValue(homeToml.markdown?.archive, "markdown.archive");
   const doneKeep = validateDoneKeep(
     projectToml.markdown?.done_keep ??
       homeToml.markdown?.done_keep ??
