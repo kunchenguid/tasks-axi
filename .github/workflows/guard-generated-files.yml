@@ -1,0 +1,37 @@
+name: Guard generated files
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: guard-generated-files-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Generated files must not be hand-edited
+    runs-on: ubuntu-latest
+    # release-please owns CHANGELOG.md and .release-please-manifest.json; its PR
+    # is the one legitimate place those files change, so we exempt its author.
+    if: >-
+      github.event.pull_request.user.login != 'github-actions[bot]' &&
+      github.event.pull_request.user.login != 'release-please[bot]'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need history on both sides of the merge-base so `git diff base...head`
+          # reflects exactly what GitHub shows as "Files changed".
+          fetch-depth: 0
+
+      - name: Check PR does not modify release-please-generated files
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          bash scripts/guard-generated-files.sh "${BASE_SHA}" "${HEAD_SHA}"
