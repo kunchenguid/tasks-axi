@@ -198,8 +198,9 @@ export class MarkdownStore implements Store {
     if (input.body) task.body = input.body;
     if (input.priority !== undefined) task.priority = input.priority;
     if (input.meta) task.meta = input.meta;
-    if (input.created) task.created = input.created;
-    else if (state !== "done") task.created = this.now();
+    if (input.created !== undefined) {
+      if (input.created) task.created = input.created;
+    } else if (state !== "done") task.created = this.now();
     if (input.closed) task.closed = input.closed;
     return task;
   }

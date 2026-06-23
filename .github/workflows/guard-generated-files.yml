@@ -35,14 +35,10 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -eu
-          files=$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")
-
-          violated=""
-          for path in CHANGELOG.md .release-please-manifest.json; do
-            if printf '%s\n' "$files" | grep -qxF -- "$path"; then
-              violated="${violated} ${path}"
-            fi
-          done
+          violated=$(
+            git diff --name-status "${BASE_SHA}...${HEAD_SHA}" -- CHANGELOG.md .release-please-manifest.json |
+              awk '$1 == "M" { printf " %s", $2 }'
+          )
 
           if [ -n "$violated" ]; then
             {

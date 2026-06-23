@@ -70,7 +70,7 @@ export interface TaskInput {
   links?: TaskLink[];
   deps?: Dep[];
   priority?: number;
-  created?: string;
+  created?: string | null;
   closed?: string;
   meta?: Record<string, unknown>;
 }

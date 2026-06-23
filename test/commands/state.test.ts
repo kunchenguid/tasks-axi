@@ -341,6 +341,23 @@ describe("state commands", () => {
       }
     });
 
+    it("preserves a missing created date when moving legacy tasks", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## Queued\n- [ ] legacy-q1 - legacy without since\n\n## Done\n",
+      );
+      const target = makeBacklog("# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n");
+      try {
+        await mvCommand(["legacy-q1", "--to", target.path], b.ctx);
+
+        const moved = readFileSync(target.path, "utf8");
+        expect(moved).toContain("- [ ] legacy-q1 - legacy without since");
+        expect(moved).not.toContain("(since ");
+      } finally {
+        b.cleanup();
+        target.cleanup();
+      }
+    });
+
     it("requires --to", async () => {
       const b = makeBacklog();
       try {

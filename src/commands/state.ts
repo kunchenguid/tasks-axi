@@ -293,7 +293,7 @@ function taskToInput(task: Task): TaskInput {
   if (task.repo) input.repo = task.repo;
   if (task.body) input.body = task.body;
   if (task.priority !== undefined) input.priority = task.priority;
-  if (task.created) input.created = task.created;
+  input.created = task.created ?? null;
   if (task.closed) input.closed = task.closed;
   if (task.meta) input.meta = { ...task.meta };
   return input;

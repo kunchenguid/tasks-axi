@@ -1,5 +1,5 @@
 import { AxiError, installSessionStartHooks } from "axi-sdk-js";
-import { renderHelp, renderOutput } from "../toon.js";
+import { field, renderHelp, renderList, renderOutput } from "../toon.js";
 
 export const SETUP_HELP = `usage: tasks-axi setup hooks
 Install or repair agent SessionStart hooks so the backlog is injected as ambient
@@ -16,7 +16,22 @@ export async function setupCommand(args: string[]): Promise<string> {
     ]);
   }
 
-  installSessionStartHooks();
+  const failures: string[] = [];
+  installSessionStartHooks({
+    onError: (message) => failures.push(message),
+  });
+
+  if (failures.length > 0) {
+    return renderOutput([
+      "hooks:\n  status: partial\n  integrations: Claude Code, Codex, OpenCode",
+      renderList(
+        "failures",
+        failures.map((message) => ({ message })),
+        [field("message")],
+      ),
+      renderHelp(["Fix the listed files and rerun `tasks-axi setup hooks`"]),
+    ]);
+  }
 
   return renderOutput([
     "hooks:\n  status: installed\n  integrations: Claude Code, Codex, OpenCode",
