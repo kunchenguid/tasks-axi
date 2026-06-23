@@ -1,0 +1,87 @@
+# tasks-axi firstmate markdown interop CLI transcript
+This drives the real CLI against a firstmate-shaped backlog file.
+
+$ sed -n "1,120p" .no-mistakes/evidence/fm/taxi-fmt-f9/firstmate-cli-backlog.md
+# Backlog
+
+## In flight
+- [ ] fix-login-k3 - one line (repo: app, since 2026-06-20)
+
+## Queued
+- [ ] add-tests-q7 - one line (repo: app) blocked-by: fix-login-k3 - waits on the login refactor
+
+## Done
+- [x] legacy-done-z1 - one line - https://github.com/o/r/pull/12 (merged 2026-06-21)
+
+$ pnpm exec tsx bin/tasks-axi.ts list --file .no-mistakes/evidence/fm/taxi-fmt-f9/firstmate-cli-backlog.md --fields blocked,blocked_by,deps
+count: 3
+tasks[3]{id,state,kind,repo,title,blocked,blocked_by,deps}:
+  fix-login-k3,in_flight,task,"app, since 2026-06-20",one line,no,none,none
+  add-tests-q7,queued,task,app,one line,yes,fix-login-k3,"blocked-by:fix-login-k3"
+  legacy-done-z1,done,task,"-","one line - https://github.com/o/r/pull/12",no,none,none
+help[2]:
+  - Run `tasks-axi show <id> --file=.no-mistakes/evidence/fm/taxi-fmt-f9/firstmate-cli-backlog.md` for full notes on a task
+  - Run `tasks-axi ready --file=.no-mistakes/evidence/fm/taxi-fmt-f9/firstmate-cli-backlog.md` to see unblocked queued work
+
+$ pnpm exec tsx bin/tasks-axi.ts ready --file .no-mistakes/evidence/fm/taxi-fmt-f9/firstmate-cli-backlog.md
+count: 0
+ready: 0 unblocked queued tasks
+help[1]:
+  - Run `tasks-axi list --state queued --file=.no-mistakes/evidence/fm/taxi-fmt-f9/firstmate-cli-backlog.md` to see all queued work (incl. blocked)
+
+$ pnpm exec tsx bin/tasks-axi.ts update add-tests-q7 --file .no-mistakes/evidence/fm/taxi-fmt-f9/firstmate-cli-backlog.md --title "two lines now"
+task:
+  id: add-tests-q7
+  title: two lines now
+  state: queued
+  blocked: yes
+  blocked_by: fix-login-k3
+  kind: task
+  repo: app
+  priority: "-"
+  created: "-"
+  closed: "-"
+  deps: "blocked-by:fix-login-k3"
+  links: none
+  body: ""
+help[1]:
+  - Run `tasks-axi show add-tests-q7 --full --file=.no-mistakes/evidence/fm/taxi-fmt-f9/firstmate-cli-backlog.md` to see the result
+
+$ sed -n "1,120p" .no-mistakes/evidence/fm/taxi-fmt-f9/firstmate-cli-backlog.md
+# Backlog
+
+## In flight
+- [ ] fix-login-k3 - one line (repo: app, since 2026-06-20)
+
+## Queued
+- [ ] add-tests-q7 - two lines now (repo: app) blocked-by: fix-login-k3 - waits on the login refactor
+
+## Done
+- [x] legacy-done-z1 - one line - https://github.com/o/r/pull/12 (merged 2026-06-21)
+
+$ pnpm exec tsx bin/tasks-axi.ts done fix-login-k3 --file .no-mistakes/evidence/fm/taxi-fmt-f9/firstmate-cli-backlog.md --no-prune
+done:
+  id: fix-login-k3
+  state: done
+  pruned: 0
+help[1]:
+  - Run `tasks-axi ready --file=.no-mistakes/evidence/fm/taxi-fmt-f9/firstmate-cli-backlog.md` to dispatch work unblocked by this
+
+$ pnpm exec tsx bin/tasks-axi.ts ready --file .no-mistakes/evidence/fm/taxi-fmt-f9/firstmate-cli-backlog.md
+count: 1
+ready[1]{id,state,kind,repo,title}:
+  add-tests-q7,queued,task,app,two lines now
+help[1]:
+  - Run `tasks-axi start <id> --file=.no-mistakes/evidence/fm/taxi-fmt-f9/firstmate-cli-backlog.md` to dispatch one of these
+
+$ sed -n "1,160p" .no-mistakes/evidence/fm/taxi-fmt-f9/firstmate-cli-backlog.md
+# Backlog
+
+## In flight
+
+## Queued
+- [ ] add-tests-q7 - two lines now (repo: app) blocked-by: fix-login-k3 - waits on the login refactor
+
+## Done
+- [x] fix-login-k3 - one line (repo: app, since 2026-06-20) (done 2026-06-23)
+- [x] legacy-done-z1 - one line - https://github.com/o/r/pull/12 (merged 2026-06-21)
