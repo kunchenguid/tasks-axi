@@ -23,6 +23,12 @@ function quoteSuggestionValue(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
+function decodedHelp(out: string): string[] {
+  const decoded = decode(out) as { help?: unknown };
+  expect(Array.isArray(decoded.help)).toBe(true);
+  return decoded.help as string[];
+}
+
 let dir: string;
 let path: string;
 const savedFile = process.env.TASKS_AXI_FILE;
@@ -110,8 +116,8 @@ describe("CLI entrypoint", () => {
     const out = c.read();
     expect(out).toContain("solo-q1");
     expect(out).not.toContain("cert-cleanup");
-    expect(out).toContain(
-      `Run \`tasks-axi show <id> --file=${quoteSuggestionValue(other)}\``,
+    expect(decodedHelp(out)).toContain(
+      `Run \`tasks-axi show <id> --file=${quoteSuggestionValue(other)}\` for full notes on a task`,
     );
   });
 
@@ -123,8 +129,8 @@ describe("CLI entrypoint", () => {
       argv: ["list", "--backend", "markdown", "--file", other],
       stdout: c.stdout,
     });
-    expect(c.read()).toContain(
-      `Run \`tasks-axi show <id> --backend=markdown --file=${quoteSuggestionValue(other)}\``,
+    expect(decodedHelp(c.read())).toContain(
+      `Run \`tasks-axi show <id> --backend=markdown --file=${quoteSuggestionValue(other)}\` for full notes on a task`,
     );
   });
 

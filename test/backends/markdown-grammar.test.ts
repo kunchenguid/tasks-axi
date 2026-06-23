@@ -36,6 +36,20 @@ describe("markdown grammar", () => {
       expect(renderBacklog(parseBacklog(FIXTURE))).toBe(FIXTURE);
     });
 
+    it("round-trips CRLF fixtures while still recognizing tasks", () => {
+      const src = FIXTURE.replace(/\n/g, "\r\n");
+      const doc = parseBacklog(src);
+      const tasks = tasksOf(doc);
+      const ids = tasks.map((t) => t.id);
+
+      expect(renderBacklog(doc)).toBe(src);
+      expect(ids).toContain("cert-cleanup");
+      expect(ids).toContain("lease-core-t4");
+      expect(
+        tasks.find((t) => t.id === "multi-line-w8")?.body,
+      ).not.toContain("\r");
+    });
+
     it("round-trips an empty file", () => {
       expect(renderBacklog(parseBacklog(""))).toBe("");
     });

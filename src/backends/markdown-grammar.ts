@@ -63,6 +63,10 @@ const DONE_RE = new RegExp(`^- \\[x\\] (${ID_CHARS}) - (.*)$`);
 /** Validate a caller-supplied id round-trips through the markdown grammar. */
 export const ID_RE = new RegExp(`^${ID_CHARS}$`);
 
+function semanticLine(line: string): string {
+  return line.endsWith("\r") ? line.slice(0, -1) : line;
+}
+
 function matchTaskBullet(
   line: string,
   state: State,
@@ -278,7 +282,7 @@ export function renderTaskLines(task: Task): string[] {
 // ---------------------------------------------------------------------------
 
 function sectionState(headerLine: string): State | undefined {
-  const m = headerLine.match(/^##\s+(.*?)\s*$/);
+  const m = semanticLine(headerLine).match(/^##\s+(.*?)\s*$/);
   if (!m) return undefined;
   const text = m[1].toLowerCase();
   if (text === "in flight") return "in_flight";
@@ -323,7 +327,7 @@ function parseEntries(lines: string[], state: State | undefined): Entry[] {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const bullet = state ? matchTaskBullet(line, state) : null;
+    const bullet = state ? matchTaskBullet(semanticLine(line), state) : null;
 
     if (bullet && state) {
       flushRaw();
@@ -332,12 +336,12 @@ function parseEntries(lines: string[], state: State | undefined): Entry[] {
       // Consume indented continuation lines as the task body.
       while (
         i + 1 < lines.length &&
-        lines[i + 1].length > 0 &&
-        lines[i + 1].startsWith("  ")
+        semanticLine(lines[i + 1]).length > 0 &&
+        semanticLine(lines[i + 1]).startsWith("  ")
       ) {
         i++;
         raw.push(lines[i]);
-        bodyLines.push(lines[i].slice(2));
+        bodyLines.push(semanticLine(lines[i]).slice(2));
       }
       entries.push({
         kind: "task",
@@ -377,7 +381,7 @@ export function parseBacklog(src: string): BacklogDoc {
   };
 
   for (const line of lines) {
-    if (/^##\s+/.test(line)) {
+    if (/^##\s+/.test(semanticLine(line))) {
       closeSection();
       current = { headerLine: line, state: sectionState(line), entries: [] };
       continue;

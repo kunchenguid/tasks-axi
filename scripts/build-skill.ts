@@ -12,6 +12,10 @@ const target = new URL("../skills/tasks-axi/SKILL.md", import.meta.url);
 const expected = createSkillMarkdown();
 const check = process.argv.includes("--check");
 
+function normalizeLineEndings(value: string): string {
+  return value.replace(/\r\n/g, "\n");
+}
+
 if (check) {
   let actual: string | null = null;
   try {
@@ -19,7 +23,7 @@ if (check) {
   } catch {
     // missing file falls through to the mismatch branch below
   }
-  if (actual !== expected) {
+  if (actual === null || normalizeLineEndings(actual) !== expected) {
     console.error(
       "skills/tasks-axi/SKILL.md is out of date. Run `pnpm run build:skill` and commit the result.",
     );
