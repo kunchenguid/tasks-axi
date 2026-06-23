@@ -1,0 +1,14 @@
+$ mkdir -p .no-mistakes/tmp-release-smoke && cd .no-mistakes/tmp-release-smoke
+$ npm init -y
+$ npm install --no-audit --no-fund ../evidence/fm/tax-release-r7/tasks-axi-0.1.0.tgz
+
+added 3 packages in 410ms
+$ ./node_modules/.bin/tasks-axi --version
+0.1.0
+$ printf "# Backlog..." > backlog.md
+$ TASKS_AXI_FILE=$PWD/backlog.md ./node_modules/.bin/tasks-axi list --state queued
+count: 1
+tasks[1]{id,state,kind,repo,title}:
+  release-smoke,queued,task,"-",verify installed package runs
+help[1]:
+  - Run `tasks-axi show <id>` for full notes on a task

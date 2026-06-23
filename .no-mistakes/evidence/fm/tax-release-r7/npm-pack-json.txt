@@ -1,0 +1,170 @@
+$ npm pack --pack-destination .no-mistakes/evidence/fm/tax-release-r7 --json
+
+> tasks-axi@0.1.0 prepack
+> npm run build
+
+
+> tasks-axi@0.1.0 build
+> tsc
+
+[
+  {
+    "id": "tasks-axi@0.1.0",
+    "name": "tasks-axi",
+    "version": "0.1.0",
+    "size": 35740,
+    "unpackedSize": 132347,
+    "shasum": "e2f43e05bbabffee8f04a7538c437f56bc291c19",
+    "integrity": "sha512-oORC/Fqt43QRr3QDLZUud27URS55YHyQTvKTaCw2nqLbErT5R349vHZD5blhSd6HmMLKzj3P95gIsYmrnJeSaA==",
+    "filename": "tasks-axi-0.1.0.tgz",
+    "files": [
+      {
+        "path": "LICENSE",
+        "size": 1065,
+        "mode": 420
+      },
+      {
+        "path": "README.md",
+        "size": 8905,
+        "mode": 420
+      },
+      {
+        "path": "dist/bin/tasks-axi.js",
+        "size": 103,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/args.js",
+        "size": 5719,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/backends/lock.js",
+        "size": 4899,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/backends/markdown-grammar.js",
+        "size": 11008,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/backends/markdown.js",
+        "size": 24244,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/body.js",
+        "size": 1857,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli.js",
+        "size": 6228,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/commands/crud.js",
+        "size": 15118,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/commands/home.js",
+        "size": 2213,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/commands/maintain.js",
+        "size": 2279,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/commands/setup.js",
+        "size": 1338,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/commands/state.js",
+        "size": 13192,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/config.js",
+        "size": 6266,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/context.js",
+        "size": 1026,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/derive.js",
+        "size": 1775,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/errors.js",
+        "size": 904,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/fields.js",
+        "size": 1105,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/format.js",
+        "size": 809,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/id.js",
+        "size": 1934,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/model.js",
+        "size": 416,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/skill.js",
+        "size": 4607,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/store.js",
+        "size": 44,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/suggestions.js",
+        "size": 6023,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/toon.js",
+        "size": 1681,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/view.js",
+        "size": 2798,
+        "mode": 420
+      },
+      {
+        "path": "package.json",
+        "size": 1465,
+        "mode": 420
+      },
+      {
+        "path": "skills/tasks-axi/SKILL.md",
+        "size": 3326,
+        "mode": 420
+      }
+    ],
+    "entryCount": 29,
+    "bundled": []
+  }
+]

@@ -1,0 +1,2 @@
+$ tar -tzf .no-mistakes/evidence/fm/tax-release-r7/tasks-axi-0.1.0.tgz | grep -E "(\.d\.ts$|\.js\.map$|^package/src/|^package/test/)"
+OK: tarball contains no .d.ts, .js.map, src/, or test/ entries

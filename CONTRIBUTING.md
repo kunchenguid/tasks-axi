@@ -38,6 +38,17 @@ See the [no-mistakes quick start](https://kunchenguid.github.io/no-mistakes/star
 - Do not hand-edit `CHANGELOG.md` or `.release-please-manifest.json` - release-please owns them.
 - Do not hand-edit `skills/tasks-axi/SKILL.md` - it is generated from the CLI's own description and help by `pnpm run build:skill`. Regenerate and commit it after changing the description or top-level help; CI fails if it is stale.
 
+## Release and Packaging
+
+Releases are cut by release-please from Conventional Commits on `main`.
+When a release is created, the release workflow installs dependencies, builds, lints, tests, checks generated skill drift, and publishes with `npm publish --access public --provenance`.
+
+The npm package intentionally ships runtime JavaScript only.
+Keep `package.json` `files` limited to `dist/**/*.js`, `skills/tasks-axi`, `LICENSE`, and `README.md`; TypeScript declarations and source maps stay local for development.
+
+`prepack` runs `npm run build`, so `npm pack`, `npm publish`, and `npm publish --dry-run` rebuild `dist` first.
+Before any manual publish, verify the package with `npm pack --dry-run` and keep the CLI bin as `dist/bin/tasks-axi.js` so npm preserves it without warnings.
+
 ## Questions
 
 Open an issue, or talk to me on [Discord](https://discord.gg/Wsy2NpnZDu).
