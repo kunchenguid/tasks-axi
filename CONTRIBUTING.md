@@ -47,7 +47,8 @@ The npm package intentionally ships runtime JavaScript only.
 Keep `package.json` `files` limited to `dist/**/*.js`, `skills/tasks-axi`, `LICENSE`, and `README.md`; TypeScript declarations and source maps stay local for development.
 
 `prepack` runs `npm run build`, so `npm pack`, `npm publish`, and `npm publish --dry-run` rebuild `dist` first.
-Before any manual publish, verify the package with `npm pack --dry-run` and keep the CLI bin as `dist/bin/tasks-axi.js` so npm preserves it without warnings.
+From a fresh clone, install dependencies with `pnpm install --frozen-lockfile` before any manual pack or publish, since that build step needs `node_modules` (this matches how CI and the release workflow install).
+Then verify the package with `npm pack --dry-run` and keep the CLI bin as `dist/bin/tasks-axi.js` so npm preserves it without warnings.
 
 ## Questions
 

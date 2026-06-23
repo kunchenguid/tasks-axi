@@ -17,7 +17,8 @@ It borrows the dependency-graph and ready-query model from [beads](https://githu
 
 Every backlog mutation today regenerates markdown through the model, which is expensive output tokens and risks dropped, duplicated, or reordered items.
 tasks-axi reduces that to the length of one short command plus a compact confirmation read back as cheap input.
-The long status line that the model used to rewrite on every status change is now a `body` you grow with `update --append`.
+The long status line that the model used to rewrite on every status change is now a `body`.
+`update --append` adds to that body, while `update --body` / `update --body-file` replace it outright and `update --title` replaces the title.
 
 ## Quick Start
 
@@ -97,8 +98,11 @@ tasks-axi reopen some-task
 tasks-axi block firstmate-lease-adopt --by treehouse-lease-t4
 tasks-axi ready
 
-# grow the long notes without rewriting the whole line
+# edit the body and title: --append adds to the body, --body / --body-file replace it, --title replaces the title
 tasks-axi update nm-release-validation --append "step 3 in progress on lavish #87"
+tasks-axi update nm-release-validation --body "rewritten notes"
+tasks-axi update nm-release-validation --body-file notes.md
+tasks-axi update nm-release-validation --title "clearer title"
 
 # read the full notes on demand (truncated by default)
 tasks-axi show homemux-h7 --full
