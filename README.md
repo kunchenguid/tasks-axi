@@ -78,8 +78,8 @@ queued[10]{id,title,kind,blocked_by}:
   ...
 done: 10 retained
 help[2]:
-  Run `tasks-axi list --state queued` for all 14 queued tasks
-  Run `tasks-axi ready` to see only unblocked work
+  - Run `tasks-axi list --state queued` for all 14 queued tasks
+  - Run `tasks-axi ready` to see only unblocked work
 ```
 
 The common mutations are one short, low-token command:

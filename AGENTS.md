@@ -25,7 +25,10 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 - **Trailing-tag extraction.** Canonical tags (`(repo: X)`, `(kind: X)`, `(since DATE)`, `(merged|reported|done DATE)`, `blocked-by:/parent:/discovered-from:`) are pulled only off the **trailing** tag-region of a line and re-appended in canonical order on render. This is what makes normalization idempotent: a mid-sentence parenthetical (e.g. `report.md (reported 2026-06-22): …`) or a non-date one (`(closed w/ link)`) is left in the prose and never duplicated or relocated. Date tags require an actual `YYYY-MM-DD`.
 - **Links and leading-word kinds live in the prose**, not as managed tags, so they are never duplicated. `done --pr`/`--report` append the url/path to the title text; links are re-derived by scanning. `kind` comes from a `(kind:)` tag or a leading `SHIP`/`SCOUT`/`DOCS-ONLY`/`PERSISTENT SECONDMATE` word, and the tag is emitted only when the prose does not already lead with that word.
 - **body** = indented (2-space) continuation lines under a bullet; `update --append` grows it. Blank lines inside a body are not preserved (avoid them).
-- **Concurrency:** every mutation runs under `withLock` (advisory `<path>.lock`, stale lock reclaimed after 30s), re-reads fresh, then writes atomically (temp + rename). Reads do not lock.
+- **Concurrency:** every mutation runs under `withLock` (advisory `<path>.lock`) and fails closed with a `LOCKED` error if another process holds the lock past the bounded timeout.
+  If the lock looks stale, the error tells the user to remove `<path>.lock` only after confirming no `tasks-axi` process is running.
+  Corruption-safety is guaranteed independently by atomic temp-file + rename writes, and a hand-edit landing between read and write is detected and refused.
+  Reads do not lock.
 
 ## Conventions
 
