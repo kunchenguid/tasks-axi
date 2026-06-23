@@ -46,6 +46,12 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 - `skills/tasks-axi/SKILL.md` is generated — regenerate with `pnpm run build:skill` after changing the description or top-level help; never hand-edit it.
 - This repo is no-mistakes-gated; ship through `/no-mistakes`.
 
+### Release & packaging (mirrors the `*-axi` siblings)
+
+- **Published to npm as a public package** via `release-please` → `npm publish --access public --provenance` on a release commit (`.github/workflows/release-please.yml`); the captain can also `npm publish` manually. Conventional commits drive the version bump; `release-please-config.json` + `.release-please-manifest.json` own versioning and `CHANGELOG.md`.
+- **The tarball ships runtime JS only.** `package.json` `files` is `dist/**/*.js` (+ `skills/tasks-axi`, `LICENSE`, `README.md`), so the `.d.ts`/`.js.map` that `tsc` emits for local debugging are kept out of the package. `prepack` runs `npm run build`, so `npm pack`/`npm publish` always rebuild `dist` first. Verify with `npm pack --dry-run` (no source/test cruft; bin is `dist/bin/tasks-axi.js` with its shebang preserved by tsc).
+- **CI is a 3-OS matrix** (ubuntu/macos/windows) running install → build → lint → test → `build:skill --check`. The `Require no-mistakes` and `Guard generated files` checks gate every PR to `main`.
+
 ## Follow-ups (out of P1 scope)
 
 - Migrate firstmate's own `backlog.md` onto tasks-axi (a separate firstmate-repo change).

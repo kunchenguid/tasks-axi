@@ -6,7 +6,11 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kunchenguid/tasks-axi.git"
+    "url": "git+https://github.com/kunchenguid/tasks-axi.git"
+  },
+  "homepage": "https://github.com/kunchenguid/tasks-axi#readme",
+  "bugs": {
+    "url": "https://github.com/kunchenguid/tasks-axi/issues"
   },
   "keywords": [
     "tasks",
@@ -18,10 +22,10 @@
     "beads"
   ],
   "bin": {
-    "tasks-axi": "./dist/bin/tasks-axi.js"
+    "tasks-axi": "dist/bin/tasks-axi.js"
   },
   "files": [
-    "dist",
+    "dist/**/*.js",
     "skills/tasks-axi",
     "LICENSE",
     "README.md"
@@ -36,7 +40,7 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "dev": "tsx bin/tasks-axi.ts",
-    "prepublishOnly": "npm run build"
+    "prepack": "npm run build"
   },
   "license": "MIT",
   "engines": {
