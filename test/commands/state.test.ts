@@ -461,6 +461,29 @@ describe("state commands", () => {
       }
     });
 
+    it("moves opposite directions without deadlocking", async () => {
+      const left = makeBacklog(
+        "# Backlog\n\n## Queued\n- [ ] left-q1 - move right\n\n## Done\n",
+      );
+      const right = makeBacklog(
+        "# Backlog\n\n## Queued\n- [ ] right-q1 - move left\n\n## Done\n",
+      );
+      try {
+        await Promise.all([
+          mvCommand(["left-q1", "--to", right.path], left.ctx),
+          mvCommand(["right-q1", "--to", left.path], right.ctx),
+        ]);
+
+        expect(left.read()).toContain("right-q1");
+        expect(left.read()).not.toContain("left-q1");
+        expect(readFileSync(right.path, "utf8")).toContain("left-q1");
+        expect(readFileSync(right.path, "utf8")).not.toContain("right-q1");
+      } finally {
+        left.cleanup();
+        right.cleanup();
+      }
+    });
+
     it("requires --to", async () => {
       const b = makeBacklog();
       try {

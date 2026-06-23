@@ -10,6 +10,12 @@ export interface SuggestionContext {
   isEmpty?: boolean;
   /** A blocked task suggests unblocking; an empty ready list suggests listing. */
   blocked?: boolean;
+  globals?: SuggestionGlobals;
+}
+
+export interface SuggestionGlobals {
+  backend?: string;
+  file?: string;
 }
 
 type Entry = {
@@ -105,7 +111,57 @@ const table: Entry[] = [
 
 export function getSuggestions(ctx: SuggestionContext): string[] {
   for (const entry of table) {
-    if (entry.match(ctx)) return entry.lines(ctx);
+    if (entry.match(ctx)) {
+      return withSuggestionGlobals(entry.lines(ctx), ctx.globals);
+    }
   }
   return [];
+}
+
+export function withSuggestionGlobals(
+  lines: string[],
+  globals: SuggestionGlobals | undefined,
+): string[] {
+  const suffix = globalSuffix(globals);
+  if (suffix === undefined) return [];
+  if (!suffix) return lines;
+  return lines.flatMap((line) => {
+    const withSuffix = appendSuffixToCommand(line, suffix);
+    return withSuffix ? [withSuffix] : [];
+  });
+}
+
+function globalSuffix(globals: SuggestionGlobals | undefined): string | undefined {
+  if (!globals) return "";
+  const parts: string[] = [];
+  if (globals.backend !== undefined) {
+    const quoted = shellQuoteOneLine(globals.backend);
+    if (!quoted) return undefined;
+    parts.push(`--backend=${quoted}`);
+  }
+  if (globals.file !== undefined) {
+    const quoted = shellQuoteOneLine(globals.file);
+    if (!quoted) return undefined;
+    parts.push(`--file=${quoted}`);
+  }
+  return parts.length > 0 ? ` ${parts.join(" ")}` : "";
+}
+
+function appendSuffixToCommand(line: string, suffix: string): string | undefined {
+  const first = line.indexOf("`");
+  if (first === -1) return undefined;
+  const second = line.indexOf("`", first + 1);
+  if (second === -1) return undefined;
+
+  const command = line.slice(first + 1, second);
+  if (command !== "tasks-axi" && !command.startsWith("tasks-axi ")) {
+    return undefined;
+  }
+  return `${line.slice(0, second)}${suffix}${line.slice(second)}`;
+}
+
+function shellQuoteOneLine(value: string): string | undefined {
+  if (/[\0\r\n`]/.test(value)) return undefined;
+  if (/^[A-Za-z0-9_./:@%+=,-]+$/.test(value)) return value;
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }

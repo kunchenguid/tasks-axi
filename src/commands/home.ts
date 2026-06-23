@@ -2,7 +2,7 @@ import { encode } from "@toon-format/toon";
 import { requireCtx, type TasksContext } from "../context.js";
 import { blockedIds, readyTasks } from "../derive.js";
 import type { Task } from "../model.js";
-import { getSuggestions } from "../suggestions.js";
+import { getSuggestions, withSuggestionGlobals } from "../suggestions.js";
 import { field, renderHelp, renderList, renderOutput } from "../toon.js";
 import { toRow } from "../view.js";
 
@@ -67,7 +67,15 @@ export async function homeCommand(
   if (blocked.size > 0) {
     hints.push("Run `tasks-axi ready` to see only unblocked work");
   }
-  blocks.push(renderHelp([...hints, ...getSuggestions({ action: "home" })]));
+  blocks.push(
+    renderHelp([
+      ...withSuggestionGlobals(hints, context?.suggestionGlobals),
+      ...getSuggestions({
+        action: "home",
+        globals: context?.suggestionGlobals,
+      }),
+    ]),
+  );
 
   return renderOutput(blocks);
 }

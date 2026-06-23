@@ -86,7 +86,13 @@ export async function startCommand(
       field("id"),
       field("state"),
     ]),
-    renderHelp(getSuggestions({ action: "start", id })),
+    renderHelp(
+      getSuggestions({
+        action: "start",
+        id,
+        globals: context?.suggestionGlobals,
+      }),
+    ),
   ]);
 }
 
@@ -155,7 +161,13 @@ export async function doneCommand(
       field("state"),
       field("pruned"),
     ]),
-    renderHelp(getSuggestions({ action: "done", id })),
+    renderHelp(
+      getSuggestions({
+        action: "done",
+        id,
+        globals: context?.suggestionGlobals,
+      }),
+    ),
   ]);
 }
 
@@ -205,7 +217,13 @@ export async function reopenCommand(
       field("id"),
       field("state"),
     ]),
-    renderHelp(getSuggestions({ action: "reopen", id })),
+    renderHelp(
+      getSuggestions({
+        action: "reopen",
+        id,
+        globals: context?.suggestionGlobals,
+      }),
+    ),
   ]);
 }
 
@@ -252,7 +270,15 @@ export async function blockCommand(
       field("blocked_by"),
     ]),
   );
-  blocks.push(renderHelp(getSuggestions({ action: "block", id })));
+  blocks.push(
+    renderHelp(
+      getSuggestions({
+        action: "block",
+        id,
+        globals: context?.suggestionGlobals,
+      }),
+    ),
+  );
   return renderOutput(blocks);
 }
 
@@ -282,7 +308,15 @@ export async function unblockCommand(
       field("blocked_by"),
     ]),
   );
-  blocks.push(renderHelp(getSuggestions({ action: "unblock", id })));
+  blocks.push(
+    renderHelp(
+      getSuggestions({
+        action: "unblock",
+        id,
+        globals: context?.suggestionGlobals,
+      }),
+    ),
+  );
   return renderOutput(blocks);
 }
 
@@ -309,7 +343,15 @@ export async function readyCommand(
   } else {
     blocks.push(renderTaskList("ready", items, all));
   }
-  blocks.push(renderHelp(getSuggestions({ action: "ready", isEmpty })));
+  blocks.push(
+    renderHelp(
+      getSuggestions({
+        action: "ready",
+        isEmpty,
+        globals: context?.suggestionGlobals,
+      }),
+    ),
+  );
   return renderOutput(blocks);
 }
 

@@ -10,7 +10,7 @@ import {
   writeFileSync,
   writeSync,
 } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { AxiError } from "../errors.js";
 
 /**
@@ -44,6 +44,16 @@ function errno(error: unknown): string {
   return error && typeof error === "object" && "code" in error
     ? String((error as NodeJS.ErrnoException).code)
     : "UNKNOWN";
+}
+
+function unlinkIfTokenMatches(lockPath: string, token: string): boolean {
+  try {
+    if (readFileSync(lockPath, "utf8") !== token) return false;
+    unlinkSync(lockPath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Read a file's UTF-8 contents, or undefined when it does not exist. */
@@ -89,24 +99,17 @@ async function acquireLock(targetPath: string): Promise<LockHandle> {
         closeSync(fd);
       }
       return {
-        release: () => {
-          try {
-            if (readFileSync(lockPath, "utf8") !== token) return;
-            unlinkSync(lockPath);
-          } catch {
-            // already gone
-          }
-        },
+        release: () => void unlinkIfTokenMatches(lockPath, token),
       };
     } catch (error) {
       if (errno(error) !== "EEXIST") throw error;
 
       // Steal a stale lock (a crashed process that never released it).
       try {
+        const observed = readFileSync(lockPath, "utf8");
         const stat = statSync(lockPath);
         if (Date.now() - stat.mtimeMs > LOCK_STALE_MS) {
-          unlinkSync(lockPath);
-          continue;
+          if (unlinkIfTokenMatches(lockPath, observed)) continue;
         }
       } catch {
         // lock vanished between EEXIST and stat — retry immediately
@@ -133,6 +136,24 @@ export async function withLock<T>(
     return await fn();
   } finally {
     handle.release();
+  }
+}
+
+export async function withLocks<T>(
+  paths: string[],
+  fn: () => Promise<T> | T,
+): Promise<T> {
+  const byResolved = new Map<string, string>();
+  for (const path of paths) byResolved.set(resolve(path), path);
+  const ordered = [...byResolved.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, path]) => path);
+  const handles: LockHandle[] = [];
+  try {
+    for (const path of ordered) handles.push(await acquireLock(path));
+    return await fn();
+  } finally {
+    for (const handle of handles.reverse()) handle.release();
   }
 }
 

@@ -15,6 +15,7 @@ import {
   isLocked,
   readFileSafe,
   withLock,
+  withLocks,
 } from "../../src/backends/lock.js";
 
 let dir: string;
@@ -101,5 +102,24 @@ describe("lock + atomic write", () => {
     releaseReclaimed();
     await reclaimedFinished;
     expect(existsSync(lockPath)).toBe(false);
+  });
+
+  it("serializes reversed multi-lock acquisition orders", async () => {
+    const a = join(dir, "a.md");
+    const b = join(dir, "b.md");
+    let active = 0;
+    let maxActive = 0;
+    const hold = async () => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      active -= 1;
+    };
+
+    await Promise.all([withLocks([a, b], hold), withLocks([b, a], hold)]);
+
+    expect(maxActive).toBe(1);
+    expect(isLocked(a)).toBe(false);
+    expect(isLocked(b)).toBe(false);
   });
 });

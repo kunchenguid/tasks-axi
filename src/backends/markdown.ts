@@ -18,7 +18,7 @@ import type {
   PruneResult,
   Store,
 } from "../store.js";
-import { atomicWrite, readFileSafe, withLock } from "./lock.js";
+import { atomicWrite, readFileSafe, withLock, withLocks } from "./lock.js";
 import {
   type BacklogDoc,
   type Section,
@@ -419,14 +419,34 @@ export class MarkdownStore implements Store {
   }
 
   async moveTo(id: string, target: MarkdownStore): Promise<Task> {
-    return withLock(this.path, async () => {
+    return withLocks([this.path, target.path], () => {
       const doc = this.load();
       const found = this.findEntry(doc, id);
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
 
-      const task = found.entry.task;
-      await target.create(taskToInput(task));
+      const targetDoc = target.load();
+      target.ensureSections(targetDoc);
+      if (target.findEntry(targetDoc, id)) {
+        throw new AxiError(
+          `Task "${id}" already exists in the destination backlog`,
+          "CONFLICT",
+        );
+      }
+
+      const task = target.taskFromInput(taskToInput(found.entry.task));
+      target.requireExistingDeps(targetDoc, task.deps);
+      target.insert(
+        target.section(targetDoc, task.state),
+        {
+          kind: "task",
+          task,
+          raw: [],
+          dirty: true,
+        },
+        task.state === "in_flight",
+      );
       found.section.entries.splice(found.index, 1);
+      target.persist(targetDoc);
       this.persist(doc);
       return task;
     });

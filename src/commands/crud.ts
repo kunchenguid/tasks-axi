@@ -233,7 +233,13 @@ export async function addCommand(
   const all = (await store.list({})).items;
   const blocks = [
     renderTaskDetail(task, all, false),
-    renderHelp(getSuggestions({ action: "add", id })),
+    renderHelp(
+      getSuggestions({
+        action: "add",
+        id,
+        globals: context?.suggestionGlobals,
+      }),
+    ),
   ];
   return renderOutput(blocks);
 }
@@ -294,7 +300,15 @@ export async function listCommand(
   } else {
     blocks.push(renderTaskList("tasks", items, all, extraDefs));
   }
-  blocks.push(renderHelp(getSuggestions({ action: "list", isEmpty })));
+  blocks.push(
+    renderHelp(
+      getSuggestions({
+        action: "list",
+        isEmpty,
+        globals: context?.suggestionGlobals,
+      }),
+    ),
+  );
   return renderOutput(blocks);
 }
 
@@ -333,7 +347,12 @@ export async function showCommand(
   const isBlocked = blockedIds(all).has(id);
 
   const blocks = [renderTaskDetail(task, all, full)];
-  const help = getSuggestions({ action: "show", id, blocked: isBlocked });
+  const help = getSuggestions({
+    action: "show",
+    id,
+    blocked: isBlocked,
+    globals: context?.suggestionGlobals,
+  });
   if (help.length > 0) blocks.push(renderHelp(help));
   return renderOutput(blocks);
 }
@@ -402,7 +421,13 @@ export async function updateCommand(
   const all = (await store.list({})).items;
   const blocks = [
     renderTaskDetail(task, all, false),
-    renderHelp(getSuggestions({ action: "update", id })),
+    renderHelp(
+      getSuggestions({
+        action: "update",
+        id,
+        globals: context?.suggestionGlobals,
+      }),
+    ),
   ];
   return renderOutput(blocks);
 }
@@ -425,7 +450,13 @@ export async function rmCommand(
 
   const blocks = [
     `removed:\n  id: ${id}`,
-    renderHelp(getSuggestions({ action: "rm", id })),
+    renderHelp(
+      getSuggestions({
+        action: "rm",
+        id,
+        globals: context?.suggestionGlobals,
+      }),
+    ),
   ];
   return renderOutput(blocks);
 }

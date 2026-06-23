@@ -1,3 +1,4 @@
+import { decode } from "@toon-format/toon";
 import { describe, expect, it } from "vitest";
 import {
   ADD_HELP,
@@ -273,6 +274,7 @@ describe("crud commands", () => {
         expect(out).toMatch(/count: \d+/);
         expect(out).toContain("tasks[");
         expect(out).toContain("{id,state,kind,repo,title}");
+        expect(() => decode(out)).not.toThrow();
         // the long body is never in list
         expect(out).not.toContain("Follow-up note added later");
       } finally {

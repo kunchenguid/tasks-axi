@@ -1,3 +1,4 @@
+import { decode } from "@toon-format/toon";
 import { describe, expect, it } from "vitest";
 import { homeCommand } from "../../src/commands/home.js";
 import { makeBacklog } from "../helpers.js";
@@ -13,6 +14,7 @@ describe("home", () => {
       expect(out.match(/^queued(?:\[|:)/gm)).toHaveLength(1);
       expect(out).toContain("done:");
       expect(out).toContain("help[");
+      expect(() => decode(out)).not.toThrow();
       // the long body never appears in the dashboard
       expect(out).not.toContain("Follow-up note added later");
     } finally {

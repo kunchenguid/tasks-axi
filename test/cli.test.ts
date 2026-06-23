@@ -1,6 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { decode } from "@toon-format/toon";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { main, TOP_HELP } from "../src/cli.js";
 import { FIXTURE } from "./helpers.js";
@@ -53,8 +54,10 @@ describe("CLI entrypoint", () => {
   it("runs a verb against the env-resolved backlog", async () => {
     const c = capture();
     await main({ argv: ["list", "--state", "queued"], stdout: c.stdout });
-    expect(c.read()).toContain("count:");
-    expect(c.read()).toContain("cert-cleanup");
+    const out = c.read();
+    expect(out).toContain("count:");
+    expect(out).toContain("cert-cleanup");
+    expect(() => decode(out)).not.toThrow();
   });
 
   it("treats the `task` noun as optional sugar", async () => {
@@ -92,8 +95,23 @@ describe("CLI entrypoint", () => {
     writeFileSync(other, "# Backlog\n\n## Queued\n- [ ] solo-q1 - just me\n");
     const c = capture();
     await main({ argv: ["list", "--file", other], stdout: c.stdout });
-    expect(c.read()).toContain("solo-q1");
-    expect(c.read()).not.toContain("cert-cleanup");
+    const out = c.read();
+    expect(out).toContain("solo-q1");
+    expect(out).not.toContain("cert-cleanup");
+    expect(out).toContain(`Run \`tasks-axi show <id> --file=${other}\``);
+  });
+
+  it("carries explicit global backend and file flags into suggestions", async () => {
+    const other = join(dir, "other.md");
+    writeFileSync(other, "# Backlog\n\n## Queued\n- [ ] solo-q1 - just me\n");
+    const c = capture();
+    await main({
+      argv: ["list", "--backend", "markdown", "--file", other],
+      stdout: c.stdout,
+    });
+    expect(c.read()).toContain(
+      `Run \`tasks-axi show <id> --backend=markdown --file=${other}\``,
+    );
   });
 
   it("rejects a missing global flag value", async () => {
@@ -119,6 +137,13 @@ describe("CLI entrypoint", () => {
     expect(process.exitCode).toBe(2);
   });
 
+  it("rejects multiline global flag values", async () => {
+    const c = capture();
+    await main({ argv: ["list", "--file", "one\ntwo"], stdout: c.stdout });
+    expect(c.read()).toContain("--file must be a single line");
+    expect(process.exitCode).toBe(2);
+  });
+
   it("renders config validation errors without a stack trace", async () => {
     writeFileSync(join(dir, ".tasks.toml"), "[markdown]\ndone_keep = -1\n");
     process.chdir(dir);
@@ -132,9 +157,11 @@ describe("CLI entrypoint", () => {
   it("renders the home dashboard with no args", async () => {
     const c = capture();
     await main({ argv: [], stdout: c.stdout });
-    expect(c.read()).toContain("bin:");
-    expect(c.read()).toContain("description:");
-    expect(c.read()).toContain("queued[");
+    const out = c.read();
+    expect(out).toContain("bin:");
+    expect(out).toContain("description:");
+    expect(out).toContain("queued[");
+    expect(() => decode(out)).not.toThrow();
   });
 
   it("errors on an unknown command", async () => {

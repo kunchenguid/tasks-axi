@@ -50,7 +50,12 @@ export async function pruneCommand(
       },
       [field("state"), field("kept"), field("archived"), field("ids")],
     ),
-    renderHelp(getSuggestions({ action: "prune" })),
+    renderHelp(
+      getSuggestions({
+        action: "prune",
+        globals: context?.suggestionGlobals,
+      }),
+    ),
   ]);
 }
 

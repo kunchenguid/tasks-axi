@@ -54,10 +54,19 @@ export function renderDetail(
   return encode({ [label]: extract(item, schema) });
 }
 
-/** Render help suggestions (manual formatting — encode() inlines primitive arrays). */
+function renderPrimitive(value: string): string {
+  const encoded = encode([value]);
+  const prefix = "[1]: ";
+  if (!encoded.startsWith(prefix)) {
+    throw new Error("Unexpected TOON primitive array encoding");
+  }
+  return encoded.slice(prefix.length);
+}
+
+/** Render help suggestions as a one-item-per-line TOON primitive array. */
 export function renderHelp(lines: string[]): string {
   if (lines.length === 0) return "";
-  const indented = lines.map((l) => `  ${l}`).join("\n");
+  const indented = lines.map((l) => `  - ${renderPrimitive(l)}`).join("\n");
   return `help[${lines.length}]:\n${indented}`;
 }
 

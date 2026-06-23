@@ -2,9 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runAxiCli } from "axi-sdk-js";
-import { requireFlagValue } from "./args.js";
+import { requireFlagValue, requireNonEmptySingleLineFlagValue } from "./args.js";
 import { resolveTasksContext, type TasksContext } from "./context.js";
-import { AxiError } from "./errors.js";
 import {
   ADD_HELP,
   LIST_HELP,
@@ -41,6 +40,7 @@ import {
 } from "./commands/maintain.js";
 import { homeCommand } from "./commands/home.js";
 import { SETUP_HELP, setupCommand } from "./commands/setup.js";
+import type { SuggestionGlobals } from "./suggestions.js";
 
 export const DESCRIPTION =
   "Agent ergonomic task & backlog manager for the current workspace. Prefer this over hand-editing backlog.md for task state changes.";
@@ -139,11 +139,15 @@ export async function main(options: MainOptions = {}): Promise<void> {
 /** Strip the global --backend/--file flags and run the handler on the rest. */
 function withContext(handler: CommandFn): CommandFn {
   return (args) => {
-    const { backend, file, stripped } = parseGlobalFlags(args);
-    const ctx = resolveTasksContext({
-      ...(backend !== undefined ? { backend } : {}),
-      ...(file !== undefined ? { file } : {}),
-    });
+    const { backend, file, stripped, suggestionGlobals } =
+      parseGlobalFlags(args);
+    const ctx = resolveTasksContext(
+      {
+        ...(backend !== undefined ? { backend } : {}),
+        ...(file !== undefined ? { file } : {}),
+      },
+      suggestionGlobals,
+    );
     return handler(stripped, ctx);
   };
 }
@@ -152,6 +156,7 @@ function parseGlobalFlags(args: string[]): {
   backend?: string;
   file?: string;
   stripped: string[];
+  suggestionGlobals?: SuggestionGlobals;
 } {
   const stripped: string[] = [];
   let backend: string | undefined;
@@ -192,16 +197,19 @@ function parseGlobalFlags(args: string[]): {
     ...(backend ? { backend } : {}),
     ...(file ? { file } : {}),
     stripped,
+    ...(backend !== undefined || file !== undefined
+      ? {
+          suggestionGlobals: {
+            ...(backend !== undefined ? { backend } : {}),
+            ...(file !== undefined ? { file } : {}),
+          },
+        }
+      : {}),
   };
 }
 
 function requireNonEmptyGlobalFlagValue(flag: string, value: string): string {
-  if (value.trim() === "") {
-    throw new AxiError(`${flag} requires a value`, "VALIDATION_ERROR", [
-      `Pass ${flag}=... with a non-empty value`,
-    ]);
-  }
-  return value;
+  return requireNonEmptySingleLineFlagValue(flag, value) ?? value;
 }
 
 function readPackageVersion(): string {

@@ -2,6 +2,7 @@ import { MarkdownStore } from "./backends/markdown.js";
 import { type ConfigOverrides, type ResolvedConfig, resolveConfig } from "./config.js";
 import { AxiError } from "./errors.js";
 import type { Store } from "./store.js";
+import type { SuggestionGlobals } from "./suggestions.js";
 
 /**
  * The resolved CLI context: the active backend Store plus the config that
@@ -11,10 +12,12 @@ import type { Store } from "./store.js";
 export interface TasksContext {
   store: Store;
   config: ResolvedConfig;
+  suggestionGlobals?: SuggestionGlobals;
 }
 
 export function resolveTasksContext(
   overrides: ConfigOverrides = {},
+  suggestionGlobals?: SuggestionGlobals,
 ): TasksContext {
   const config = resolveConfig(overrides);
 
@@ -30,7 +33,11 @@ export function resolveTasksContext(
     path: config.path,
     ...(config.archivePath ? { archivePath: config.archivePath } : {}),
   });
-  return { store, config };
+  return {
+    store,
+    config,
+    ...(suggestionGlobals ? { suggestionGlobals } : {}),
+  };
 }
 
 /** Narrow an optional context to a present one (the resolver always sets it). */
