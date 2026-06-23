@@ -214,12 +214,12 @@ describe("MarkdownStore", () => {
     it("appending a note leaves all original lines intact", async () => {
       const b = makeBacklog();
       try {
-        const before = b.read().split("\n");
+        const before = b.read().split(/\r?\n/);
         await b.store.update("cert-cleanup", { appendBody: "a note" });
         const after = b.read();
         // no original line is removed; the note is simply added as a continuation
         for (const line of before) expect(after).toContain(line);
-        expect(after).toContain("\n  a note");
+        expect(after).toMatch(/\r?\n[ ]{2}a note/);
       } finally {
         b.cleanup();
       }

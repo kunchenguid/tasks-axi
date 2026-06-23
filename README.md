@@ -176,6 +176,12 @@ pnpm run build:skill -- --check   # fail if the generated skill is stale
 
 The installable skill is generated from the same description and help the CLI prints, so it can never drift.
 
+## Contributing
+
+Contributions are welcome.
+Human-authored PRs targeting `main` are raised through the [`no-mistakes`](https://github.com/kunchenguid/no-mistakes) gate, which runs review/test/lint/CI before opening the PR.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow and repo conventions.
+
 ## License
 
-MIT
+[MIT](LICENSE) © Kun Chen

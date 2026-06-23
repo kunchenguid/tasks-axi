@@ -30,10 +30,28 @@ function tasksOf(doc: BacklogDoc): Task[] {
   return out;
 }
 
+function toCrlf(src: string): string {
+  return src.replace(/\r?\n/g, "\r\n");
+}
+
 describe("markdown grammar", () => {
   describe("byte-exact round-trip", () => {
     it("render(parse(src)) === src on the corpus fixture", () => {
       expect(renderBacklog(parseBacklog(FIXTURE))).toBe(FIXTURE);
+    });
+
+    it("round-trips CRLF fixtures while still recognizing tasks", () => {
+      const src = toCrlf(FIXTURE);
+      const doc = parseBacklog(src);
+      const tasks = tasksOf(doc);
+      const ids = tasks.map((t) => t.id);
+
+      expect(renderBacklog(doc)).toBe(src);
+      expect(ids).toContain("cert-cleanup");
+      expect(ids).toContain("lease-core-t4");
+      expect(
+        tasks.find((t) => t.id === "multi-line-w8")?.body,
+      ).not.toContain("\r");
     });
 
     it("round-trips an empty file", () => {

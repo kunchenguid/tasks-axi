@@ -18,6 +18,17 @@ function capture() {
   };
 }
 
+function quoteSuggestionValue(value: string): string {
+  if (/^[A-Za-z0-9_./:@%+=,-]+$/.test(value)) return value;
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function decodedHelp(out: string): string[] {
+  const decoded = decode(out) as { help?: unknown };
+  expect(Array.isArray(decoded.help)).toBe(true);
+  return decoded.help as string[];
+}
+
 let dir: string;
 let path: string;
 const savedFile = process.env.TASKS_AXI_FILE;
@@ -98,26 +109,28 @@ describe("CLI entrypoint", () => {
   });
 
   it("accepts a global --file after the command", async () => {
-    const other = join(dir, "other.md");
+    const other = join(dir, "other backlog.md");
     writeFileSync(other, "# Backlog\n\n## Queued\n- [ ] solo-q1 - just me\n");
     const c = capture();
     await main({ argv: ["list", "--file", other], stdout: c.stdout });
     const out = c.read();
     expect(out).toContain("solo-q1");
     expect(out).not.toContain("cert-cleanup");
-    expect(out).toContain(`Run \`tasks-axi show <id> --file=${other}\``);
+    expect(decodedHelp(out)).toContain(
+      `Run \`tasks-axi show <id> --file=${quoteSuggestionValue(other)}\` for full notes on a task`,
+    );
   });
 
   it("carries explicit global backend and file flags into suggestions", async () => {
-    const other = join(dir, "other.md");
+    const other = join(dir, "other backlog.md");
     writeFileSync(other, "# Backlog\n\n## Queued\n- [ ] solo-q1 - just me\n");
     const c = capture();
     await main({
       argv: ["list", "--backend", "markdown", "--file", other],
       stdout: c.stdout,
     });
-    expect(c.read()).toContain(
-      `Run \`tasks-axi show <id> --backend=markdown --file=${other}\``,
+    expect(decodedHelp(c.read())).toContain(
+      `Run \`tasks-axi show <id> --backend=markdown --file=${quoteSuggestionValue(other)}\` for full notes on a task`,
     );
   });
 

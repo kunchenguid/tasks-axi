@@ -7,6 +7,10 @@ import {
   SKILL_DESCRIPTION,
 } from "../src/skill.js";
 
+function normalizeLineEndings(value: string): string {
+  return value.replace(/\r\n/g, "\n");
+}
+
 describe("skill generation", () => {
   it("extracts the commands block from TOP_HELP", () => {
     const block = extractCommandsBlock();
@@ -29,6 +33,6 @@ describe("skill generation", () => {
       new URL("../skills/tasks-axi/SKILL.md", import.meta.url),
       "utf8",
     );
-    expect(committed).toBe(createSkillMarkdown());
+    expect(normalizeLineEndings(committed)).toBe(createSkillMarkdown());
   });
 });
