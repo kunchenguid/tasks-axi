@@ -85,6 +85,22 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("rejects out-of-range priority values", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.create({
+            id: "bad-priority-q1",
+            title: "bad priority",
+            priority: 7,
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("bad-priority-q1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("filters list by state, repo, and kind with a true total", async () => {
       const b = makeBacklog();
       try {
@@ -262,6 +278,18 @@ describe("MarkdownStore", () => {
           b.store.update("cert-cleanup", { kind: "ship\nscout" }),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         expect(b.read()).not.toContain("ship\nscout");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects out-of-range priority updates", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.update("cert-cleanup", { priority: 7 }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("(priority: 7)");
       } finally {
         b.cleanup();
       }

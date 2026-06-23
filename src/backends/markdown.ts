@@ -88,6 +88,17 @@ function normalizeLinkUrl(url: string): string {
   return trimmed;
 }
 
+function normalizePriority(priority: number | undefined): number | undefined {
+  if (priority === undefined) return undefined;
+  if (!Number.isInteger(priority) || priority < 0 || priority > 4) {
+    throw new AxiError(
+      "Task priority must be an integer 0-4",
+      "VALIDATION_ERROR",
+    );
+  }
+  return priority;
+}
+
 function appendTitleText(title: string, text: string): string {
   const url = normalizeLinkUrl(text);
   if (deriveLinks(title).some((link) => link.url === url)) return title;
@@ -241,7 +252,8 @@ export class MarkdownStore implements Store {
     if (kind) task.kind = kind;
     if (repo) task.repo = repo;
     if (input.body) task.body = input.body;
-    if (input.priority !== undefined) task.priority = input.priority;
+    const priority = normalizePriority(input.priority);
+    if (priority !== undefined) task.priority = priority;
     if (input.meta) task.meta = input.meta;
     if (input.created !== undefined) {
       if (input.created) task.created = input.created;
@@ -293,7 +305,8 @@ export class MarkdownStore implements Store {
       if (patch.kind !== undefined) {
         task.kind = normalizeTagValue(patch.kind, "kind");
       }
-      if (patch.priority !== undefined) task.priority = patch.priority;
+      const priority = normalizePriority(patch.priority);
+      if (priority !== undefined) task.priority = priority;
       if (patch.meta) task.meta = { ...task.meta, ...patch.meta };
       for (const link of patch.addLinks ?? []) {
         task.title = appendTitleText(task.title, link.url);

@@ -331,7 +331,9 @@ export async function updateCommand(
     );
   }
   if (body !== undefined) patch.body = body;
-  if (append !== undefined) patch.appendBody = append;
+  if (append !== undefined) {
+    patch.appendBody = requireNonEmptyFlagValue("--append", append);
+  }
   if (repo !== undefined) patch.repo = repo;
   if (kind !== undefined) patch.kind = kind;
   if (priority !== undefined) patch.priority = priority;

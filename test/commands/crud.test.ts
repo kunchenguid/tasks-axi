@@ -340,6 +340,18 @@ describe("crud commands", () => {
       }
     });
 
+    it("rejects an empty append before updating", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          updateCommand(["cert-cleanup", "--append", "   "], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("\n     ");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("requires at least one field", async () => {
       const b = makeBacklog();
       try {
