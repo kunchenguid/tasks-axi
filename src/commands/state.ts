@@ -399,8 +399,8 @@ export async function mvCommand(
   const { store, config } = requireCtx(context);
   const args = [...rawArgs];
 
-  const to = takeFlag(args, "--to");
-  if (!to) {
+  const to = requireNonEmptySingleLineFlagValue("--to", takeFlag(args, "--to"));
+  if (to === undefined) {
     throw new AxiError("--to <path-or-dir> is required", "VALIDATION_ERROR", [
       "Name the destination backlog, e.g. `--to ../other/data/backlog.md`",
     ]);

@@ -18,13 +18,17 @@ export interface RowOptions {
   all: Task[];
   /** Show untruncated title/body. */
   full?: boolean;
+  /** Escape hatch text for truncated fields. */
+  truncationHint?: string;
 }
 
 export function toRow(task: Task, opts: RowOptions): Record<string, unknown> {
   const blockers = activeBlockers(task, opts.all);
   return {
     id: task.id,
-    title: opts.full ? task.title : truncate(task.title, TITLE_LIST_LIMIT),
+    title: opts.full
+      ? task.title
+      : truncate(task.title, TITLE_LIST_LIMIT, opts.truncationHint),
     state: task.state,
     blocked: blockers.length > 0 ? "yes" : "no",
     blocked_by: blockers.length > 0 ? blockers.join(",") : "none",
@@ -41,7 +45,9 @@ export function toRow(task: Task, opts: RowOptions): Record<string, unknown> {
       task.links.length > 0
         ? task.links.map((l) => `${l.kind}:${l.url}`).join(",")
         : "none",
-    body: opts.full ? (task.body ?? "") : truncate(task.body, BODY_LIMIT),
+    body: opts.full
+      ? (task.body ?? "")
+      : truncate(task.body, BODY_LIMIT, opts.truncationHint),
   };
 }
 
@@ -87,7 +93,12 @@ export function renderTaskList(
   all: Task[],
   extra: FieldDef[] = [],
 ): string {
-  const rows = tasks.map((t) => toRow(t, { all }));
+  const rows = tasks.map((t) =>
+    toRow(t, {
+      all,
+      truncationHint: `use show ${t.id} --full to see complete text`,
+    }),
+  );
   return renderList(label, rows, [...LIST_DEFAULT, ...extra]);
 }
 

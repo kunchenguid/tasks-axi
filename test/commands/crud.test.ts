@@ -97,6 +97,22 @@ describe("crud commands", () => {
       }
     });
 
+    it.each<[string, string, string[]]>([
+      ["bad pr", "dup title", ["--pr", "https://github.com/o/r/issues/9"]],
+      ["missing blocker", "dup title", ["--blocked-by", "missing-q1"]],
+      ["tag-injecting repo", "dup title", ["--repo", "foo(bar)"]],
+      ["tagging title", "dup title (repo: foo)", []],
+    ])("rejects %s before duplicate add no-ops", async (_case, title, flagArgs) => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          addCommand(["lease-adopt", title, ...flagArgs], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects an invalid id", async () => {
       const b = makeBacklog();
       try {
@@ -302,6 +318,18 @@ describe("crud commands", () => {
         expect(out).toMatch(/count: 0 of \d+ total/);
         expect(out).not.toContain("0 tasks in this backlog");
         expect(out).toContain("Run `tasks-axi show <id>`");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("uses show --full as the list truncation escape hatch", async () => {
+      const b = makeBacklog();
+      try {
+        await addCommand(["long-title-q1", "x".repeat(100)], b.ctx);
+        const out = await listCommand([], b.ctx);
+        expect(out).toContain("use show long-title-q1 --full");
+        expect(out).not.toContain("use --full to see complete text");
       } finally {
         b.cleanup();
       }

@@ -530,6 +530,18 @@ describe("state commands", () => {
       }
     });
 
+    it("rejects a whitespace --to before moving", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          mvCommand(["cert-cleanup", "--to", "   "], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toContain("cert-cleanup");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects extra positional arguments before moving", async () => {
       const b = makeBacklog();
       const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");

@@ -10,6 +10,7 @@ import {
   takeFlag,
 } from "../args.js";
 import { takeBody } from "../body.js";
+import { deriveLinks, extractTags } from "../backends/markdown-grammar.js";
 import { requireCtx, type TasksContext } from "../context.js";
 import { blockedIds } from "../derive.js";
 import { AxiError, notFound } from "../errors.js";
@@ -92,10 +93,47 @@ async function requireExistingBlockers(store: Store, deps: Dep[]): Promise<void>
   }
 }
 
+function requireSafeTagFlagValue(
+  flag: string,
+  value: string | undefined,
+): string | undefined {
+  const checked = requireNonEmptySingleLineFlagValue(flag, value);
+  if (checked === undefined) return undefined;
+  if (/[()]/.test(checked)) {
+    throw new AxiError(`${flag} must not contain parentheses`, "VALIDATION_ERROR", [
+      `Pass ${flag}=... without parentheses`,
+    ]);
+  }
+  return checked.trim();
+}
+
+function requireTypedLinkUrl(
+  flag: "--pr" | "--report",
+  kind: TaskLink["kind"],
+  value: string | undefined,
+): string | undefined {
+  const checked = requireNonEmptyFlagValue(flag, value);
+  if (checked === undefined) return undefined;
+  if (/[\r\n]/.test(checked)) {
+    throw new AxiError(`${flag} must be a single line`, "VALIDATION_ERROR", [
+      `Pass ${flag}=... without line breaks`,
+    ]);
+  }
+  const url = checked.trim();
+  if (!deriveLinks(url).some((link) => link.kind === kind && link.url === url)) {
+    const expected =
+      kind === "pr"
+        ? "an http(s) pull request URL ending in /pull/<number>"
+        : "a data/<id>/report.md path";
+    throw new AxiError(`${flag} must be ${expected}`, "VALIDATION_ERROR");
+  }
+  return url;
+}
+
 function parseLinks(pr?: string, report?: string): TaskLink[] {
   const links: TaskLink[] = [];
-  const checkedPr = requireNonEmptyFlagValue("--pr", pr);
-  const checkedReport = requireNonEmptyFlagValue("--report", report);
+  const checkedPr = requireTypedLinkUrl("--pr", "pr", pr);
+  const checkedReport = requireTypedLinkUrl("--report", "report", report);
   if (checkedPr !== undefined) links.push({ kind: "pr", url: checkedPr });
   if (checkedReport !== undefined) {
     links.push({ kind: "report", url: checkedReport });
@@ -118,6 +156,12 @@ function requireTitle(raw: string, message: string, suggestion: string): string 
   const title = raw.trim();
   if (title === "") {
     throw new AxiError(message, "VALIDATION_ERROR", [suggestion]);
+  }
+  if (extractTags(title).title !== title) {
+    throw new AxiError(
+      "Task title must not end with canonical task tags",
+      "VALIDATION_ERROR",
+    );
   }
   return title;
 }
@@ -148,11 +192,11 @@ export async function addCommand(
   const { store } = requireCtx(context);
   const args = [...rawArgs];
 
-  const kind = requireNonEmptySingleLineFlagValue(
+  const kind = requireSafeTagFlagValue(
     "--kind",
     takeFlag(args, "--kind"),
   );
-  const repo = requireNonEmptySingleLineFlagValue(
+  const repo = requireSafeTagFlagValue(
     "--repo",
     takeFlag(args, "--repo"),
   );
@@ -204,6 +248,8 @@ export async function addCommand(
   if (deps.some((dep) => dep.id === id)) {
     throw new AxiError("A task cannot block itself", "VALIDATION_ERROR");
   }
+  await requireExistingBlockers(store, deps);
+  const links = parseLinks(pr, report);
 
   if (!mint) {
     const existing = await store.get(id);
@@ -214,15 +260,13 @@ export async function addCommand(
     }
   }
 
-  await requireExistingBlockers(store, deps);
-
   const state: State = start ? "in_flight" : "queued";
   const input: TaskInput = {
     id,
     title,
     state,
     deps,
-    links: parseLinks(pr, report),
+    links,
   };
   if (kind) input.kind = kind;
   if (repo) input.repo = repo;

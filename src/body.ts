@@ -46,11 +46,15 @@ export function takeBody(args: string[]): string | undefined {
  * maxLen; otherwise returns the first maxLen characters plus a sentinel naming
  * the total size and the `--full` escape hatch.
  */
-export function truncate(text: unknown, maxLen = DEFAULT_TRUNCATE): string {
+export function truncate(
+  text: unknown,
+  maxLen = DEFAULT_TRUNCATE,
+  hint = "use --full to see complete text",
+): string {
   if (typeof text !== "string" || text === "") return "";
   if (text.length <= maxLen) return text;
   return (
     text.slice(0, maxLen) +
-    `\n... (truncated, ${text.length} chars total — use --full to see complete text)`
+    `\n... (truncated, ${text.length} chars total - ${hint})`
   );
 }
