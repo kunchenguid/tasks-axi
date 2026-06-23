@@ -1,7 +1,6 @@
 import {
   closeSync,
   existsSync,
-  linkSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -22,12 +21,18 @@ import { AxiError } from "../errors.js";
  */
 
 const LOCK_STALE_MS = 30_000;
-const LOCK_RETRIES = 100;
+const LOCK_TIMEOUT_MS = 2_500;
 const LOCK_RETRY_MS = 25;
 let lockTokenCounter = 0;
 
 export interface LockHandle {
   release(): void;
+}
+
+export interface LockOptions {
+  timeoutMs?: number;
+  retryMs?: number;
+  staleMs?: number;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -51,72 +56,6 @@ function randomNonce(): string {
     .slice(2)}`;
 }
 
-function uniqueLockSidecar(lockPath: string, purpose: string): string {
-  return `${lockPath}.${purpose}-${process.pid}-${Date.now()}-${randomNonce()}`;
-}
-
-function unlinkSafe(path: string): void {
-  try {
-    unlinkSync(path);
-  } catch (error) {
-    if (errno(error) !== "ENOENT") throw error;
-  }
-}
-
-function restoreMovedLock(lockPath: string, movedPath: string): void {
-  try {
-    linkSync(movedPath, lockPath);
-  } catch (error) {
-    if (errno(error) !== "EEXIST" && errno(error) !== "ENOENT") throw error;
-  } finally {
-    unlinkSafe(movedPath);
-  }
-}
-
-function readStableLock(lockPath: string):
-  | {
-      token: string;
-      mtimeMs: number;
-    }
-  | undefined {
-  const token = readFileSync(lockPath, "utf8");
-  const stat = statSync(lockPath);
-  const tokenAfterStat = readFileSync(lockPath, "utf8");
-  if (tokenAfterStat !== token) return undefined;
-  return { token, mtimeMs: stat.mtimeMs };
-}
-
-function moveLockAside(lockPath: string, purpose: string): string | undefined {
-  const sidecarPath = uniqueLockSidecar(lockPath, purpose);
-  try {
-    renameSync(lockPath, sidecarPath);
-    return sidecarPath;
-  } catch (error) {
-    if (errno(error) === "ENOENT") return undefined;
-    throw error;
-  }
-}
-
-function removeMovedLockIfTokenMatches(
-  lockPath: string,
-  movedPath: string,
-  expectedToken: string,
-): boolean {
-  const movedToken = readFileSync(movedPath, "utf8");
-  if (movedToken !== expectedToken) {
-    restoreMovedLock(lockPath, movedPath);
-    return false;
-  }
-  unlinkSafe(movedPath);
-  return true;
-}
-
-function stealStaleLock(lockPath: string, staleToken: string): boolean {
-  const movedPath = moveLockAside(lockPath, "stale");
-  if (!movedPath) return false;
-  return removeMovedLockIfTokenMatches(lockPath, movedPath, staleToken);
-}
-
 function releaseLock(lockPath: string, token: string): void {
   let observed: string;
   try {
@@ -127,9 +66,32 @@ function releaseLock(lockPath: string, token: string): void {
   }
   if (observed !== token) return;
 
-  const movedPath = moveLockAside(lockPath, "release");
-  if (!movedPath) return;
-  removeMovedLockIfTokenMatches(lockPath, movedPath, token);
+  try {
+    unlinkSync(lockPath);
+  } catch (error) {
+    if (errno(error) !== "ENOENT") throw error;
+  }
+}
+
+function lockedError(lockPath: string, staleMs: number): AxiError {
+  try {
+    if (Date.now() - statSync(lockPath).mtimeMs > staleMs) {
+      return new AxiError(
+        `backlog lock looks stale: ${lockPath}`,
+        "LOCKED",
+        [
+          `If no tasks-axi process is running, remove ${lockPath} and retry`,
+        ],
+      );
+    }
+  } catch (error) {
+    if (errno(error) !== "ENOENT") throw error;
+  }
+  return new AxiError(
+    "backlog is locked by another tasks-axi process",
+    "LOCKED",
+    ["Wait a moment and retry"],
+  );
 }
 
 /** Read a file's UTF-8 contents, or undefined when it does not exist. */
@@ -161,11 +123,18 @@ export function atomicWrite(path: string, content: string): void {
   }
 }
 
-async function acquireLock(targetPath: string): Promise<LockHandle> {
+async function acquireLock(
+  targetPath: string,
+  options: LockOptions = {},
+): Promise<LockHandle> {
   const lockPath = `${targetPath}.lock`;
   mkdirSync(dirname(targetPath), { recursive: true });
+  const timeoutMs = options.timeoutMs ?? LOCK_TIMEOUT_MS;
+  const retryMs = options.retryMs ?? LOCK_RETRY_MS;
+  const staleMs = options.staleMs ?? LOCK_STALE_MS;
+  const deadline = Date.now() + timeoutMs;
 
-  for (let attempt = 0; attempt < LOCK_RETRIES; attempt++) {
+  while (true) {
     try {
       const fd = openSync(lockPath, "wx");
       const token = lockToken();
@@ -180,38 +149,22 @@ async function acquireLock(targetPath: string): Promise<LockHandle> {
     } catch (error) {
       if (errno(error) !== "EEXIST") throw error;
 
-      // Steal a stale lock (a crashed process that never released it).
-      try {
-        const observed = readStableLock(lockPath);
-        if (
-          observed &&
-          Date.now() - observed.mtimeMs > LOCK_STALE_MS &&
-          stealStaleLock(lockPath, observed.token)
-        ) {
-          continue;
-        }
-      } catch (error) {
-        if (errno(error) !== "ENOENT") throw error;
-        // Lock vanished between EEXIST and stat - retry immediately.
-        continue;
-      }
-      await sleep(LOCK_RETRY_MS);
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
+      await sleep(Math.min(retryMs, remaining));
     }
   }
 
-  throw new AxiError(
-    "backlog is locked by another tasks-axi process",
-    "LOCKED",
-    ["Wait a moment and retry; a stale lock is reclaimed automatically"],
-  );
+  throw lockedError(lockPath, staleMs);
 }
 
 /** Run `fn` while holding the advisory lock for `path`, releasing it after. */
 export async function withLock<T>(
   path: string,
   fn: () => Promise<T> | T,
+  options?: LockOptions,
 ): Promise<T> {
-  const handle = await acquireLock(path);
+  const handle = await acquireLock(path, options);
   try {
     return await fn();
   } finally {
@@ -222,6 +175,7 @@ export async function withLock<T>(
 export async function withLocks<T>(
   paths: string[],
   fn: () => Promise<T> | T,
+  options?: LockOptions,
 ): Promise<T> {
   const byResolved = new Map<string, string>();
   for (const path of paths) byResolved.set(resolve(path), path);
@@ -230,7 +184,7 @@ export async function withLocks<T>(
     .map(([, path]) => path);
   const handles: LockHandle[] = [];
   try {
-    for (const path of ordered) handles.push(await acquireLock(path));
+    for (const path of ordered) handles.push(await acquireLock(path, options));
     return await fn();
   } finally {
     for (const handle of handles.reverse()) handle.release();

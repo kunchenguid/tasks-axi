@@ -46,6 +46,11 @@ const HEADERS: Record<State, string> = {
 };
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+interface LoadedBacklogDoc {
+  doc: BacklogDoc;
+  source: string | undefined;
+}
+
 function today(): string {
   // Local date (firstmate's dates are local, e.g. "2026-06-22"), not UTC.
   const d = new Date();
@@ -207,8 +212,17 @@ export class MarkdownStore implements Store {
   // Read helpers
   // -------------------------------------------------------------------------
 
+  private loadSource(): string | undefined {
+    return readFileSafe(this.path);
+  }
+
   private load(): BacklogDoc {
-    return parseBacklog(readFileSafe(this.path) ?? "");
+    return parseBacklog(this.loadSource() ?? "");
+  }
+
+  private loadForUpdate(): LoadedBacklogDoc {
+    const source = this.loadSource();
+    return { doc: parseBacklog(source ?? ""), source };
   }
 
   private allTasks(doc: BacklogDoc): Task[] {
@@ -307,8 +321,19 @@ export class MarkdownStore implements Store {
     section.entries.splice(idx, 0, entry);
   }
 
-  private persist(doc: BacklogDoc): void {
-    atomicWrite(this.path, renderBacklog(doc));
+  private assertUnchanged(loaded: LoadedBacklogDoc): void {
+    if (this.loadSource() !== loaded.source) {
+      throw new AxiError(
+        "Backlog changed on disk; retry the command",
+        "CONFLICT",
+        ["Review the latest backlog, then re-run the command"],
+      );
+    }
+  }
+
+  private persist(loaded: LoadedBacklogDoc): void {
+    this.assertUnchanged(loaded);
+    atomicWrite(this.path, renderBacklog(loaded.doc));
   }
 
   private taskFromInput(input: TaskInput): Task {
@@ -353,7 +378,8 @@ export class MarkdownStore implements Store {
 
   async create(input: TaskInput): Promise<Task> {
     return withLock(this.path, () => {
-      const doc = this.load();
+      const loaded = this.loadForUpdate();
+      const { doc } = loaded;
       this.ensureSections(doc);
       if (this.findEntry(doc, input.id)) {
         throw new AxiError(
@@ -366,14 +392,15 @@ export class MarkdownStore implements Store {
       const entry: TaskEntry = { kind: "task", task, raw: [], dirty: true };
       // New in_flight work goes to the top; queued work appends to the bottom.
       this.insert(this.section(doc, task.state), entry, task.state === "in_flight");
-      this.persist(doc);
+      this.persist(loaded);
       return task;
     });
   }
 
   async update(id: string, patch: TaskPatch): Promise<Task> {
     return withLock(this.path, () => {
-      const doc = this.load();
+      const loaded = this.loadForUpdate();
+      const { doc } = loaded;
       const found = this.findEntry(doc, id);
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
       const task = found.entry.task;
@@ -401,30 +428,33 @@ export class MarkdownStore implements Store {
       task.updated = this.now();
 
       found.entry.dirty = true;
-      this.persist(doc);
+      this.persist(loaded);
       return task;
     });
   }
 
   async remove(id: string): Promise<Task> {
     return withLock(this.path, () => {
-      const doc = this.load();
+      const loaded = this.loadForUpdate();
+      const { doc } = loaded;
       const found = this.findEntry(doc, id);
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
       const task = found.entry.task;
       found.section.entries.splice(found.index, 1);
-      this.persist(doc);
+      this.persist(loaded);
       return task;
     });
   }
 
   async moveTo(id: string, target: MarkdownStore): Promise<Task> {
     return withLocks([this.path, target.path], () => {
-      const doc = this.load();
+      const loaded = this.loadForUpdate();
+      const { doc } = loaded;
       const found = this.findEntry(doc, id);
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
 
-      const targetDoc = target.load();
+      const targetLoaded = target.loadForUpdate();
+      const { doc: targetDoc } = targetLoaded;
       target.ensureSections(targetDoc);
       if (target.findEntry(targetDoc, id)) {
         throw new AxiError(
@@ -446,8 +476,10 @@ export class MarkdownStore implements Store {
         task.state === "in_flight",
       );
       found.section.entries.splice(found.index, 1);
-      target.persist(targetDoc);
-      this.persist(doc);
+      target.assertUnchanged(targetLoaded);
+      this.assertUnchanged(loaded);
+      target.persist(targetLoaded);
+      this.persist(loaded);
       return task;
     });
   }
@@ -462,7 +494,8 @@ export class MarkdownStore implements Store {
     opts: TransitionOpts = {},
   ): Promise<Task> {
     return withLock(this.path, () => {
-      const doc = this.load();
+      const loaded = this.loadForUpdate();
+      const { doc } = loaded;
       this.ensureSections(doc);
       const found = this.findEntry(doc, id);
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
@@ -503,7 +536,7 @@ export class MarkdownStore implements Store {
       // Done and started work surface at the top; reopened work appends to queued.
       this.insert(this.section(doc, to), moved, to !== "queued");
 
-      this.persist(doc);
+      this.persist(loaded);
       return task;
     });
   }
@@ -511,7 +544,8 @@ export class MarkdownStore implements Store {
   async addDep(id: string, dep: Dep): Promise<boolean> {
     const checkedDep = normalizeDep(id, dep);
     return withLock(this.path, () => {
-      const doc = this.load();
+      const loaded = this.loadForUpdate();
+      const { doc } = loaded;
       const found = this.findEntry(doc, id);
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
       const task = found.entry.task;
@@ -525,7 +559,7 @@ export class MarkdownStore implements Store {
       this.requireExistingDeps(doc, [checkedDep]);
       task.deps.push(checkedDep);
       found.entry.dirty = true;
-      this.persist(doc);
+      this.persist(loaded);
       return true;
     });
   }
@@ -533,7 +567,8 @@ export class MarkdownStore implements Store {
   async removeDep(id: string, dep: Dep): Promise<boolean> {
     const checkedDep: Dep = { ...dep, id: validateDependencyId(dep.id) };
     return withLock(this.path, () => {
-      const doc = this.load();
+      const loaded = this.loadForUpdate();
+      const { doc } = loaded;
       const found = this.findEntry(doc, id);
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
       const task = found.entry.task;
@@ -543,7 +578,7 @@ export class MarkdownStore implements Store {
       );
       if (task.deps.length === before) return false;
       found.entry.dirty = true;
-      this.persist(doc);
+      this.persist(loaded);
       return true;
     });
   }
@@ -554,7 +589,8 @@ export class MarkdownStore implements Store {
 
   async prune(options: PruneOptions): Promise<PruneResult> {
     return withLock(this.path, () => {
-      const doc = this.load();
+      const loaded = this.loadForUpdate();
+      const { doc } = loaded;
       const section = doc.sections.find((s) => s.state === options.state);
       if (!section) return { archived: 0, ids: [] };
 
@@ -581,9 +617,10 @@ export class MarkdownStore implements Store {
       }
 
       if (options.archive) {
+        this.assertUnchanged(loaded);
         this.appendArchive(archivedLines);
       }
-      this.persist(doc);
+      this.persist(loaded);
       return { archived: archivedIds.length, ids: archivedIds };
     });
   }
@@ -597,7 +634,8 @@ export class MarkdownStore implements Store {
 
   async render(): Promise<number> {
     return withLock(this.path, () => {
-      const doc = this.load();
+      const loaded = this.loadForUpdate();
+      const { doc } = loaded;
       this.ensureSections(doc);
       let count = 0;
       for (const section of doc.sections) {
@@ -608,7 +646,7 @@ export class MarkdownStore implements Store {
           }
         }
       }
-      this.persist(doc);
+      this.persist(loaded);
       return count;
     });
   }

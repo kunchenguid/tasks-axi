@@ -1,3 +1,4 @@
+import { writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { MarkdownStore } from "../../src/backends/markdown.js";
 import { AxiError } from "../../src/errors.js";
@@ -214,6 +215,29 @@ describe("MarkdownStore", () => {
         // no original line is removed; the note is simply added as a continuation
         for (const line of before) expect(after).toContain(line);
         expect(after).toContain("\n  a note");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects writes when the backlog changed after load", async () => {
+      const b = makeBacklog();
+      try {
+        const before = b.read();
+        const manuallyEdited = `${before}\nmanual edit\n`;
+
+        await expect(
+          b.store.update("cert-cleanup", {
+            get title() {
+              writeFileSync(b.path, manuallyEdited, "utf8");
+              return "updated title";
+            },
+          }),
+        ).rejects.toMatchObject({
+          code: "CONFLICT",
+          message: expect.stringContaining("changed on disk"),
+        });
+        expect(b.read()).toBe(manuallyEdited);
       } finally {
         b.cleanup();
       }

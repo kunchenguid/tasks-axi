@@ -60,48 +60,37 @@ describe("lock + atomic write", () => {
     expect(isLocked(path)).toBe(false);
   });
 
-  it("reclaims a stale lock from a crashed process", async () => {
+  it("fails closed when a held lock remains past the timeout", async () => {
     const path = join(dir, "b.md");
     const lockPath = `${path}.lock`;
-    writeFileSync(lockPath, "99999\n");
-    // Backdate the lock well past the stale threshold.
+    writeFileSync(lockPath, "other-holder\n");
+
+    await expect(
+      withLock(path, () => "never", { timeoutMs: 20, retryMs: 5 }),
+    ).rejects.toMatchObject({ code: "LOCKED" });
+    expect(readFileSync(lockPath, "utf8")).toBe("other-holder\n");
+  });
+
+  it("reports a stale held lock without removing it", async () => {
+    const path = join(dir, "b.md");
+    const lockPath = `${path}.lock`;
+    writeFileSync(lockPath, "crashed-holder\n");
     const old = new Date(Date.now() - 120_000);
     utimesSync(lockPath, old, old);
 
-    const result = await withLock(path, () => "stole it");
-    expect(result).toBe("stole it");
-    expect(existsSync(lockPath)).toBe(false);
-  });
-
-  it("does not release another holder's reclaimed stale lock", async () => {
-    const path = join(dir, "b.md");
-    const lockPath = `${path}.lock`;
-    let releaseReclaimed: (() => void) | undefined;
-    let reclaimedFinished: Promise<void> | undefined;
-    let markReclaimedHolding!: () => void;
-    const reclaimedHolding = new Promise<void>((resolve) => {
-      markReclaimedHolding = resolve;
+    await expect(
+      withLock(path, () => "never", {
+        staleMs: 30_000,
+        timeoutMs: 20,
+        retryMs: 5,
+      }),
+    ).rejects.toMatchObject({
+      code: "LOCKED",
+      message: expect.stringContaining("looks stale"),
+      suggestions: [expect.stringContaining(lockPath)],
     });
-
-    await withLock(path, async () => {
-      const old = new Date(Date.now() - 120_000);
-      utimesSync(lockPath, old, old);
-      reclaimedFinished = withLock(path, async () => {
-        markReclaimedHolding();
-        await new Promise<void>((resolve) => {
-          releaseReclaimed = resolve;
-        });
-      });
-      await reclaimedHolding;
-    });
-
+    expect(readFileSync(lockPath, "utf8")).toBe("crashed-holder\n");
     expect(existsSync(lockPath)).toBe(true);
-    if (!releaseReclaimed || !reclaimedFinished) {
-      throw new Error("reclaimed lock was not acquired");
-    }
-    releaseReclaimed();
-    await reclaimedFinished;
-    expect(existsSync(lockPath)).toBe(false);
   });
 
   it("does not release a different holder token", async () => {
@@ -115,7 +104,7 @@ describe("lock + atomic write", () => {
     expect(readFileSync(lockPath, "utf8")).toBe("other-holder\n");
   });
 
-  it("waits on a non-stale lock instead of reclaiming it", async () => {
+  it("waits on a non-stale lock until it is released", async () => {
     const path = join(dir, "b.md");
     let markFirstHolding!: () => void;
     let releaseFirst!: () => void;
