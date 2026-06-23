@@ -19,7 +19,7 @@ describe("parseConfigToml", () => {
   it("reads backend and the [markdown] table", () => {
     const cfg = parseConfigToml(
       [
-        '# a comment',
+        "# a comment",
         'backend = "markdown"',
         "",
         "[markdown]",
@@ -85,5 +85,12 @@ describe("resolveConfig", () => {
   it("reads done_keep from the project toml", () => {
     writeFileSync(join(dir, ".tasks.toml"), "[markdown]\ndone_keep = 5\n");
     expect(resolveConfig({ cwd: dir, home, env: {} }).doneKeep).toBe(5);
+  });
+
+  it("rejects negative done_keep from toml", () => {
+    writeFileSync(join(dir, ".tasks.toml"), "[markdown]\ndone_keep = -1\n");
+    expect(() => resolveConfig({ cwd: dir, home, env: {} })).toThrow(
+      /done_keep/,
+    );
   });
 });

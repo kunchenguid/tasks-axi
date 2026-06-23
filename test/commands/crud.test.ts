@@ -60,9 +60,9 @@ describe("crud commands", () => {
     it("rejects an invalid id", async () => {
       const b = makeBacklog();
       try {
-        await expect(
-          addCommand(["Bad Id", "t"], b.ctx),
-        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await expect(addCommand(["Bad Id", "t"], b.ctx)).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+        });
       } finally {
         b.cleanup();
       }
@@ -115,12 +115,40 @@ describe("crud commands", () => {
     it("filters by state and reports a true total when limited", async () => {
       const b = makeBacklog();
       try {
-        const out = await listCommand(["--state", "queued", "--limit", "2"], b.ctx);
+        const out = await listCommand(
+          ["--state", "queued", "--limit", "2"],
+          b.ctx,
+        );
         expect(out).toMatch(/count: 2 of \d+ total/);
       } finally {
         b.cleanup();
       }
     });
+
+    it("rejects an invalid state filter", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          listCommand(["--state", "in-flight"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it.each(["2abc", "abc", "-1"])(
+      "rejects an invalid limit %s",
+      async (limit) => {
+        const b = makeBacklog();
+        try {
+          await expect(
+            listCommand(["--limit", limit], b.ctx),
+          ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        } finally {
+          b.cleanup();
+        }
+      },
+    );
 
     it("filters to blocked tasks with --blocked", async () => {
       const b = makeBacklog();
@@ -165,7 +193,10 @@ describe("crud commands", () => {
     it("adds requested columns via --fields", async () => {
       const b = makeBacklog();
       try {
-        const out = await listCommand(["--fields", "blocked_by,created"], b.ctx);
+        const out = await listCommand(
+          ["--fields", "blocked_by,created"],
+          b.ctx,
+        );
         expect(out).toContain("blocked_by");
         expect(out).toContain("created");
       } finally {

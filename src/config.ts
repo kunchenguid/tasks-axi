@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { readFileSafe } from "./backends/lock.js";
+import { AxiError } from "./errors.js";
 
 /**
  * Backend + path resolution (report §8 config selection).
@@ -67,11 +68,13 @@ export function parseConfigToml(src: string): TomlConfig {
     const value = parseTomlValue(kv[2]);
 
     if (table === "") {
-      if (key === "backend" && typeof value === "string") config.backend = value;
+      if (key === "backend" && typeof value === "string")
+        config.backend = value;
       continue;
     }
     config.markdown ??= {};
-    if (key === "path" && typeof value === "string") config.markdown.path = value;
+    if (key === "path" && typeof value === "string")
+      config.markdown.path = value;
     if (key === "archive" && typeof value === "string")
       config.markdown.archive = value;
     if (key === "done_keep" && typeof value === "number")
@@ -109,6 +112,17 @@ function resolveMarkdownPath(
   return resolve(cwd, PATH_CANDIDATES[0]);
 }
 
+function validateDoneKeep(value: number): number {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new AxiError(
+      "markdown.done_keep must be a non-negative integer",
+      "VALIDATION_ERROR",
+      ["Set `[markdown] done_keep = 10` in .tasks.toml"],
+    );
+  }
+  return value;
+}
+
 export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
   const env = overrides.env ?? process.env;
   const cwd = overrides.cwd ?? process.cwd();
@@ -131,8 +145,11 @@ export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
   );
 
   const archive = projectToml.markdown?.archive ?? homeToml.markdown?.archive;
-  const doneKeep =
-    projectToml.markdown?.done_keep ?? homeToml.markdown?.done_keep ?? DEFAULT_KEEP;
+  const doneKeep = validateDoneKeep(
+    projectToml.markdown?.done_keep ??
+      homeToml.markdown?.done_keep ??
+      DEFAULT_KEEP,
+  );
 
   const config: ResolvedConfig = { backend, path, doneKeep };
   if (archive) {

@@ -7,7 +7,8 @@
  */
 
 /** The three explicit states (= the three markdown sections). */
-export type State = "queued" | "in_flight" | "done";
+export const STATES = ["queued", "in_flight", "done"] as const;
+export type State = (typeof STATES)[number];
 
 /** State plus the derived `blocked` projection used in display/filters. */
 export type DerivedState = State | "blocked";

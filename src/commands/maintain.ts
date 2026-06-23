@@ -1,7 +1,10 @@
-import { parseNonNegativeIntegerFlag, takeFlag } from "../args.js";
+import {
+  parseNonNegativeIntegerFlag,
+  parseStateFlag,
+  takeFlag,
+} from "../args.js";
 import { requireCtx, type TasksContext } from "../context.js";
 import { unsupported } from "../errors.js";
-import type { State } from "../model.js";
 import { getSuggestions } from "../suggestions.js";
 import { field, renderDetail, renderHelp, renderOutput } from "../toon.js";
 
@@ -9,7 +12,7 @@ export const PRUNE_HELP = `usage: tasks-axi prune [--keep <n>] [--state done]
 Trim a section to the N most recent tasks, archiving the rest (never deletes).
 flags:
   --keep <n>   tasks to retain (default from config, usually 10)
-  --state <state>   section to prune (default done)
+  --state <queued|in_flight|done>   section to prune (default done)
 examples:
   tasks-axi prune --keep 10`;
 
@@ -30,7 +33,7 @@ export async function pruneCommand(
 
   const keepRaw = takeFlag(args, "--keep");
   const keep = parseNonNegativeIntegerFlag("--keep", keepRaw, config.doneKeep);
-  const state = (takeFlag(args, "--state") ?? "done") as State;
+  const state = parseStateFlag("--state", takeFlag(args, "--state"), "done");
 
   const result = await store.prune({ state, keep, archive: true });
 

@@ -2,6 +2,8 @@ import {
   getFlag,
   getPositional,
   hasFlag,
+  parseOptionalNonNegativeIntegerFlag,
+  parseStateFlag,
   requireId,
   takeAllFlags,
   takeBoolFlag,
@@ -13,8 +15,15 @@ import { blockedIds } from "../derive.js";
 import { AxiError, notFound } from "../errors.js";
 import { parseFields } from "../fields.js";
 import { formatCountLine } from "../format.js";
-import { mintId, validateDependencyId, validateId } from "../id.js";
+import {
+  MINT_SUFFIXES,
+  mintId,
+  mintIdForSuffix,
+  validateDependencyId,
+  validateId,
+} from "../id.js";
 import type { Dep, State, TaskInput, TaskLink, TaskPatch } from "../model.js";
+import type { Store } from "../store.js";
 import { getSuggestions } from "../suggestions.js";
 import { renderHelp, renderOutput } from "../toon.js";
 import {
@@ -88,6 +97,25 @@ function parsePriority(raw: string | undefined): number | undefined {
   return Number(raw);
 }
 
+async function mintAvailableId(
+  store: Store,
+  title: string,
+  prefix?: string,
+): Promise<string> {
+  const first = mintId(title, prefix);
+  if (!(await store.get(first))) return first;
+
+  for (const suffix of MINT_SUFFIXES) {
+    const candidate = mintIdForSuffix(title, suffix, prefix);
+    if (candidate === first) continue;
+    if (!(await store.get(candidate))) return candidate;
+  }
+
+  throw new AxiError("Could not mint a unique id for this title", "CONFLICT", [
+    'Pass an explicit id, e.g. `tasks-axi add <id> "title"`',
+  ]);
+}
+
 export async function addCommand(
   rawArgs: string[],
   context?: TasksContext,
@@ -118,7 +146,7 @@ export async function addCommand(
         'Run `tasks-axi add "<title>" --mint`',
       ]);
     }
-    id = mintId(title, prefix);
+    id = await mintAvailableId(store, title, prefix);
   } else {
     id = validateId(requireId(positionals[0], "id"));
     title = titleFlag ?? positionals[1] ?? "";
@@ -129,19 +157,23 @@ export async function addCommand(
     }
   }
 
-  // Idempotent: an existing id is a no-op that reports the current task.
-  const existing = await store.get(id);
-  if (existing) {
-    const all = (await store.list({})).items;
-    const blocks = [
-      "already: true",
-      renderTaskDetail(existing, all, false),
-    ];
-    return renderOutput(blocks);
+  if (!mint) {
+    const existing = await store.get(id);
+    if (existing) {
+      const all = (await store.list({})).items;
+      const blocks = ["already: true", renderTaskDetail(existing, all, false)];
+      return renderOutput(blocks);
+    }
   }
 
   const state: State = start ? "in_flight" : "queued";
-  const input: TaskInput = { id, title, state, deps, links: parseLinks(pr, report) };
+  const input: TaskInput = {
+    id,
+    title,
+    state,
+    deps,
+    links: parseLinks(pr, report),
+  };
   if (kind) input.kind = kind;
   if (repo) input.repo = repo;
   if (body !== undefined) input.body = body;
@@ -163,13 +195,18 @@ export async function listCommand(
   const { store } = requireCtx(context);
   const args = [...rawArgs];
 
-  const { extraDefs } = parseFields(takeFlag(args, "--fields"), LIST_EXTRA_FIELDS);
-  const state = getFlag(args, "--state") as State | undefined;
+  const { extraDefs } = parseFields(
+    takeFlag(args, "--fields"),
+    LIST_EXTRA_FIELDS,
+  );
+  const state = parseStateFlag("--state", getFlag(args, "--state"));
   const repo = getFlag(args, "--repo");
   const kind = getFlag(args, "--kind");
   const onlyBlocked = hasFlag(args, "--blocked");
-  const limitRaw = getFlag(args, "--limit");
-  const limit = limitRaw ? parseInt(limitRaw, 10) : undefined;
+  const limit = parseOptionalNonNegativeIntegerFlag(
+    "--limit",
+    getFlag(args, "--limit"),
+  );
 
   // The full set is needed to derive `blocked` (a dep-graph projection), so the
   // list command filters in the CLI rather than pushing every filter to the
@@ -258,7 +295,10 @@ export async function updateCommand(
   const priority = parsePriority(takeFlag(args, "--priority"));
   const pr = takeFlag(args, "--pr");
   const report = takeFlag(args, "--report");
-  const id = requireId(args.find((a) => !a.startsWith("-")), "id");
+  const id = requireId(
+    args.find((a) => !a.startsWith("-")),
+    "id",
+  );
 
   const patch: TaskPatch = {};
   if (title !== undefined) patch.title = title;

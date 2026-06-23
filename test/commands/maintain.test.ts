@@ -26,6 +26,31 @@ describe("maintenance commands", () => {
         b.cleanup();
       }
     });
+
+    it("rejects a negative configured keep", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          pruneCommand([], {
+            ...b.ctx,
+            config: { ...b.ctx.config, doneKeep: -1 },
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects an invalid state", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          pruneCommand(["--state", "in-flight"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      } finally {
+        b.cleanup();
+      }
+    });
   });
 
   describe("render", () => {

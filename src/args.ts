@@ -1,4 +1,5 @@
 import { AxiError } from "./errors.js";
+import { STATES, type State } from "./model.js";
 
 function flagEqualsPrefix(flag: string): string {
   return `${flag}=`;
@@ -81,15 +82,63 @@ export function parseNonNegativeIntegerFlag(
   raw: string | undefined,
   fallback: number,
 ): number {
-  if (raw === undefined) return fallback;
+  if (raw === undefined) return requireNonNegativeInteger(flag, fallback);
+  return parseRequiredNonNegativeIntegerFlag(flag, raw);
+}
+
+export function parseOptionalNonNegativeIntegerFlag(
+  flag: string,
+  raw: string | undefined,
+): number | undefined {
+  if (raw === undefined) return undefined;
+  return parseRequiredNonNegativeIntegerFlag(flag, raw);
+}
+
+function parseRequiredNonNegativeIntegerFlag(
+  flag: string,
+  raw: string,
+): number {
   if (!/^\d+$/.test(raw)) {
-    throw new AxiError(`${flag} must be a non-negative integer`, "VALIDATION_ERROR");
+    throw new AxiError(
+      `${flag} must be a non-negative integer`,
+      "VALIDATION_ERROR",
+    );
   }
-  const value = Number(raw);
-  if (!Number.isSafeInteger(value)) {
-    throw new AxiError(`${flag} must be a non-negative integer`, "VALIDATION_ERROR");
+  return requireNonNegativeInteger(flag, Number(raw));
+}
+
+function requireNonNegativeInteger(flag: string, value: number): number {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new AxiError(
+      `${flag} must be a non-negative integer`,
+      "VALIDATION_ERROR",
+    );
   }
   return value;
+}
+
+export function parseStateFlag(
+  flag: string,
+  raw: string | undefined,
+): State | undefined;
+export function parseStateFlag(
+  flag: string,
+  raw: string | undefined,
+  fallback: State,
+): State;
+export function parseStateFlag(
+  flag: string,
+  raw: string | undefined,
+  fallback?: State,
+): State | undefined {
+  if (raw === undefined) return fallback;
+  if (!(STATES as readonly string[]).includes(raw)) {
+    throw new AxiError(
+      `${flag} must be one of queued, in_flight, done`,
+      "VALIDATION_ERROR",
+    );
+  }
+  return raw as State;
 }
 
 /**

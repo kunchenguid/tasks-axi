@@ -11,7 +11,9 @@ import { AxiError } from "./errors.js";
 /** Validate a caller-supplied id round-trips through the markdown grammar. */
 export function validateId(
   id: string,
-  suggestions = ["Use a slug like `homemux-h7`, or pass --mint to generate one"],
+  suggestions = [
+    "Use a slug like `homemux-h7`, or pass --mint to generate one",
+  ],
 ): string {
   if (!ID_RE.test(id)) {
     throw new AxiError(
@@ -24,7 +26,9 @@ export function validateId(
 }
 
 export function validateDependencyId(id: string): string {
-  return validateId(id, ["Use an existing task slug like `treehouse-lease-t4`"]);
+  return validateId(id, [
+    "Use an existing task slug like `treehouse-lease-t4`",
+  ]);
 }
 
 function slugify(text: string): string {
@@ -41,10 +45,27 @@ function suffix(): string {
   return randomBytes(4).toString("hex").slice(0, 2);
 }
 
-/** Mint a slug-xx id from a title, optionally namespaced with a prefix. */
-export function mintId(title: string, prefix?: string): string {
+export function mintIdForSuffix(
+  title: string,
+  suffixValue: string,
+  prefix?: string,
+): string {
+  if (!/^[0-9a-f]{2}$/.test(suffixValue)) {
+    throw new AxiError(
+      "Minted id suffix must be two lowercase hex characters",
+      "VALIDATION_ERROR",
+    );
+  }
   const base = slugify(title) || "task";
   const head = prefix ? `${slugify(prefix)}-${base}` : base;
-  const id = `${head}-${suffix()}`;
-  return validateId(id);
+  return validateId(`${head}-${suffixValue}`);
+}
+
+export const MINT_SUFFIXES = Array.from({ length: 256 }, (_, index) =>
+  index.toString(16).padStart(2, "0"),
+);
+
+/** Mint a slug-xx id from a title, optionally namespaced with a prefix. */
+export function mintId(title: string, prefix?: string): string {
+  return mintIdForSuffix(title, suffix(), prefix);
 }

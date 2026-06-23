@@ -20,6 +20,7 @@ function capture() {
 let dir: string;
 let path: string;
 const savedFile = process.env.TASKS_AXI_FILE;
+const savedCwd = process.cwd();
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "tasks-axi-cli-"));
@@ -29,6 +30,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  process.chdir(savedCwd);
   rmSync(dir, { recursive: true, force: true });
   if (savedFile === undefined) delete process.env.TASKS_AXI_FILE;
   else process.env.TASKS_AXI_FILE = savedFile;
@@ -87,6 +89,16 @@ describe("CLI entrypoint", () => {
     const c = capture();
     await main({ argv: ["list", "--file", "--state"], stdout: c.stdout });
     expect(c.read()).toContain("--file requires a value");
+    expect(process.exitCode).toBe(2);
+  });
+
+  it("renders config validation errors without a stack trace", async () => {
+    writeFileSync(join(dir, ".tasks.toml"), "[markdown]\ndone_keep = -1\n");
+    process.chdir(dir);
+    const c = capture();
+    await main({ argv: ["list"], stdout: c.stdout });
+    expect(c.read()).toContain("markdown.done_keep");
+    expect(c.read()).not.toContain("AxiError");
     expect(process.exitCode).toBe(2);
   });
 
