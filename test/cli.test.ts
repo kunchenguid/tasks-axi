@@ -103,6 +103,22 @@ describe("CLI entrypoint", () => {
     expect(process.exitCode).toBe(2);
   });
 
+  it("rejects an empty global --file without falling back to env config", async () => {
+    const c = capture();
+    await main({ argv: ["done", "cert-cleanup", "--file="], stdout: c.stdout });
+    expect(c.read()).toContain("--file requires a value");
+    expect(process.exitCode).toBe(2);
+    expect(readFileSync(path, "utf8")).toContain("- [ ] cert-cleanup");
+    expect(readFileSync(path, "utf8")).not.toContain("- [x] cert-cleanup");
+  });
+
+  it("rejects a whitespace global --backend value", async () => {
+    const c = capture();
+    await main({ argv: ["list", "--backend", "   "], stdout: c.stdout });
+    expect(c.read()).toContain("--backend requires a value");
+    expect(process.exitCode).toBe(2);
+  });
+
   it("renders config validation errors without a stack trace", async () => {
     writeFileSync(join(dir, ".tasks.toml"), "[markdown]\ndone_keep = -1\n");
     process.chdir(dir);

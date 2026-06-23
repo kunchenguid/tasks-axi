@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { runAxiCli } from "axi-sdk-js";
 import { requireFlagValue } from "./args.js";
 import { resolveTasksContext, type TasksContext } from "./context.js";
+import { AxiError } from "./errors.js";
 import {
   ADD_HELP,
   LIST_HELP,
@@ -140,8 +141,8 @@ function withContext(handler: CommandFn): CommandFn {
   return (args) => {
     const { backend, file, stripped } = parseGlobalFlags(args);
     const ctx = resolveTasksContext({
-      ...(backend ? { backend } : {}),
-      ...(file ? { file } : {}),
+      ...(backend !== undefined ? { backend } : {}),
+      ...(file !== undefined ? { file } : {}),
     });
     return handler(stripped, ctx);
   };
@@ -160,22 +161,28 @@ function parseGlobalFlags(args: string[]): {
     const arg = args[i];
     if (arg === "--backend") {
       const value = requireFlagValue(args, i, "--backend");
-      backend = value;
+      backend = requireNonEmptyGlobalFlagValue("--backend", value);
       i++;
       continue;
     }
     if (arg.startsWith("--backend=")) {
-      backend = arg.slice("--backend=".length);
+      backend = requireNonEmptyGlobalFlagValue(
+        "--backend",
+        arg.slice("--backend=".length),
+      );
       continue;
     }
     if (arg === "--file") {
       const value = requireFlagValue(args, i, "--file");
-      file = value;
+      file = requireNonEmptyGlobalFlagValue("--file", value);
       i++;
       continue;
     }
     if (arg.startsWith("--file=")) {
-      file = arg.slice("--file=".length);
+      file = requireNonEmptyGlobalFlagValue(
+        "--file",
+        arg.slice("--file=".length),
+      );
       continue;
     }
     stripped.push(arg);
@@ -186,6 +193,15 @@ function parseGlobalFlags(args: string[]): {
     ...(file ? { file } : {}),
     stripped,
   };
+}
+
+function requireNonEmptyGlobalFlagValue(flag: string, value: string): string {
+  if (value.trim() === "") {
+    throw new AxiError(`${flag} requires a value`, "VALIDATION_ERROR", [
+      `Pass ${flag}=... with a non-empty value`,
+    ]);
+  }
+  return value;
 }
 
 function readPackageVersion(): string {
