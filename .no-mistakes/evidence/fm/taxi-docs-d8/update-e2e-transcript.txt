@@ -1,0 +1,166 @@
+Scratch backlog: .no-mistakes/evidence/fm/taxi-docs-d8/update-e2e-backlog.md
+Scratch body file: .no-mistakes/evidence/fm/taxi-docs-d8/update-body-file-notes.md
+
+$ TASKS_AXI_FILE=.no-mistakes/evidence/fm/taxi-docs-d8/update-e2e-backlog.md node dist/bin/tasks-axi.js update --help
+usage: tasks-axi update <id> [flags]
+aliases: edit
+flags:
+  --title <text>, --body <text> or --body-file <path>, --append "<note>"
+  --repo <name>, --kind <name>, --priority <0-4>, --pr <url>, --report <path>
+examples:
+  tasks-axi update nm-release-validation --append "step 3 in progress on lavish #87"
+  tasks-axi update fm-x --repo firstmate --kind ship
+$ TASKS_AXI_FILE=.no-mistakes/evidence/fm/taxi-docs-d8/update-e2e-backlog.md node dist/bin/tasks-axi.js add nm-release-validation "original title" --body "initial note"
+task:
+  id: nm-release-validation
+  title: original title
+  state: queued
+  blocked: no
+  blocked_by: none
+  kind: task
+  repo: "-"
+  priority: "-"
+  created: 2026-06-23
+  closed: "-"
+  deps: none
+  links: none
+  body: initial note
+help[2]:
+  - Run `tasks-axi start nm-release-validation` to move it to in flight
+  - Run `tasks-axi block nm-release-validation --by <other>` to record a dependency
+
+$ TASKS_AXI_FILE=.no-mistakes/evidence/fm/taxi-docs-d8/update-e2e-backlog.md node dist/bin/tasks-axi.js update nm-release-validation --append "appended note"
+task:
+  id: nm-release-validation
+  title: original title
+  state: queued
+  blocked: no
+  blocked_by: none
+  kind: task
+  repo: "-"
+  priority: "-"
+  created: 2026-06-23
+  closed: "-"
+  deps: none
+  links: none
+  body: "initial note\nappended note"
+help[1]:
+  - Run `tasks-axi show nm-release-validation --full` to see the result
+
+$ TASKS_AXI_FILE=.no-mistakes/evidence/fm/taxi-docs-d8/update-e2e-backlog.md node dist/bin/tasks-axi.js show nm-release-validation --full
+task:
+  id: nm-release-validation
+  title: original title
+  state: queued
+  blocked: no
+  blocked_by: none
+  kind: task
+  repo: "-"
+  priority: "-"
+  created: 2026-06-23
+  closed: "-"
+  deps: none
+  links: none
+  body: "initial note\nappended note"
+
+$ TASKS_AXI_FILE=.no-mistakes/evidence/fm/taxi-docs-d8/update-e2e-backlog.md node dist/bin/tasks-axi.js update nm-release-validation --body "replacement note"
+task:
+  id: nm-release-validation
+  title: original title
+  state: queued
+  blocked: no
+  blocked_by: none
+  kind: task
+  repo: "-"
+  priority: "-"
+  created: 2026-06-23
+  closed: "-"
+  deps: none
+  links: none
+  body: replacement note
+help[1]:
+  - Run `tasks-axi show nm-release-validation --full` to see the result
+
+$ TASKS_AXI_FILE=.no-mistakes/evidence/fm/taxi-docs-d8/update-e2e-backlog.md node dist/bin/tasks-axi.js show nm-release-validation --full
+task:
+  id: nm-release-validation
+  title: original title
+  state: queued
+  blocked: no
+  blocked_by: none
+  kind: task
+  repo: "-"
+  priority: "-"
+  created: 2026-06-23
+  closed: "-"
+  deps: none
+  links: none
+  body: replacement note
+
+$ TASKS_AXI_FILE=.no-mistakes/evidence/fm/taxi-docs-d8/update-e2e-backlog.md node dist/bin/tasks-axi.js update nm-release-validation --body-file .no-mistakes/evidence/fm/taxi-docs-d8/update-body-file-notes.md
+task:
+  id: nm-release-validation
+  title: original title
+  state: queued
+  blocked: no
+  blocked_by: none
+  kind: task
+  repo: "-"
+  priority: "-"
+  created: 2026-06-23
+  closed: "-"
+  deps: none
+  links: none
+  body: "file replacement line one\nfile replacement line two\n"
+help[1]:
+  - Run `tasks-axi show nm-release-validation --full` to see the result
+
+$ TASKS_AXI_FILE=.no-mistakes/evidence/fm/taxi-docs-d8/update-e2e-backlog.md node dist/bin/tasks-axi.js update nm-release-validation --title "clearer title"
+task:
+  id: nm-release-validation
+  title: clearer title
+  state: queued
+  blocked: no
+  blocked_by: none
+  kind: task
+  repo: "-"
+  priority: "-"
+  created: 2026-06-23
+  closed: "-"
+  deps: none
+  links: none
+  body: "file replacement line one\nfile replacement line two\n"
+help[1]:
+  - Run `tasks-axi show nm-release-validation --full` to see the result
+
+$ TASKS_AXI_FILE=.no-mistakes/evidence/fm/taxi-docs-d8/update-e2e-backlog.md node dist/bin/tasks-axi.js show nm-release-validation --full
+task:
+  id: nm-release-validation
+  title: clearer title
+  state: queued
+  blocked: no
+  blocked_by: none
+  kind: task
+  repo: "-"
+  priority: "-"
+  created: 2026-06-23
+  closed: "-"
+  deps: none
+  links: none
+  body: "file replacement line one\nfile replacement line two\n"
+
+$ TASKS_AXI_FILE=.no-mistakes/evidence/fm/taxi-docs-d8/update-e2e-backlog.md node dist/bin/tasks-axi.js update nm-release-validation --body inline --body-file .no-mistakes/evidence/fm/taxi-docs-d8/update-body-file-notes.md
+error: Use only one of --body or --body-file
+code: VALIDATION_ERROR
+exit_status: 2
+
+$ sed -n 1,80p .no-mistakes/evidence/fm/taxi-docs-d8/update-e2e-backlog.md
+# Backlog
+
+## Queued
+- [ ] nm-release-validation - clearer title (since 2026-06-23)
+  file replacement line one
+  file replacement line two
+  
+## In flight
+## Done
