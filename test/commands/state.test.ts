@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -93,6 +93,26 @@ describe("state commands", () => {
       const b = makeBacklog(undefined, "2026-07-01");
       try {
         await doneCommand(["cert-cleanup", "--keep", "2"], b.ctx);
+        expect(b.archive()).toContain("## Archived");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("retries prune when the task is already done", async () => {
+      const b = makeBacklog(undefined, "2026-07-01");
+      const archivePath = join(b.dir, "done-archive.md");
+      try {
+        mkdirSync(archivePath);
+        await expect(
+          doneCommand(["cert-cleanup", "--keep", "2"], b.ctx),
+        ).rejects.toThrow(/EISDIR/);
+        expect(b.read()).toContain("- [x] cert-cleanup");
+
+        rmSync(archivePath, { recursive: true, force: true });
+        const out = await doneCommand(["cert-cleanup", "--keep", "2"], b.ctx);
+        expect(out).toContain("already: true");
+        expect(out).toContain("pruned: ");
         expect(b.archive()).toContain("## Archived");
       } finally {
         b.cleanup();
@@ -202,6 +222,7 @@ describe("state commands", () => {
             "backfilled review evidence",
             "--keep",
             "0",
+            "--no-prune",
           ],
           b.ctx,
         );

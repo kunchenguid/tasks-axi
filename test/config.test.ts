@@ -122,6 +122,25 @@ describe("resolveConfig", () => {
     expect(fromFlag.path).toBe("/abs/from-flag.md");
   });
 
+  it("does not validate a lower-priority empty toml path", () => {
+    writeFileSync(join(dir, ".tasks.toml"), '[markdown]\npath = ""\n');
+
+    const fromEnv = resolveConfig({
+      cwd: dir,
+      home,
+      env: { TASKS_AXI_FILE: "/abs/from-env.md" },
+    });
+    expect(fromEnv.path).toBe("/abs/from-env.md");
+
+    const fromFlag = resolveConfig({
+      cwd: dir,
+      home,
+      env: { TASKS_AXI_FILE: "/abs/from-env.md" },
+      file: "/abs/from-flag.md",
+    });
+    expect(fromFlag.path).toBe("/abs/from-flag.md");
+  });
+
   it("reads done_keep from the project toml", () => {
     writeFileSync(join(dir, ".tasks.toml"), "[markdown]\ndone_keep = 5\n");
     expect(resolveConfig({ cwd: dir, home, env: {} }).doneKeep).toBe(5);

@@ -125,35 +125,29 @@ export async function doneCommand(
 
   if (current.state === "done") {
     const patch = doneMetadataPatch(pr, report, note);
-    if (Object.keys(patch).length > 0) {
-      const task = await store.update(id, patch);
-      const all = (await store.list({})).items;
-      return renderOutput([
-        "already: true",
-        renderTaskDetail(task, all, false),
-      ]);
+    const hasPatch = Object.keys(patch).length > 0;
+    let task = current;
+    if (hasPatch) {
+      task = await store.update(id, patch);
     }
-    return renderOutput([
+    const pruned = await pruneDone(store, keep, noPrune);
+    const blocks = [
       "already: true",
-      renderDetail("done", { id, state: "done", pruned: 0 }, [
+      renderDetail("done", { id: task.id, state: task.state, pruned }, [
         field("id"),
         field("state"),
         field("pruned"),
       ]),
-    ]);
+    ];
+    if (hasPatch) {
+      const all = (await store.list({})).items;
+      blocks.push(renderTaskDetail(task, all, false));
+    }
+    return renderOutput(blocks);
   }
 
   const task = await store.transition(id, "done", opts);
-
-  let pruned = 0;
-  if (!noPrune && store.prune) {
-    const result = await store.prune({
-      state: "done",
-      keep,
-      archive: true,
-    });
-    pruned = result.archived;
-  }
+  const pruned = await pruneDone(store, keep, noPrune);
 
   return renderOutput([
     renderDetail("done", { id: task.id, state: task.state, pruned }, [
@@ -169,6 +163,20 @@ export async function doneCommand(
       }),
     ),
   ]);
+}
+
+async function pruneDone(
+  store: Store,
+  keep: number,
+  noPrune: boolean,
+): Promise<number> {
+  if (noPrune || !store.prune) return 0;
+  const result = await store.prune({
+    state: "done",
+    keep,
+    archive: true,
+  });
+  return result.archived;
 }
 
 function doneMetadataPatch(

@@ -208,11 +208,15 @@ export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
   const explicitPath =
     overrides.file !== undefined
       ? validatePathValue(overrides.file, "--file")
-      : validatePathValue(env.TASKS_AXI_FILE, "TASKS_AXI_FILE");
+      : env.TASKS_AXI_FILE !== undefined
+        ? validatePathValue(env.TASKS_AXI_FILE, "TASKS_AXI_FILE")
+        : undefined;
   const tomlPath =
-    projectToml.markdown?.path !== undefined
-      ? validatePathValue(projectToml.markdown.path, "markdown.path")
-      : validatePathValue(homeToml.markdown?.path, "markdown.path");
+    explicitPath !== undefined
+      ? undefined
+      : projectToml.markdown?.path !== undefined
+        ? validatePathValue(projectToml.markdown.path, "markdown.path")
+        : validatePathValue(homeToml.markdown?.path, "markdown.path");
 
   const backend =
     overrides.backend ??
