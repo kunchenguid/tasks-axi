@@ -2,9 +2,9 @@
  * Shared formatting helpers for consistent count phrasing (AXI house style §4).
  *
  * Standard phrases:
- *   count: N                       — simple count
- *   count: N of T total            — when the true total is known
- *   count: N (showing first N)     — when truncated by the request limit
+ *   count: N                       - simple count
+ *   count: N of T total            - when the true total is known
+ *   count: N (showing first N)     - when truncated by the request limit
  */
 
 export interface CountLineOptions {
@@ -23,7 +23,12 @@ export function formatCountLine(opts: CountLineOptions): string {
     return `count: ${count} of ${totalCount} total`;
   }
 
-  if (limit !== undefined && count === limit && count > 0) {
+  if (
+    limit !== undefined &&
+    count === limit &&
+    count > 0 &&
+    (totalCount === undefined || totalCount > count)
+  ) {
     return `count: ${count} (showing first ${count})`;
   }
 

@@ -1,4 +1,10 @@
-import { appendFileSync, mkdirSync } from "node:fs";
+import {
+  appendFileSync,
+  mkdirSync,
+  statSync,
+  truncateSync,
+  unlinkSync,
+} from "node:fs";
 import { dirname, resolve } from "node:path";
 import { AxiError } from "../errors.js";
 import { validateDependencyId, validateId } from "../id.js";
@@ -51,12 +57,23 @@ interface LoadedBacklogDoc {
   source: string | undefined;
 }
 
+interface ArchiveRestorePoint {
+  existed: boolean;
+  size: number;
+}
+
 function today(): string {
   // Local date (firstmate's dates are local, e.g. "2026-06-22"), not UTC.
   const d = new Date();
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${month}-${day}`;
+}
+
+function errno(error: unknown): string {
+  return error && typeof error === "object" && "code" in error
+    ? String((error as NodeJS.ErrnoException).code)
+    : "UNKNOWN";
 }
 
 function normalizeTitle(title: string): string {
@@ -360,6 +377,38 @@ export class MarkdownStore implements Store {
     atomicWrite(this.path, renderBacklog(loaded.doc));
   }
 
+  private removeCreatedTask(id: string): void {
+    const loaded = this.loadForUpdate();
+    const found = this.findEntry(loaded.doc, id);
+    if (!found) return;
+    found.section.entries.splice(found.index, 1);
+    this.persist(loaded);
+  }
+
+  private partialMoveError(
+    id: string,
+    originalError: unknown,
+    rollbackError: unknown,
+  ): AxiError {
+    const originalMessage =
+      originalError instanceof Error
+        ? originalError.message
+        : String(originalError);
+    const rollbackMessage =
+      rollbackError instanceof Error
+        ? rollbackError.message
+        : String(rollbackError);
+    return new AxiError(
+      `Move of "${id}" partially completed; task now exists in both backlogs`,
+      "CONFLICT",
+      [
+        "Remove the duplicate from the destination backlog manually before retrying",
+        `Source removal failed: ${originalMessage}`,
+        `Destination rollback failed: ${rollbackMessage}`,
+      ],
+    );
+  }
+
   private taskFromInput(input: TaskInput): Task {
     const id = validateId(input.id);
     const state: State = input.state ?? "queued";
@@ -505,7 +554,16 @@ export class MarkdownStore implements Store {
       target.assertUnchanged(targetLoaded);
       this.assertUnchanged(loaded);
       target.persist(targetLoaded);
-      this.persist(loaded);
+      try {
+        this.persist(loaded);
+      } catch (error) {
+        try {
+          target.removeCreatedTask(id);
+        } catch (rollbackError) {
+          throw this.partialMoveError(id, error, rollbackError);
+        }
+        throw error;
+      }
       return task;
     });
   }
@@ -642,13 +700,46 @@ export class MarkdownStore implements Store {
         section.entries.splice(index, 1);
       }
 
+      let archiveRestorePoint: ArchiveRestorePoint | undefined;
       if (options.archive) {
         this.assertUnchanged(loaded);
+        archiveRestorePoint = this.captureArchiveRestorePoint();
         this.appendArchive(archivedLines);
       }
-      this.persist(loaded);
+      try {
+        this.persist(loaded);
+      } catch (error) {
+        if (archiveRestorePoint) this.restoreArchive(archiveRestorePoint);
+        throw error;
+      }
       return { archived: archivedIds.length, ids: archivedIds };
     });
+  }
+
+  private captureArchiveRestorePoint(): ArchiveRestorePoint {
+    try {
+      return { existed: true, size: statSync(this.archivePath).size };
+    } catch (error) {
+      if (errno(error) === "ENOENT") return { existed: false, size: 0 };
+      throw error;
+    }
+  }
+
+  private restoreArchive(point: ArchiveRestorePoint): void {
+    if (!point.existed) {
+      try {
+        unlinkSync(this.archivePath);
+      } catch (error) {
+        if (errno(error) !== "ENOENT") throw error;
+      }
+      return;
+    }
+
+    try {
+      truncateSync(this.archivePath, point.size);
+    } catch (error) {
+      if (errno(error) !== "ENOENT") throw error;
+    }
   }
 
   private appendArchive(lines: string[]): void {

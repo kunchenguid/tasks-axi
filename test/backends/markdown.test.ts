@@ -4,6 +4,11 @@ import { MarkdownStore } from "../../src/backends/markdown.js";
 import { AxiError } from "../../src/errors.js";
 import { makeBacklog } from "../helpers.js";
 
+type MarkdownInternals = {
+  appendArchive(lines: string[]): void;
+  persist(loaded: unknown): void;
+};
+
 describe("MarkdownStore", () => {
   describe("create / get / list", () => {
     it("creates a queued task and reads it back", async () => {
@@ -635,6 +640,39 @@ describe("MarkdownStore", () => {
     });
   });
 
+  describe("moveTo", () => {
+    it("rolls back the destination when source removal fails", async () => {
+      const source = makeBacklog(
+        "# Backlog\n\n## Queued\n- [ ] move-q1 - move me\n\n## Done\n",
+      );
+      const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      try {
+        const targetInternals = target.store as unknown as MarkdownInternals;
+        const originalPersist = targetInternals.persist.bind(target.store);
+        targetInternals.persist = (loaded: unknown) => {
+          originalPersist(loaded);
+          writeFileSync(
+            source.path,
+            `${source.read()}\nmanual edit after destination write\n`,
+            "utf8",
+          );
+        };
+
+        await expect(
+          source.store.moveTo("move-q1", target.store),
+        ).rejects.toMatchObject({
+          code: "CONFLICT",
+          message: expect.stringContaining("changed on disk"),
+        });
+        expect(source.read()).toContain("move-q1");
+        expect(target.read()).not.toContain("move-q1");
+      } finally {
+        source.cleanup();
+        target.cleanup();
+      }
+    });
+  });
+
   describe("prune", () => {
     it("rejects an archive path that resolves to the live backlog", () => {
       const b = makeBacklog();
@@ -662,6 +700,33 @@ describe("MarkdownStore", () => {
         expect(b.archive()).toContain("multi-line-w8");
         // the live file no longer contains the archived task
         expect(b.read()).not.toContain("- [x] multi-line-w8");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("restores the archive when the active backlog write fails", async () => {
+      const b = makeBacklog();
+      try {
+        const internals = b.store as unknown as MarkdownInternals;
+        const originalAppendArchive = internals.appendArchive.bind(b.store);
+        internals.appendArchive = (lines: string[]) => {
+          originalAppendArchive(lines);
+          writeFileSync(
+            b.path,
+            `${b.read()}\nmanual edit after archive append\n`,
+            "utf8",
+          );
+        };
+
+        await expect(
+          b.store.prune({ state: "done", keep: 2, archive: true }),
+        ).rejects.toMatchObject({
+          code: "CONFLICT",
+          message: expect.stringContaining("changed on disk"),
+        });
+        expect(b.archive()).toBe("");
+        expect(b.read()).toContain("- [x] multi-line-w8");
       } finally {
         b.cleanup();
       }
