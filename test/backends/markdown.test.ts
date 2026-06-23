@@ -654,6 +654,43 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("rejects dependency reasons that contain edge markers before writing", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.addDep("cert-cleanup", {
+            type: "blocked-by",
+            id: "lease-core-t4",
+            reason: "waits blocked-by: injected-q1 - hidden",
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+
+        const markers = ["blocked-by", "parent", "discovered-from"];
+        for (let i = 0; i < markers.length; i++) {
+          await expect(
+            b.store.create({
+              id: `new-${i}-q1`,
+              title: "bad dep reason",
+              deps: [
+                {
+                  type: "blocked-by",
+                  id: "lease-core-t4",
+                  reason: `waits ${markers[i]}: injected-q1 - hidden`,
+                },
+              ],
+            }),
+          ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        }
+
+        expect(b.read()).not.toContain("injected-q1");
+        expect(b.read()).not.toContain("new-0-q1");
+        expect(b.read()).not.toContain("new-1-q1");
+        expect(b.read()).not.toContain("new-2-q1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects self-dependencies before writing", async () => {
       const b = makeBacklog();
       try {

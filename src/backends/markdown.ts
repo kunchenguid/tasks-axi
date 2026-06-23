@@ -51,6 +51,8 @@ const HEADERS: Record<State, string> = {
   done: "## Done",
 };
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const DEP_REASON_EDGE_MARKER_RE =
+  /(?:^|\s)(?:blocked-by|parent|discovered-from):\s/;
 
 interface LoadedBacklogDoc {
   doc: BacklogDoc;
@@ -171,6 +173,12 @@ function normalizeDepReason(reason: string | undefined): string | undefined {
     );
   }
   const trimmed = reason.trim();
+  if (DEP_REASON_EDGE_MARKER_RE.test(trimmed)) {
+    throw new AxiError(
+      "Task dependency reason must not contain dependency markers",
+      "VALIDATION_ERROR",
+    );
+  }
   return trimmed === "" ? undefined : trimmed;
 }
 

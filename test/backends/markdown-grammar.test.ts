@@ -346,6 +346,23 @@ describe("markdown grammar", () => {
       markAllDirty(normalized);
       expect(renderBacklog(normalized)).toBe(once);
     });
+
+    it("does not derive task links from dependency reason text", () => {
+      const src =
+        "# Backlog\n\n## Queued\n- [ ] target-q1 - work blocked-by: blocker-a - see https://example.com/doc\n";
+      const task = tasksOf(parseBacklog(src)).find(
+        (t) => t.id === "target-q1",
+      )!;
+      expect(task.title).toBe("work");
+      expect(task.links).toEqual([]);
+      expect(task.deps).toEqual([
+        {
+          type: "blocked-by",
+          id: "blocker-a",
+          reason: "see https://example.com/doc",
+        },
+      ]);
+    });
   });
 
   describe("leadingKind", () => {

@@ -175,7 +175,6 @@ export interface ExtractedTags {
  * re-render), and mid-sentence parentheticals are preserved verbatim.
  */
 export function extractTags(rest: string): ExtractedTags {
-  const links = deriveLinks(rest);
   const deps: Dep[] = [];
   let repo: string | undefined;
   let kindTag: string | undefined;
@@ -236,6 +235,7 @@ export function extractTags(rest: string): ExtractedTags {
 
   title = title.trim();
   const kind = kindTag ?? leadingKind(title);
+  const links = deriveLinks(title);
 
   return { title, kind, repo, deps, created, closed, priority, links };
 }
