@@ -32,7 +32,8 @@ describe("crud commands", () => {
       const b = makeBacklog();
       try {
         await addCommand(["new-h1", "started task", "--start"], b.ctx);
-        expect(b.read()).toMatch(/## In flight[\s\S]*\*\*new-h1\*\*/);
+        // In-flight items use firstmate's `- [ ]` checkbox form under the header.
+        expect(b.read()).toMatch(/## In flight[\s\S]*- \[ \] new-h1/);
       } finally {
         b.cleanup();
       }

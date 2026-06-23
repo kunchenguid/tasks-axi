@@ -37,4 +37,19 @@ describe("derive", () => {
     expect(activeBlockers(tasks[0], tasks)).toEqual(["b"]);
     expect(activeBlockers(tasks[2], tasks)).toEqual([]);
   });
+
+  it("a blocked-by edge with a free-text reason still blocks (graph keys off the id)", () => {
+    const withReason: Task[] = [
+      task("p", "queued", [
+        {
+          type: "blocked-by",
+          id: "q",
+          reason: "waits on the login refactor",
+        },
+      ]),
+      task("q", "in_flight"),
+    ];
+    expect(blockedIds(withReason).has("p")).toBe(true);
+    expect(readyTasks(withReason).map((t) => t.id)).toEqual([]);
+  });
 });

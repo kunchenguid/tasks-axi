@@ -29,6 +29,12 @@ export interface TaskLink {
 export interface Dep {
   type: DepType;
   id: string;
+  /**
+   * Free-text rationale carried by firstmate's `blocked-by: <id> - <reason>`
+   * form. Preserved across a round-trip; does not affect `blocked`/`ready`
+   * (which key off the blocker id alone).
+   */
+  reason?: string;
 }
 
 export interface Task {

@@ -9,6 +9,16 @@ export const FIXTURE = readFileSync(
   "utf8",
 );
 
+/**
+ * A backlog whose lines mirror firstmate's real `data/backlog.md` shape: a
+ * `- [ ]` checkbox in-flight item, a `- [ ]` queued item carrying a
+ * `blocked-by: <id> - <reason>` edge, and a `- [x]` done item.
+ */
+export const FIRSTMATE_FIXTURE = readFileSync(
+  new URL("./fixtures/firstmate-backlog.md", import.meta.url),
+  "utf8",
+);
+
 export interface TempBacklog {
   dir: string;
   path: string;
