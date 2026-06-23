@@ -104,6 +104,48 @@ describe("lock + atomic write", () => {
     expect(existsSync(lockPath)).toBe(false);
   });
 
+  it("does not release a different holder token", async () => {
+    const path = join(dir, "b.md");
+    const lockPath = `${path}.lock`;
+
+    await withLock(path, () => {
+      writeFileSync(lockPath, "other-holder\n");
+    });
+
+    expect(readFileSync(lockPath, "utf8")).toBe("other-holder\n");
+  });
+
+  it("waits on a non-stale lock instead of reclaiming it", async () => {
+    const path = join(dir, "b.md");
+    let markFirstHolding!: () => void;
+    let releaseFirst!: () => void;
+    const firstHolding = new Promise<void>((resolve) => {
+      markFirstHolding = resolve;
+    });
+    const firstRelease = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let secondEntered = false;
+
+    const first = withLock(path, async () => {
+      markFirstHolding();
+      await firstRelease;
+    });
+    await firstHolding;
+
+    const second = withLock(path, () => {
+      secondEntered = true;
+      return "second";
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(secondEntered).toBe(false);
+    releaseFirst();
+    await first;
+    await expect(second).resolves.toBe("second");
+    expect(secondEntered).toBe(true);
+  });
+
   it("serializes reversed multi-lock acquisition orders", async () => {
     const a = join(dir, "a.md");
     const b = join(dir, "b.md");
