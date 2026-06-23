@@ -37,6 +37,18 @@ describe("crud commands", () => {
       }
     });
 
+    it("rejects conflicting placement flags before creating a task", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          addCommand(["new-q1", "ambiguous task", "--start", "--queue"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("new-q1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("mints an id from the title with --mint", async () => {
       const b = makeBacklog();
       try {
@@ -147,6 +159,18 @@ describe("crud commands", () => {
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         expect(b.read()).not.toContain("new-q1");
         expect(b.read()).not.toContain("missing-q1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects a self blocked-by edge before creating a task", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          addCommand(["new-q1", "self blocked", "--blocked-by", "new-q1"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("new-q1");
       } finally {
         b.cleanup();
       }
@@ -443,6 +467,24 @@ describe("crud commands", () => {
         b.cleanup();
       }
     });
+
+    it.each(["--body", "--repo", "--kind"])(
+      "rejects an empty %s value before updating",
+      async (flag) => {
+        const b = makeBacklog();
+        try {
+          await expect(
+            updateCommand(["cert-cleanup", flag, "   "], b.ctx),
+          ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+          expect(b.read()).toContain("(repo: monorepo)");
+          expect(b.read()).toContain(
+            "- [ ] cert-cleanup - port the post-upload cert pruning",
+          );
+        } finally {
+          b.cleanup();
+        }
+      },
+    );
 
     it("persists updated priority through a fresh read", async () => {
       const b = makeBacklog();

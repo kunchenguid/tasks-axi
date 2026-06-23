@@ -466,6 +466,29 @@ describe("MarkdownStore", () => {
         b.cleanup();
       }
     });
+
+    it("rejects self-dependencies before writing", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.addDep("cert-cleanup", {
+            type: "blocked-by",
+            id: "cert-cleanup",
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await expect(
+          b.store.create({
+            id: "new-q1",
+            title: "self dep",
+            deps: [{ type: "blocked-by", id: "new-q1" }],
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("blocked-by: cert-cleanup");
+        expect(b.read()).not.toContain("new-q1");
+      } finally {
+        b.cleanup();
+      }
+    });
   });
 
   describe("prune", () => {

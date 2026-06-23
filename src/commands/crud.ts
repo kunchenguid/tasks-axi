@@ -155,10 +155,14 @@ export async function addCommand(
   const priority = parsePriority(takeFlag(args, "--priority"));
   const deps = parseDeps(args);
   const start = takeBoolFlag(args, "--start");
-  takeBoolFlag(args, "--queue");
+  const queue = takeBoolFlag(args, "--queue");
   const mint = takeBoolFlag(args, "--mint");
   const prefix = takeFlag(args, "--prefix");
   const titleFlag = takeFlag(args, "--title");
+
+  if (start && queue) {
+    throw new AxiError("Use only one of --start or --queue", "VALIDATION_ERROR");
+  }
 
   const positionals = requirePositionals(
     args,
@@ -182,6 +186,10 @@ export async function addCommand(
       "A title is required",
       'Run `tasks-axi add <id> "<title>"`',
     );
+  }
+
+  if (deps.some((dep) => dep.id === id)) {
+    throw new AxiError("A task cannot block itself", "VALIDATION_ERROR");
   }
 
   if (!mint) {
@@ -342,12 +350,18 @@ export async function updateCommand(
       'Pass a non-empty title, e.g. --title "new title"',
     );
   }
-  if (body !== undefined) patch.body = body;
+  if (body !== undefined) {
+    patch.body = requireNonEmptyFlagValue("--body", body);
+  }
   if (append !== undefined) {
     patch.appendBody = requireNonEmptyFlagValue("--append", append);
   }
-  if (repo !== undefined) patch.repo = repo;
-  if (kind !== undefined) patch.kind = kind;
+  if (repo !== undefined) {
+    patch.repo = requireNonEmptyFlagValue("--repo", repo);
+  }
+  if (kind !== undefined) {
+    patch.kind = requireNonEmptyFlagValue("--kind", kind);
+  }
   if (priority !== undefined) patch.priority = priority;
   const addLinks = parseLinks(pr, report);
   if (addLinks.length > 0) patch.addLinks = addLinks;

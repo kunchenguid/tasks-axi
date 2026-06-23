@@ -110,6 +110,14 @@ function normalizeDate(value: string, field: string): string {
   return value;
 }
 
+function normalizeDep(ownerId: string, dep: Dep): Dep {
+  const checked: Dep = { ...dep, id: validateDependencyId(dep.id) };
+  if (checked.id === ownerId) {
+    throw new AxiError("A task cannot block itself", "VALIDATION_ERROR");
+  }
+  return checked;
+}
+
 function appendTitleText(title: string, text: string): string {
   const url = normalizeLinkUrl(text);
   if (deriveLinks(title).some((link) => link.url === url)) return title;
@@ -258,6 +266,7 @@ export class MarkdownStore implements Store {
   }
 
   private taskFromInput(input: TaskInput): Task {
+    const id = validateId(input.id);
     const state: State = input.state ?? "queued";
     let title = normalizeTitle(input.title);
     const kind = normalizeTagValue(input.kind, "kind");
@@ -267,16 +276,11 @@ export class MarkdownStore implements Store {
       title = appendTitleText(title, link.url);
     }
     const task: Task = {
-      id: validateId(input.id),
+      id,
       title,
       state,
       links: deriveLinks(title),
-      deps: input.deps
-        ? input.deps.map((dep) => ({
-            ...dep,
-            id: validateDependencyId(dep.id),
-          }))
-        : [],
+      deps: input.deps ? input.deps.map((dep) => normalizeDep(id, dep)) : [],
     };
     if (kind) task.kind = kind;
     if (repo) task.repo = repo;
@@ -431,7 +435,7 @@ export class MarkdownStore implements Store {
   }
 
   async addDep(id: string, dep: Dep): Promise<boolean> {
-    const checkedDep: Dep = { ...dep, id: validateDependencyId(dep.id) };
+    const checkedDep = normalizeDep(id, dep);
     return withLock(this.path, () => {
       const doc = this.load();
       const found = this.findEntry(doc, id);

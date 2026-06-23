@@ -236,6 +236,9 @@ export async function blockCommand(
   const id = requireId(positionals[0], "id");
 
   if (!(await store.get(id))) throw notFound(id);
+  if (by === id) {
+    throw new AxiError("A task cannot block itself", "VALIDATION_ERROR");
+  }
   await requireExistingBlocker(store, by);
   const dep: Dep = { type: "blocked-by", id: by };
   const added = await store.addDep(id, dep);

@@ -270,6 +270,18 @@ describe("state commands", () => {
       }
     });
 
+    it("rejects a self-block before changing dependencies", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          blockCommand(["cert-cleanup", "--by", "cert-cleanup"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("blocked-by: cert-cleanup");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects extra positional arguments before changing dependencies", async () => {
       const b = makeBacklog();
       try {
