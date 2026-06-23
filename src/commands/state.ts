@@ -12,6 +12,7 @@ import { requireCtx, type TasksContext } from "../context.js";
 import { readyTasks } from "../derive.js";
 import { AxiError, notFound } from "../errors.js";
 import { formatCountLine } from "../format.js";
+import { validateDependencyId } from "../id.js";
 import type { Dep } from "../model.js";
 import { getSuggestions } from "../suggestions.js";
 import { field, renderDetail, renderHelp, renderOutput } from "../toon.js";
@@ -43,7 +44,7 @@ export const UNBLOCK_HELP = `usage: tasks-axi unblock <id> --by <other>
 Clear a blocked-by dependency edge (idempotent).`;
 
 export const READY_HELP = `usage: tasks-axi ready [--repo <name>]
-List unblocked queued work — the tasks dispatchable right now.`;
+List unblocked queued work - the tasks dispatchable right now.`;
 
 export const MV_HELP = `usage: tasks-axi mv <id> --to <path-or-dir>
 Move a task to another backlog file (generalizes a hand-rolled line move).
@@ -172,7 +173,7 @@ function requireBy(args: string[]): string {
       "Name the other task, e.g. `--by treehouse-lease-t4`",
     ]);
   }
-  return by;
+  return validateDependencyId(by);
 }
 
 export async function blockCommand(

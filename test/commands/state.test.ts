@@ -125,6 +125,21 @@ describe("state commands", () => {
         b.cleanup();
       }
     });
+
+    it("rejects invalid blocker ids", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          blockCommand(["cert-cleanup", "--by", "bad:id"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await expect(
+          unblockCommand(["cert-cleanup", "--by", "bad:id"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("bad:id");
+      } finally {
+        b.cleanup();
+      }
+    });
   });
 
   describe("ready", () => {

@@ -68,6 +68,18 @@ describe("crud commands", () => {
       }
     });
 
+    it("rejects an invalid blocked-by id", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          addCommand(["new-q1", "bad dep", "--blocked-by", "bad:id"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("bad:id");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("exposes usage help text", () => {
       expect(ADD_HELP).toContain("usage: tasks-axi add");
     });
@@ -102,7 +114,7 @@ describe("crud commands", () => {
       const b = makeBacklog();
       try {
         const out = await listCommand(["--blocked"], b.ctx);
-        // lease-adopt is blocked-by lease-core-t4 (in_flight elsewhere? it is done? no — t4 is done)
+        // lease-adopt is blocked-by lease-core-t4 (in_flight elsewhere? it is done? no - t4 is done)
         // build a guaranteed blocked edge first
         await b.store.addDep("cert-cleanup", {
           type: "blocked-by",

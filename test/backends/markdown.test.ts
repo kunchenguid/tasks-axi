@@ -225,6 +225,29 @@ describe("MarkdownStore", () => {
         b.cleanup();
       }
     });
+
+    it("rejects dependency ids that cannot round-trip through markdown", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.addDep("cert-cleanup", {
+            type: "blocked-by",
+            id: "bad:id",
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await expect(
+          b.store.create({
+            id: "new-q1",
+            title: "bad dep",
+            deps: [{ type: "blocked-by", id: "bad:id" }],
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("bad:id");
+        expect(b.read()).not.toContain("new-q1");
+      } finally {
+        b.cleanup();
+      }
+    });
   });
 
   describe("prune", () => {

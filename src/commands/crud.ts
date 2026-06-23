@@ -13,7 +13,7 @@ import { blockedIds } from "../derive.js";
 import { AxiError, notFound } from "../errors.js";
 import { parseFields } from "../fields.js";
 import { formatCountLine } from "../format.js";
-import { mintId, validateId } from "../id.js";
+import { mintId, validateDependencyId, validateId } from "../id.js";
 import type { Dep, State, TaskInput, TaskLink, TaskPatch } from "../model.js";
 import { getSuggestions } from "../suggestions.js";
 import { renderHelp, renderOutput } from "../toon.js";
@@ -69,7 +69,7 @@ examples:
 function parseDeps(args: string[]): Dep[] {
   return takeAllFlags(args, "--blocked-by").map((id) => ({
     type: "blocked-by" as const,
-    id,
+    id: validateDependencyId(id),
   }));
 }
 

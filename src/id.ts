@@ -3,21 +3,28 @@ import { ID_RE } from "./backends/markdown-grammar.js";
 import { AxiError } from "./errors.js";
 
 /**
- * Id ownership (decision D6, report §2.2): the caller supplies the id — it is
- * the join key to state/<id>, data/<id>/report.md, and tmux windows — and
+ * Id ownership (decision D6, report §2.2): the caller supplies the id - it is
+ * the join key to state/<id>, data/<id>/report.md, and tmux windows - and
  * tasks-axi can optionally mint one in firstmate's `slug-xx` style.
  */
 
 /** Validate a caller-supplied id round-trips through the markdown grammar. */
-export function validateId(id: string): string {
+export function validateId(
+  id: string,
+  suggestions = ["Use a slug like `homemux-h7`, or pass --mint to generate one"],
+): string {
   if (!ID_RE.test(id)) {
     throw new AxiError(
-      `Invalid id "${id}" — ids must be slug-shaped (letters, digits, "._-") with no spaces`,
+      `Invalid id "${id}" - ids must be slug-shaped (letters, digits, "._-") with no spaces`,
       "VALIDATION_ERROR",
-      ["Use a slug like `homemux-h7`, or pass --mint to generate one"],
+      suggestions,
     );
   }
   return id;
+}
+
+export function validateDependencyId(id: string): string {
+  return validateId(id, ["Use an existing task slug like `treehouse-lease-t4`"]);
 }
 
 function slugify(text: string): string {

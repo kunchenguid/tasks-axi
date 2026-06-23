@@ -1,6 +1,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { AxiError } from "../errors.js";
+import { validateDependencyId, validateId } from "../id.js";
 import type {
   Dep,
   State,
@@ -181,11 +182,16 @@ export class MarkdownStore implements Store {
       if (!title.includes(link.url)) title = `${title} ${link.url}`.trim();
     }
     const task: Task = {
-      id: input.id,
+      id: validateId(input.id),
       title,
       state,
       links: deriveLinks(title),
-      deps: input.deps ? [...input.deps] : [],
+      deps: input.deps
+        ? input.deps.map((dep) => ({
+            ...dep,
+            id: validateDependencyId(dep.id),
+          }))
+        : [],
     };
     if (input.kind) task.kind = input.kind;
     if (input.repo) task.repo = input.repo;
@@ -313,15 +319,20 @@ export class MarkdownStore implements Store {
   }
 
   async addDep(id: string, dep: Dep): Promise<boolean> {
+    const checkedDep: Dep = { ...dep, id: validateDependencyId(dep.id) };
     return withLock(this.path, () => {
       const doc = this.load();
       const found = this.findEntry(doc, id);
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
       const task = found.entry.task;
-      if (task.deps.some((d) => d.type === dep.type && d.id === dep.id)) {
+      if (
+        task.deps.some(
+          (d) => d.type === checkedDep.type && d.id === checkedDep.id,
+        )
+      ) {
         return false;
       }
-      task.deps.push(dep);
+      task.deps.push(checkedDep);
       found.entry.dirty = true;
       this.persist(doc);
       return true;
@@ -329,6 +340,7 @@ export class MarkdownStore implements Store {
   }
 
   async removeDep(id: string, dep: Dep): Promise<boolean> {
+    const checkedDep: Dep = { ...dep, id: validateDependencyId(dep.id) };
     return withLock(this.path, () => {
       const doc = this.load();
       const found = this.findEntry(doc, id);
@@ -336,7 +348,7 @@ export class MarkdownStore implements Store {
       const task = found.entry.task;
       const before = task.deps.length;
       task.deps = task.deps.filter(
-        (d) => !(d.type === dep.type && d.id === dep.id),
+        (d) => !(d.type === checkedDep.type && d.id === checkedDep.id),
       );
       if (task.deps.length === before) return false;
       found.entry.dirty = true;
