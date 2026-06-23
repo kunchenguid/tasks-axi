@@ -52,22 +52,6 @@ export function takeBoolFlag(args: string[], flag: string): boolean {
   return true;
 }
 
-/** Collect all values for a repeatable flag in --flag value or --flag=value form. */
-export function getAllFlags(args: string[], flag: string): string[] {
-  const result: string[] = [];
-  const equalsPrefix = flagEqualsPrefix(flag);
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === flag && i + 1 < args.length) {
-      result.push(args[i + 1]);
-      i++;
-    } else if (arg.startsWith(equalsPrefix)) {
-      result.push(arg.slice(equalsPrefix.length));
-    }
-  }
-  return result;
-}
-
 /** Collect all values for a repeatable flag and remove every occurrence from args. */
 export function takeAllFlags(args: string[], flag: string): string[] {
   const result: string[] = [];

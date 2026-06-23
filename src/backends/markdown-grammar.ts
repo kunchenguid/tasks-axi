@@ -385,7 +385,7 @@ export function parseBacklog(src: string): BacklogDoc {
 // Render
 // ---------------------------------------------------------------------------
 
-export function renderEntry(entry: Entry): string[] {
+function renderEntry(entry: Entry): string[] {
   if (entry.kind === "raw") return entry.lines;
   return entry.dirty ? renderTaskLines(entry.task) : entry.raw;
 }

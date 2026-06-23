@@ -41,11 +41,6 @@ export function takeBody(args: string[]): string | undefined {
   return undefined;
 }
 
-/** True when the text is longer than the limit and would be truncated. */
-export function isTruncatable(text: unknown, maxLen: number): boolean {
-  return typeof text === "string" && text.length > maxLen;
-}
-
 /**
  * Truncate a text field for display. Returns the raw text when it fits within
  * maxLen; otherwise returns the first maxLen characters plus a sentinel naming
