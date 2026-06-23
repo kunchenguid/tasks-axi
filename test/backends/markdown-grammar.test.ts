@@ -1,0 +1,209 @@
+import { existsSync, readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import {
+  type BacklogDoc,
+  buildProse,
+  deriveLinks,
+  leadingKind,
+  parseBacklog,
+  renderBacklog,
+  renderTaskLines,
+} from "../../src/backends/markdown-grammar.js";
+import type { Task } from "../../src/model.js";
+import { FIXTURE } from "../helpers.js";
+
+function markAllDirty(doc: BacklogDoc): void {
+  for (const section of doc.sections) {
+    for (const entry of section.entries) {
+      if (entry.kind === "task") entry.dirty = true;
+    }
+  }
+}
+
+function tasksOf(doc: BacklogDoc): Task[] {
+  const out: Task[] = [];
+  for (const section of doc.sections) {
+    for (const entry of section.entries) {
+      if (entry.kind === "task") out.push(entry.task);
+    }
+  }
+  return out;
+}
+
+describe("markdown grammar", () => {
+  describe("byte-exact round-trip", () => {
+    it("render(parse(src)) === src on the corpus fixture", () => {
+      expect(renderBacklog(parseBacklog(FIXTURE))).toBe(FIXTURE);
+    });
+
+    it("round-trips an empty file", () => {
+      expect(renderBacklog(parseBacklog(""))).toBe("");
+    });
+
+    it("round-trips a file with no trailing newline", () => {
+      const src = "# Backlog\n\n## Queued\n- [ ] a-task - do a thing";
+      expect(renderBacklog(parseBacklog(src))).toBe(src);
+    });
+
+    it("round-trips a file that is only a heading", () => {
+      const src = "# Backlog\n";
+      expect(renderBacklog(parseBacklog(src))).toBe(src);
+    });
+
+    // Real-corpus coverage: byte-exact on firstmate's actual backlog when present
+    // (the file is not committed to this public package, so this skips in CI).
+    const realPath =
+      "/Users/kunchen/github/kunchenguid/firstmate/data/backlog.md";
+    it.skipIf(!existsSync(realPath))(
+      "render(parse(src)) === src on the real backlog",
+      () => {
+        const src = readFileSync(realPath, "utf8");
+        expect(renderBacklog(parseBacklog(src))).toBe(src);
+      },
+    );
+  });
+
+  describe("parse", () => {
+    it("recognizes the three sections and their states", () => {
+      const doc = parseBacklog(FIXTURE);
+      expect(doc.sections.map((s) => s.state)).toEqual([
+        "in_flight",
+        "queued",
+        "done",
+      ]);
+    });
+
+    it("recognizes slug ids and leaves odd/annotated lines free-form", () => {
+      const ids = tasksOf(parseBacklog(FIXTURE)).map((t) => t.id);
+      expect(ids).toContain("owns-widget-h7");
+      expect(ids).toContain("lease-adopt");
+      expect(ids).toContain("design-scout-d4");
+      // "go-live (CAPTAIN-GATED) - ..." and "PR #31 (contributor) - ..." are free-form.
+      expect(ids).not.toContain("go-live");
+      expect(ids).not.toContain("PR");
+    });
+
+    it("extracts repo, blocked-by deps, and a leading-word kind", () => {
+      const task = tasksOf(parseBacklog(FIXTURE)).find(
+        (t) => t.id === "lease-adopt",
+      )!;
+      expect(task.repo).toBe("acme");
+      expect(task.deps).toEqual([{ type: "blocked-by", id: "lease-core-t4" }]);
+    });
+
+    it("reads `(local + repo: X)` as repo X", () => {
+      const task = tasksOf(parseBacklog(FIXTURE)).find(
+        (t) => t.id === "release-validation",
+      )!;
+      expect(task.repo).toBe("builder");
+    });
+
+    it("captures only the trailing date tag, leaving mid-sentence ones in prose", () => {
+      const task = tasksOf(parseBacklog(FIXTURE)).find(
+        (t) => t.id === "design-scout-d4",
+      )!;
+      expect(task.closed).toBe("2026-06-22");
+      expect(task.kind).toBe("scout");
+      // the mid-sentence "(reported 2026-06-22)" stays in the prose title
+      expect(task.title).toContain("report.md (reported 2026-06-22):");
+    });
+
+    it("reads indented continuation lines as the body", () => {
+      const task = tasksOf(parseBacklog(FIXTURE)).find(
+        (t) => t.id === "multi-line-w8",
+      )!;
+      expect(task.body).toContain("Follow-up note added later");
+      expect(task.body).toContain("Second continuation line");
+    });
+
+    it("derives typed links from prose", () => {
+      const links = deriveLinks(
+        "shipped https://github.com/o/r/pull/42 see data/x/report.md",
+      );
+      expect(links).toContainEqual({
+        kind: "pr",
+        url: "https://github.com/o/r/pull/42",
+      });
+      expect(links).toContainEqual({ kind: "report", url: "data/x/report.md" });
+    });
+  });
+
+  describe("canonical render", () => {
+    it("orders tags as deps, repo, kind, date", () => {
+      const task: Task = {
+        id: "x-q1",
+        title: "do a thing",
+        state: "queued",
+        kind: "ship",
+        repo: "acme",
+        links: [],
+        deps: [{ type: "blocked-by", id: "y-t1" }],
+        created: "2026-07-01",
+      };
+      expect(buildProse(task)).toBe(
+        "do a thing blocked-by: y-t1 (repo: acme) (kind: ship) (since 2026-07-01)",
+      );
+    });
+
+    it("omits the kind tag when the prose already leads with the kind word", () => {
+      const task: Task = {
+        id: "x-q1",
+        title: "SHIP a thing",
+        state: "queued",
+        kind: "ship",
+        links: [],
+        deps: [],
+      };
+      expect(buildProse(task)).toBe("SHIP a thing");
+    });
+
+    it("renders a done task with the link-derived closure verb", () => {
+      const task: Task = {
+        id: "x-q1",
+        title: "shipped it https://github.com/o/r/pull/9",
+        state: "done",
+        links: [{ kind: "pr", url: "https://github.com/o/r/pull/9" }],
+        deps: [],
+        closed: "2026-07-01",
+      };
+      expect(renderTaskLines(task)).toEqual([
+        "- [x] x-q1 - shipped it https://github.com/o/r/pull/9 (merged 2026-07-01)",
+      ]);
+    });
+
+    it("renders the body as indented continuation lines", () => {
+      const task: Task = {
+        id: "x-q1",
+        title: "title",
+        state: "queued",
+        body: "line one\nline two",
+        links: [],
+        deps: [],
+      };
+      expect(renderTaskLines(task)).toEqual([
+        "- [ ] x-q1 - title",
+        "  line one",
+        "  line two",
+      ]);
+    });
+
+    it("normalization is idempotent: normalize(normalize(x)) === normalize(x)", () => {
+      const doc1 = parseBacklog(FIXTURE);
+      markAllDirty(doc1);
+      const once = renderBacklog(doc1);
+      const doc2 = parseBacklog(once);
+      markAllDirty(doc2);
+      expect(renderBacklog(doc2)).toBe(once);
+    });
+  });
+
+  describe("leadingKind", () => {
+    it("maps the firstmate leading words", () => {
+      expect(leadingKind("SHIP a thing")).toBe("ship");
+      expect(leadingKind("SCOUT - report")).toBe("scout");
+      expect(leadingKind("DOCS-ONLY change")).toBe("docs");
+      expect(leadingKind("PERSISTENT SECONDMATE owns it")).toBe("secondmate");
+      expect(leadingKind("just prose")).toBeUndefined();
+    });
+  });
+});
