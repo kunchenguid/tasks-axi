@@ -104,6 +104,22 @@ describe("state commands", () => {
       }
     });
 
+    it("rejects a malformed pr link before closing the task", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          doneCommand(
+            ["cert-cleanup", "--pr", "https://github.com/o/r/issues/9"],
+            b.ctx,
+          ),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toContain("- [ ] cert-cleanup");
+        expect(b.read()).not.toContain("issues/9");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects a whitespace note before closing the task", async () => {
       const b = makeBacklog();
       try {

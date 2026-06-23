@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MarkdownStore } from "../../src/backends/markdown.js";
 import { AxiError } from "../../src/errors.js";
 import { makeBacklog } from "../helpers.js";
 
@@ -69,6 +70,32 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("rejects titles that end with canonical trailing tags", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.create({ id: "tag-title-q1", title: "work (repo: demo)" }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await expect(
+          b.store.create({
+            id: "dep-title-q1",
+            title: "work blocked-by: lease-core-t4",
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await b.store.create({
+          id: "mid-title-q1",
+          title: "report.md (reported 2026-06-22): write summary",
+        });
+        expect(b.read()).not.toContain("tag-title-q1");
+        expect(b.read()).not.toContain("dep-title-q1");
+        expect(b.read()).toContain(
+          "report.md (reported 2026-06-22): write summary",
+        );
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects repo values that would inject canonical tags", async () => {
       const b = makeBacklog();
       try {
@@ -80,6 +107,23 @@ describe("MarkdownStore", () => {
           }),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         expect(b.read()).not.toContain("inject-q1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects create links that cannot round-trip with their kind", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.create({
+            id: "bad-link-q1",
+            title: "bad link",
+            links: [{ kind: "pr", url: "https://github.com/o/r/issues/9" }],
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("bad-link-q1");
+        expect(b.read()).not.toContain("issues/9");
       } finally {
         b.cleanup();
       }
@@ -257,6 +301,28 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("rejects added links that cannot round-trip with their kind", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.update("cert-cleanup", {
+            addLinks: [
+              { kind: "pr", url: "https://github.com/o/r/issues/9" },
+            ],
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await expect(
+          b.store.update("cert-cleanup", {
+            addLinks: [{ kind: "report", url: "reports/cert/report.md" }],
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("issues/9");
+        expect(b.read()).not.toContain("reports/cert/report.md");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("throws NOT_FOUND for an unknown id", async () => {
       const b = makeBacklog();
       try {
@@ -291,6 +357,28 @@ describe("MarkdownStore", () => {
         expect(b.read()).toContain(
           "- [ ] cert-cleanup - port the post-upload cert pruning",
         );
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects replacement titles that end with canonical trailing tags", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.update("cert-cleanup", {
+            title: "replacement (kind: ship)",
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await expect(
+          b.store.update("cert-cleanup", {
+            title: "replacement blocked-by: owns-widget-h7",
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toContain(
+          "- [ ] cert-cleanup - port the post-upload cert pruning",
+        );
+        expect(b.read()).not.toContain("blocked-by: owns-widget-h7");
       } finally {
         b.cleanup();
       }
@@ -492,6 +580,17 @@ describe("MarkdownStore", () => {
   });
 
   describe("prune", () => {
+    it("rejects an archive path that resolves to the live backlog", () => {
+      const b = makeBacklog();
+      try {
+        expect(
+          () => new MarkdownStore({ path: b.path, archivePath: b.path }),
+        ).toThrow(AxiError);
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("keeps N recent done tasks and archives the rest", async () => {
       const b = makeBacklog();
       try {

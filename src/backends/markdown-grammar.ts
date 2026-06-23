@@ -142,7 +142,7 @@ export function deriveLinks(text: string): TaskLink[] {
   return links;
 }
 
-interface ExtractedTags {
+export interface ExtractedTags {
   title: string;
   kind?: string;
   repo?: string;
@@ -159,7 +159,7 @@ interface ExtractedTags {
  * and any leading kind word stay in the prose (so they are never duplicated on
  * re-render), and mid-sentence parentheticals are preserved verbatim.
  */
-function extractTags(rest: string): ExtractedTags {
+export function extractTags(rest: string): ExtractedTags {
   const links = deriveLinks(rest);
   const deps: Dep[] = [];
   let repo: string | undefined;

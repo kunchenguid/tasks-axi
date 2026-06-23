@@ -1,5 +1,5 @@
 import { appendFileSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { AxiError } from "../errors.js";
 import { validateDependencyId, validateId } from "../id.js";
 import type {
@@ -7,6 +7,7 @@ import type {
   State,
   Task,
   TaskInput,
+  TaskLink,
   TaskPatch,
   TaskQuery,
   TransitionOpts,
@@ -23,6 +24,7 @@ import {
   type Section,
   type TaskEntry,
   deriveLinks,
+  extractTags,
   parseBacklog,
   renderBacklog,
   renderTaskLines,
@@ -60,6 +62,12 @@ function normalizeTitle(title: string): string {
   if (trimmed === "") {
     throw new AxiError("Task title must not be empty", "VALIDATION_ERROR");
   }
+  if (extractTags(trimmed).title !== trimmed) {
+    throw new AxiError(
+      "Task title must not end with canonical task tags",
+      "VALIDATION_ERROR",
+    );
+  }
   return trimmed;
 }
 
@@ -87,6 +95,28 @@ function normalizeLinkUrl(url: string): string {
     throw new AxiError("Task link must not be empty", "VALIDATION_ERROR");
   }
   return trimmed;
+}
+
+function normalizeTypedLink(link: TaskLink): TaskLink {
+  const url = normalizeLinkUrl(link.url);
+  const derived = deriveLinks(url);
+  if (
+    !derived.some(
+      (candidate) => candidate.kind === link.kind && candidate.url === url,
+    )
+  ) {
+    const expected =
+      link.kind === "pr"
+        ? "an http(s) pull request URL ending in /pull/<number>"
+        : link.kind === "report"
+          ? "a data/<id>/report.md path"
+          : "an http(s) URL";
+    throw new AxiError(
+      `Task ${link.kind} link must be ${expected}`,
+      "VALIDATION_ERROR",
+    );
+  }
+  return { kind: link.kind, url };
 }
 
 function normalizePriority(priority: number | undefined): number | undefined {
@@ -118,8 +148,8 @@ function normalizeDep(ownerId: string, dep: Dep): Dep {
   return checked;
 }
 
-function appendTitleText(title: string, text: string): string {
-  const url = normalizeLinkUrl(text);
+function appendTitleLink(title: string, link: TaskLink): string {
+  const { url } = normalizeTypedLink(link);
   if (deriveLinks(title).some((link) => link.url === url)) return title;
   return normalizeTitle(`${title} ${url}`);
 }
@@ -151,6 +181,12 @@ export class MarkdownStore implements Store {
     this.path = options.path;
     this.archivePath =
       options.archivePath ?? `${dirname(options.path)}/done-archive.md`;
+    if (resolve(this.archivePath) === resolve(this.path)) {
+      throw new AxiError(
+        "Archive path must not be the active backlog path",
+        "VALIDATION_ERROR",
+      );
+    }
     this.now = options.now ?? today;
   }
 
@@ -273,7 +309,7 @@ export class MarkdownStore implements Store {
     const repo = normalizeTagValue(input.repo, "repo");
     // Links live in the prose; fold any provided links into the title text.
     for (const link of input.links ?? []) {
-      title = appendTitleText(title, link.url);
+      title = appendTitleLink(title, link);
     }
     const task: Task = {
       id,
@@ -348,7 +384,7 @@ export class MarkdownStore implements Store {
       if (priority !== undefined) task.priority = priority;
       if (patch.meta) task.meta = { ...task.meta, ...patch.meta };
       for (const link of patch.addLinks ?? []) {
-        task.title = appendTitleText(task.title, link.url);
+        task.title = appendTitleLink(task.title, link);
       }
       task.links = deriveLinks(task.title);
       task.updated = this.now();
@@ -404,8 +440,15 @@ export class MarkdownStore implements Store {
       const date = normalizeDate(opts.date ?? this.now(), "transition date");
 
       // Record links / notes before stamping so closureVerb sees them.
-      for (const url of [opts.pr, opts.report]) {
-        if (url !== undefined) task.title = appendTitleText(task.title, url);
+      const transitionLinks: TaskLink[] = [];
+      if (opts.pr !== undefined) {
+        transitionLinks.push({ kind: "pr", url: opts.pr });
+      }
+      if (opts.report !== undefined) {
+        transitionLinks.push({ kind: "report", url: opts.report });
+      }
+      for (const link of transitionLinks) {
+        task.title = appendTitleLink(task.title, link);
       }
       if (opts.note) {
         task.body = task.body ? `${task.body}\n${opts.note}` : opts.note;
