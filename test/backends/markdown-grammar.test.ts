@@ -10,7 +10,11 @@ import {
   renderTaskLines,
 } from "../../src/backends/markdown-grammar.js";
 import type { Task } from "../../src/model.js";
-import { FIXTURE } from "../helpers.js";
+import {
+  FIRSTMATE_FIXTURE,
+  FIXTURE,
+  MULTI_REASON_FIXTURE,
+} from "../helpers.js";
 
 function markAllDirty(doc: BacklogDoc): void {
   for (const section of doc.sections) {
@@ -223,6 +227,141 @@ describe("markdown grammar", () => {
       const doc2 = parseBacklog(once);
       markAllDirty(doc2);
       expect(renderBacklog(doc2)).toBe(once);
+    });
+  });
+
+  // The two firstmate-adoption blockers: the `- [ ]` checkbox in-flight form and
+  // the `blocked-by: <id> - <reason>` dependency edge.
+  describe("firstmate format interop", () => {
+    it("render(parse(src)) === src on the firstmate-shaped fixture", () => {
+      expect(renderBacklog(parseBacklog(FIRSTMATE_FIXTURE))).toBe(
+        FIRSTMATE_FIXTURE,
+      );
+    });
+
+    it("parses the `- [ ] <id>` checkbox in-flight form firstmate uses", () => {
+      const task = tasksOf(parseBacklog(FIRSTMATE_FIXTURE)).find(
+        (t) => t.id === "fix-login-k3",
+      )!;
+      expect(task.state).toBe("in_flight");
+    });
+
+    it("still parses the legacy `- **<id>**` in-flight form", () => {
+      const task = tasksOf(parseBacklog(FIXTURE)).find(
+        (t) => t.id === "owns-widget-h7",
+      )!;
+      expect(task.state).toBe("in_flight");
+    });
+
+    it("normalizes in-flight items to `- [ ]`, never `- **id**`", () => {
+      const doc = parseBacklog(FIXTURE); // legacy bold in-flight items
+      markAllDirty(doc);
+      const out = renderBacklog(doc);
+      expect(out).toMatch(/## In flight[\s\S]*- \[ \] owns-widget-h7/);
+      expect(out).not.toContain("**owns-widget-h7**");
+    });
+
+    it("parses `blocked-by: <id> - <reason>`, keeping both id and reason", () => {
+      const task = tasksOf(parseBacklog(FIRSTMATE_FIXTURE)).find(
+        (t) => t.id === "add-tests-q7",
+      )!;
+      expect(task.title).toBe("one line");
+      expect(task.deps).toEqual([
+        {
+          type: "blocked-by",
+          id: "fix-login-k3",
+          reason: "waits on the login refactor",
+        },
+      ]);
+    });
+
+    it("still parses a bare `blocked-by: <id>` (no reason)", () => {
+      const task = tasksOf(parseBacklog(FIXTURE)).find(
+        (t) => t.id === "lease-adopt",
+      )!;
+      expect(task.deps).toEqual([{ type: "blocked-by", id: "lease-core-t4" }]);
+    });
+
+    it("renders a blocked-by dep with its free-text reason", () => {
+      const task: Task = {
+        id: "add-tests-q7",
+        title: "one line",
+        state: "queued",
+        repo: "app",
+        links: [],
+        deps: [
+          {
+            type: "blocked-by",
+            id: "fix-login-k3",
+            reason: "waits on the login refactor",
+          },
+        ],
+      };
+      // A reason-bearing edge renders last (after the parentheticals), exactly
+      // as firstmate writes it.
+      expect(buildProse(task)).toBe(
+        "one line (repo: app) blocked-by: fix-login-k3 - waits on the login refactor",
+      );
+    });
+
+    it("round-trips the blocked-by reason through a normalize cycle", () => {
+      const doc = parseBacklog(FIRSTMATE_FIXTURE);
+      markAllDirty(doc);
+      const once = renderBacklog(doc);
+      expect(once).toContain(
+        "blocked-by: fix-login-k3 - waits on the login refactor",
+      );
+      const dep = tasksOf(parseBacklog(once)).find(
+        (t) => t.id === "add-tests-q7",
+      )!.deps[0];
+      expect(dep).toEqual({
+        type: "blocked-by",
+        id: "fix-login-k3",
+        reason: "waits on the login refactor",
+      });
+    });
+
+    it("parses multiple reason-bearing blockers without folding the later edge", () => {
+      const doc = parseBacklog(MULTI_REASON_FIXTURE);
+      const task = tasksOf(doc).find((t) => t.id === "target-q1")!;
+      expect(task.title).toBe("work");
+      expect(task.deps).toEqual([
+        {
+          type: "blocked-by",
+          id: "blocker-a",
+          reason: "first blocker done",
+        },
+        {
+          type: "blocked-by",
+          id: "blocker-b",
+          reason: "waits on second blocker",
+        },
+      ]);
+
+      markAllDirty(doc);
+      const once = renderBacklog(doc);
+      const normalized = parseBacklog(once);
+      const reparsed = tasksOf(normalized).find((t) => t.id === "target-q1")!;
+      expect(reparsed.deps).toEqual(task.deps);
+      markAllDirty(normalized);
+      expect(renderBacklog(normalized)).toBe(once);
+    });
+
+    it("does not derive task links from dependency reason text", () => {
+      const src =
+        "# Backlog\n\n## Queued\n- [ ] target-q1 - work blocked-by: blocker-a - see https://example.com/doc\n";
+      const task = tasksOf(parseBacklog(src)).find(
+        (t) => t.id === "target-q1",
+      )!;
+      expect(task.title).toBe("work");
+      expect(task.links).toEqual([]);
+      expect(task.deps).toEqual([
+        {
+          type: "blocked-by",
+          id: "blocker-a",
+          reason: "see https://example.com/doc",
+        },
+      ]);
     });
   });
 

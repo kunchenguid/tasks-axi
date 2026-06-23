@@ -128,17 +128,22 @@ Targeted task mutations re-render only the affected task; every other line, incl
 Maintenance commands are explicit exceptions: `render` normalizes every recognized task, `prune` trims the chosen section into the archive, and `mv` writes both source and destination backlogs.
 
 The read-modify-write window is guarded by an advisory lockfile, an atomic write (temp file + rename), and a fresh re-read on every invocation, so a hand-edit and a CLI-edit cannot clobber each other.
+Task state is carried by the section header, not by the bullet style: `## In flight`, `## Queued`, and `## Done` decide whether a recognized item is in flight, queued, or done.
+In flight parses both the legacy `- **id** - ...` form and firstmate's `- [ ] id - ...` checkbox form, while normalization renders both In flight and Queued items as `- [ ] id - ...` and Done items as `- [x] id - ...`.
+Untouched legacy lines are still preserved byte-for-byte; only mutated or explicitly normalized tasks are rewritten.
 
 It gently formalizes the inline tags a backlog already uses as the canonical fields:
 
-- `(repo: X)` — the repo a task belongs to
-- `blocked-by: <id>` — a dependency edge (also `parent:` / `discovered-from:`)
-- `(since <date>)` — when a task started; `(merged <date>)` / `(reported <date>)` when it closed
-- `(kind: X)` — task kind, when not already implied by a leading `SHIP` / `SCOUT` / `DOCS-ONLY` / `PERSISTENT SECONDMATE` word
-- `(priority: 0-4)` — optional priority, also accepted through `add` / `update --priority`
-- PR urls, `data/<id>/report.md` paths, and other `http(s)` urls — typed links
+- `(repo: X)` - the repo a task belongs to
+- `blocked-by: <id>` or `blocked-by: <id> - <reason>` - a dependency edge, optionally with preserved free-text rationale (also `parent:` / `discovered-from:`)
+- `(since <date>)` - when a task started; `(merged <date>)` / `(reported <date>)` when it closed
+- `(kind: X)` - task kind, when not already implied by a leading `SHIP` / `SCOUT` / `DOCS-ONLY` / `PERSISTENT SECONDMATE` word
+- `(priority: 0-4)` - optional priority, also accepted through `add` / `update --priority`
+- PR urls, `data/<id>/report.md` paths, and other `http(s)` urls - typed links
 
 `tasks-axi render` rewrites every id'd task into this canonical form; free-form lines are left untouched.
+Bare dependency edges render immediately after the title, while reason-bearing dependency edges render after the parenthetical tags so the reason stays attached to the edge on the next parse.
+Dependency reasons are preserved metadata only; readiness still keys off the blocker id.
 `add --blocked-by` and `block --by` require the referenced task to exist, and `rm` / `mv` refuse to remove a task that still blocks active work.
 
 ## Configuration

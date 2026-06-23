@@ -51,6 +51,8 @@ const HEADERS: Record<State, string> = {
   done: "## Done",
 };
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const DEP_REASON_EDGE_MARKER_RE =
+  /(?:^|\s)(?:blocked-by|parent|discovered-from):\s/;
 
 interface LoadedBacklogDoc {
   doc: BacklogDoc;
@@ -162,8 +164,32 @@ function normalizeDate(value: string, field: string): string {
   return value;
 }
 
+function normalizeDepReason(reason: string | undefined): string | undefined {
+  if (reason === undefined) return undefined;
+  if (/[\r\n]/.test(reason)) {
+    throw new AxiError(
+      "Task dependency reason must be a single line",
+      "VALIDATION_ERROR",
+    );
+  }
+  const trimmed = reason.trim();
+  if (DEP_REASON_EDGE_MARKER_RE.test(trimmed)) {
+    throw new AxiError(
+      "Task dependency reason must not contain dependency markers",
+      "VALIDATION_ERROR",
+    );
+  }
+  return trimmed === "" ? undefined : trimmed;
+}
+
 function normalizeDep(ownerId: string, dep: Dep): Dep {
+  const reason = normalizeDepReason(dep.reason);
   const checked: Dep = { ...dep, id: validateDependencyId(dep.id) };
+  if (reason === undefined) {
+    delete checked.reason;
+  } else {
+    checked.reason = reason;
+  }
   if (checked.id === ownerId) {
     throw new AxiError("A task cannot block itself", "VALIDATION_ERROR");
   }

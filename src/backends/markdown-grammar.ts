@@ -67,19 +67,25 @@ function semanticLine(line: string): string {
   return line.endsWith("\r") ? line.slice(0, -1) : line;
 }
 
+function matchOne(
+  line: string,
+  re: RegExp,
+): { id: string; rest: string } | null {
+  const m = line.match(re);
+  return m ? { id: m[1], rest: m[2] } : null;
+}
+
 function matchTaskBullet(
   line: string,
   state: State,
 ): { id: string; rest: string } | null {
-  const re =
-    state === "in_flight"
-      ? IN_FLIGHT_RE
-      : state === "queued"
-        ? QUEUED_RE
-        : DONE_RE;
-  const m = line.match(re);
-  if (!m) return null;
-  return { id: m[1], rest: m[2] };
+  if (state === "done") return matchOne(line, DONE_RE);
+  if (state === "queued") return matchOne(line, QUEUED_RE);
+  // In flight: firstmate writes the GitHub-style `- [ ] <id>` checkbox (the same
+  // bullet as Queued; the section header is what distinguishes the state), while
+  // older tasks-axi output used `- **<id>**`. Recognize both so a file either
+  // tool wrote is readable by the other.
+  return matchOne(line, IN_FLIGHT_RE) ?? matchOne(line, QUEUED_RE);
 }
 
 // ---------------------------------------------------------------------------
@@ -90,8 +96,13 @@ function matchTaskBullet(
 // a mid-sentence parenthetical (e.g. "report.md (reported 2026-06-22): ...") is
 // left untouched in the prose and never duplicated or relocated on re-render.
 const DATE = "\\d{4}-\\d{2}-\\d{2}";
+// A trailing dependency edge, optionally carrying firstmate's free-text reason
+// after a ` - ` delimiter, e.g. `blocked-by: fix-login-k3 - waits on the login
+// refactor`. The id stops at the first space, and the reason stops before the
+// next trailing dependency marker.
+const DEP_MARKER = "(?:blocked-by|parent|discovered-from)";
 const TAIL_DEP = new RegExp(
-  `\\s*(blocked-by|parent|discovered-from):\\s*(${ID_CHARS})\\s*$`,
+  `\\s*(${DEP_MARKER}):\\s*(${ID_CHARS})(?:\\s+-\\s+((?:(?!\\s+${DEP_MARKER}:\\s).)+?))?\\s*$`,
 );
 const TAIL_REPO = /\s*\((?:[^()]*\+\s*)?repo:\s*([^)]+)\)\s*$/;
 const TAIL_KIND = /\s*\(kind:\s*([^)]+)\)\s*$/;
@@ -164,7 +175,6 @@ export interface ExtractedTags {
  * re-render), and mid-sentence parentheticals are preserved verbatim.
  */
 export function extractTags(rest: string): ExtractedTags {
-  const links = deriveLinks(rest);
   const deps: Dep[] = [];
   let repo: string | undefined;
   let kindTag: string | undefined;
@@ -179,7 +189,9 @@ export function extractTags(rest: string): ExtractedTags {
 
     let m = title.match(TAIL_DEP);
     if (m) {
-      deps.unshift({ type: m[1] as Dep["type"], id: m[2] });
+      const dep: Dep = { type: m[1] as Dep["type"], id: m[2] };
+      if (m[3] !== undefined) dep.reason = m[3];
+      deps.unshift(dep);
       title = title.slice(0, m.index);
       stripping = true;
       continue;
@@ -223,6 +235,7 @@ export function extractTags(rest: string): ExtractedTags {
 
   title = title.trim();
   const kind = kindTag ?? leadingKind(title);
+  const links = deriveLinks(title);
 
   return { title, kind, repo, deps, created, closed, priority, links };
 }
@@ -241,8 +254,10 @@ function closureVerb(task: Task): string {
 export function buildProse(task: Task): string {
   const parts: string[] = [task.title.trim()];
 
+  // A bare edge sits right after the title (firstmate's `blocked-by: <id>
+  // (repo: …)`); an edge carrying a reason must come last - see below.
   for (const dep of task.deps) {
-    parts.push(`${dep.type}: ${dep.id}`);
+    if (!dep.reason) parts.push(`${dep.type}: ${dep.id}`);
   }
   if (task.repo) parts.push(`(repo: ${task.repo})`);
   if (task.kind && !titleHasLeadingKind(task.title, task.kind)) {
@@ -255,14 +270,24 @@ export function buildProse(task: Task): string {
   if (task.state === "done" && task.closed) {
     parts.push(`(${closureVerb(task)} ${task.closed})`);
   }
+  // A reason runs as free text to the end of the line, so an edge that has one
+  // is emitted after the parenthetical tags - both to match firstmate's real
+  // `(repo: …) blocked-by: <id> - <reason>` form and so a re-parse strips the
+  // parentheticals first and the reason never swallows a trailing tag.
+  for (const dep of task.deps) {
+    if (dep.reason) parts.push(`${dep.type}: ${dep.id} - ${dep.reason}`);
+  }
 
   return parts.filter((p) => p.length > 0).join(" ");
 }
 
 function bulletPrefix(state: State, id: string): string {
-  if (state === "in_flight") return `- **${id}** - `;
-  if (state === "queued") return `- [ ] ${id} - `;
-  return `- [x] ${id} - `;
+  if (state === "done") return `- [x] ${id} - `;
+  // Both in-flight and queued render as the GitHub-style unchecked checkbox to
+  // match firstmate's real backlog format; the section header carries the state.
+  // A legacy `- **<id>**` line is still parsed, but normalizes to `- [ ]` so a
+  // mutated file stays readable by firstmate (never rewritten the other way).
+  return `- [ ] ${id} - `;
 }
 
 /** Render a task to its canonical source lines (bullet + body continuations). */

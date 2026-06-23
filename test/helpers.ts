@@ -9,6 +9,30 @@ export const FIXTURE = readFileSync(
   "utf8",
 );
 
+/**
+ * A backlog whose lines mirror firstmate's real `data/backlog.md` shape: a
+ * `- [ ]` checkbox in-flight item, a `- [ ]` queued item carrying a
+ * `blocked-by: <id> - <reason>` edge, and a `- [x]` done item.
+ */
+export const FIRSTMATE_FIXTURE = readFileSync(
+  new URL("./fixtures/firstmate-backlog.md", import.meta.url),
+  "utf8",
+);
+
+export const MULTI_REASON_FIXTURE = [
+  "# Backlog",
+  "",
+  "## In flight",
+  "- [ ] blocker-b - second blocker",
+  "",
+  "## Queued",
+  "- [ ] target-q1 - work (repo: app) blocked-by: blocker-a - first blocker done blocked-by: blocker-b - waits on second blocker",
+  "",
+  "## Done",
+  "- [x] blocker-a - first blocker done",
+  "",
+].join("\n");
+
 export interface TempBacklog {
   dir: string;
   path: string;

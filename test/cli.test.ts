@@ -94,7 +94,11 @@ describe("CLI entrypoint", () => {
     const c = capture();
     await main({ argv: ["start", "cert-cleanup"], stdout: c.stdout });
     expect(c.read()).toContain("state: in_flight");
-    expect(readFileSync(path, "utf8")).toMatch(/\*\*cert-cleanup\*\*/);
+    // In-flight items render in firstmate's `- [ ]` checkbox form, under the
+    // In flight header (the section, not the bullet, carries the state).
+    expect(readFileSync(path, "utf8")).toMatch(
+      /## In flight[\s\S]*- \[ \] cert-cleanup/,
+    );
   });
 
   it("rejects unknown mutation flags instead of shifting positionals", async () => {
