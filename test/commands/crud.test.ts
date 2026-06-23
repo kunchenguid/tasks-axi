@@ -371,6 +371,30 @@ describe("crud commands", () => {
         const out = await listCommand(["--state", "queued"], b.ctx);
         expect(out).toContain("count: 0");
         expect(out).toContain("0 queued tasks in this backlog");
+        expect(() => decode(out)).not.toThrow();
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("escapes filtered empty states as valid TOON", async () => {
+      const b = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      try {
+        const out = await listCommand(["--repo", 'foo: "bar"'], b.ctx);
+        expect(out).toContain("repo=foo");
+        expect(() => decode(out)).not.toThrow();
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("carries repo scope into list suggestions", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await listCommand(["--repo", "monorepo"], b.ctx);
+        expect(out).toContain(
+          "Run `tasks-axi ready --repo=monorepo` to see unblocked queued work",
+        );
       } finally {
         b.cleanup();
       }
@@ -416,11 +440,41 @@ describe("crud commands", () => {
       }
     });
 
+    it("rejects a malformed id as a validation error", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(showCommand(["bad:id"], b.ctx)).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+        });
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("errors with NOT_FOUND for an unknown id", async () => {
       const b = makeBacklog();
       try {
         await expect(showCommand(["nope"], b.ctx)).rejects.toMatchObject({
           code: "NOT_FOUND",
+        });
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("carries explicit globals into not-found help", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          showCommand(["nope"], {
+            ...b.ctx,
+            suggestionGlobals: { file: "other backlog.md" },
+          }),
+        ).rejects.toMatchObject({
+          code: "NOT_FOUND",
+          suggestions: [
+            "Run `tasks-axi list --file='other backlog.md'` to see existing tasks",
+          ],
         });
       } finally {
         b.cleanup();
@@ -471,6 +525,17 @@ describe("crud commands", () => {
       try {
         await expect(
           updateCommand(["cert-cleanup"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects a malformed id as a validation error", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          updateCommand(["bad:id", "--append", "note"], b.ctx),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
       } finally {
         b.cleanup();
@@ -581,6 +646,17 @@ describe("crud commands", () => {
           rmCommand(["cert-cleanup", "extra"], b.ctx),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         expect(b.read()).toContain("cert-cleanup");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects a malformed id as a validation error", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(rmCommand(["bad:id"], b.ctx)).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+        });
       } finally {
         b.cleanup();
       }

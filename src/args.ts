@@ -1,4 +1,5 @@
 import { AxiError } from "./errors.js";
+import { validateId } from "./id.js";
 import { STATES, type State } from "./model.js";
 
 function flagEqualsPrefix(flag: string): string {
@@ -224,5 +225,5 @@ export function requireId(raw: string | undefined, label = "id"): string {
       `Pass the task ${label}, e.g. \`tasks-axi show <id>\``,
     ]);
   }
-  return raw;
+  return validateId(raw);
 }

@@ -25,7 +25,7 @@ import {
 import type { Dep, State, TaskInput, TaskLink, TaskPatch } from "../model.js";
 import type { Store } from "../store.js";
 import { getSuggestions } from "../suggestions.js";
-import { renderHelp, renderOutput } from "../toon.js";
+import { renderHelp, renderOutput, renderScalar } from "../toon.js";
 import {
   LIST_EXTRA_FIELDS,
   renderTaskDetail,
@@ -306,6 +306,10 @@ export async function listCommand(
         action: "list",
         isEmpty,
         globals: context?.suggestionGlobals,
+        filters: {
+          ...(repo !== undefined ? { repo } : {}),
+          ...(kind !== undefined ? { kind } : {}),
+        },
       }),
     ),
   );
@@ -327,7 +331,7 @@ function emptyState(
     .filter(Boolean)
     .join(" ");
   const scope = qualifiers ? `${qualifiers} ` : "";
-  return `tasks: 0 ${scope}tasks in this backlog`;
+  return renderScalar("tasks", `0 ${scope}tasks in this backlog`);
 }
 
 export async function showCommand(
@@ -341,7 +345,7 @@ export async function showCommand(
   const id = requireId(positionals[0], "id");
 
   const task = await store.get(id);
-  if (!task) throw notFound(id);
+  if (!task) throw notFound(id, { globals: context?.suggestionGlobals });
 
   const all = (await store.list({})).items;
   const isBlocked = blockedIds(all).has(id);
@@ -416,7 +420,9 @@ export async function updateCommand(
     ]);
   }
 
-  if (!(await store.get(id))) throw notFound(id);
+  if (!(await store.get(id))) {
+    throw notFound(id, { globals: context?.suggestionGlobals });
+  }
   const task = await store.update(id, patch);
   const all = (await store.list({})).items;
   const blocks = [
@@ -445,7 +451,9 @@ export async function rmCommand(
   );
   const id = requireId(positionals[0], "id");
 
-  if (!(await store.get(id))) throw notFound(id);
+  if (!(await store.get(id))) {
+    throw notFound(id, { globals: context?.suggestionGlobals });
+  }
   await store.remove(id);
 
   const blocks = [

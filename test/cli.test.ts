@@ -72,6 +72,13 @@ describe("CLI entrypoint", () => {
     expect(c.read()).toContain("id: cert-cleanup");
   });
 
+  it("reports malformed task ids as validation errors", async () => {
+    const c = capture();
+    await main({ argv: ["show", "bad:id"], stdout: c.stdout });
+    expect(c.read()).toContain("Invalid id");
+    expect(process.exitCode).toBe(2);
+  });
+
   it("performs a mutation end to end", async () => {
     const c = capture();
     await main({ argv: ["start", "cert-cleanup"], stdout: c.stdout });

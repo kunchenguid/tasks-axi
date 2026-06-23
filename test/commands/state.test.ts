@@ -13,6 +13,29 @@ import {
 import { makeBacklog } from "../helpers.js";
 
 describe("state commands", () => {
+  it("rejects malformed primary ids before store lookup", async () => {
+    const b = makeBacklog();
+    const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+    try {
+      const cases = [
+        () => startCommand(["bad:id"], b.ctx),
+        () => doneCommand(["bad:id", "--no-prune"], b.ctx),
+        () => reopenCommand(["bad:id"], b.ctx),
+        () => blockCommand(["bad:id", "--by", "owns-widget-h7"], b.ctx),
+        () => unblockCommand(["bad:id", "--by", "owns-widget-h7"], b.ctx),
+        () => mvCommand(["bad:id", "--to", target.path], b.ctx),
+      ];
+      for (const run of cases) {
+        await expect(run()).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+        });
+      }
+    } finally {
+      b.cleanup();
+      target.cleanup();
+    }
+  });
+
   describe("start", () => {
     it("moves a task to in_flight", async () => {
       const b = makeBacklog();

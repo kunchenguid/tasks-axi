@@ -68,7 +68,7 @@ export async function startCommand(
   const id = requireId(positionals[0], "id");
 
   const current = await store.get(id);
-  if (!current) throw notFound(id);
+  if (!current) throw notFound(id, { globals: context?.suggestionGlobals });
 
   if (current.state === "in_flight") {
     return renderOutput([
@@ -116,7 +116,7 @@ export async function doneCommand(
   const keep = parseNonNegativeIntegerFlag("--keep", keepRaw, config.doneKeep);
 
   const current = await store.get(id);
-  if (!current) throw notFound(id);
+  if (!current) throw notFound(id, { globals: context?.suggestionGlobals });
 
   const opts: { pr?: string; report?: string; note?: string } = {};
   if (pr !== undefined) opts.pr = pr;
@@ -199,7 +199,7 @@ export async function reopenCommand(
   const id = requireId(positionals[0], "id");
 
   const current = await store.get(id);
-  if (!current) throw notFound(id);
+  if (!current) throw notFound(id, { globals: context?.suggestionGlobals });
 
   if (current.state === "queued") {
     return renderOutput([
@@ -254,7 +254,9 @@ export async function blockCommand(
   const positionals = requirePositionals(args, 1, 1, BLOCK_HELP.split("\n")[0]);
   const id = requireId(positionals[0], "id");
 
-  if (!(await store.get(id))) throw notFound(id);
+  if (!(await store.get(id))) {
+    throw notFound(id, { globals: context?.suggestionGlobals });
+  }
   if (by === id) {
     throw new AxiError("A task cannot block itself", "VALIDATION_ERROR");
   }
@@ -297,7 +299,9 @@ export async function unblockCommand(
   );
   const id = requireId(positionals[0], "id");
 
-  if (!(await store.get(id))) throw notFound(id);
+  if (!(await store.get(id))) {
+    throw notFound(id, { globals: context?.suggestionGlobals });
+  }
   const removed = await store.removeDep(id, { type: "blocked-by", id: by });
 
   const blocks: string[] = [];
@@ -349,6 +353,9 @@ export async function readyCommand(
         action: "ready",
         isEmpty,
         globals: context?.suggestionGlobals,
+        filters: {
+          ...(repo !== undefined ? { repo } : {}),
+        },
       }),
     ),
   );
@@ -402,7 +409,7 @@ export async function mvCommand(
   const id = requireId(positionals[0], "id");
 
   const task = await store.get(id);
-  if (!task) throw notFound(id);
+  if (!task) throw notFound(id, { globals: context?.suggestionGlobals });
 
   const targetPath = resolveBacklogTarget(to);
   if (resolve(targetPath) === resolve(config.path)) {

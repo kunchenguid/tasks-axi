@@ -11,6 +11,7 @@ export interface SuggestionContext {
   /** A blocked task suggests unblocking; an empty ready list suggests listing. */
   blocked?: boolean;
   globals?: SuggestionGlobals;
+  filters?: SuggestionFilters;
 }
 
 export interface SuggestionGlobals {
@@ -18,10 +19,17 @@ export interface SuggestionGlobals {
   file?: string;
 }
 
+export interface SuggestionFilters {
+  repo?: string;
+  kind?: string;
+}
+
 type Entry = {
   match: (c: SuggestionContext) => boolean;
   lines: (c: SuggestionContext) => string[];
 };
+
+type ScopedFlag = keyof SuggestionFilters;
 
 const table: Entry[] = [
   {
@@ -34,17 +42,31 @@ const table: Entry[] = [
   },
   {
     match: (c) => c.action === "list" && c.isEmpty === true,
-    lines: () => [
-      'Run `tasks-axi add <id> "<title>"` to add a task',
-      "Run `tasks-axi list --state done` to see completed work",
-    ],
+    lines: (c) =>
+      compact([
+        suggestionLine(
+          'Run `tasks-axi add <id> "<title>"` to add a task',
+          c,
+          ["repo", "kind"],
+        ),
+        suggestionLine(
+          "Run `tasks-axi list --state done` to see completed work",
+          c,
+          ["repo", "kind"],
+        ),
+      ]),
   },
   {
     match: (c) => c.action === "list",
-    lines: () => [
-      "Run `tasks-axi show <id>` for full notes on a task",
-      "Run `tasks-axi ready` to see unblocked queued work",
-    ],
+    lines: (c) =>
+      compact([
+        "Run `tasks-axi show <id>` for full notes on a task",
+        suggestionLine(
+          "Run `tasks-axi ready` to see unblocked queued work",
+          c,
+          ["repo"],
+        ),
+      ]),
   },
   {
     match: (c) => c.action === "ready" && c.isEmpty === true,
@@ -164,4 +186,35 @@ function shellQuoteOneLine(value: string): string | undefined {
   if (/[\0\r\n`]/.test(value)) return undefined;
   if (/^[A-Za-z0-9_./:@%+=,-]+$/.test(value)) return value;
   return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function suggestionLine(
+  line: string,
+  ctx: SuggestionContext,
+  supportedFlags: ScopedFlag[],
+): string | undefined {
+  const suffix = filterSuffix(ctx.filters, supportedFlags);
+  if (suffix === undefined) return undefined;
+  if (!suffix) return line;
+  return appendSuffixToCommand(line, suffix);
+}
+
+function filterSuffix(
+  filters: SuggestionFilters | undefined,
+  supportedFlags: ScopedFlag[],
+): string | undefined {
+  if (!filters) return "";
+  const parts: string[] = [];
+  for (const flag of supportedFlags) {
+    const value = filters[flag];
+    if (value === undefined) continue;
+    const quoted = shellQuoteOneLine(value);
+    if (!quoted) return undefined;
+    parts.push(`--${flag}=${quoted}`);
+  }
+  return parts.length > 0 ? ` ${parts.join(" ")}` : "";
+}
+
+function compact<T>(items: Array<T | undefined>): T[] {
+  return items.filter((item): item is T => item !== undefined);
 }

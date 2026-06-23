@@ -54,6 +54,11 @@ export function renderDetail(
   return encode({ [label]: extract(item, schema) });
 }
 
+/** Render a labeled scalar as TOON. */
+export function renderScalar(label: string, value: string): string {
+  return encode({ [label]: value });
+}
+
 function renderPrimitive(value: string): string {
   const encoded = encode([value]);
   const prefix = "[1]: ";

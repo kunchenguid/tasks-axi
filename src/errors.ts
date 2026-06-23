@@ -1,4 +1,8 @@
 import { AxiError, exitCodeForError } from "axi-sdk-js";
+import {
+  type SuggestionGlobals,
+  withSuggestionGlobals,
+} from "./suggestions.js";
 
 export type ErrorCode =
   | "VALIDATION_ERROR"
@@ -10,14 +14,23 @@ export type ErrorCode =
 
 export { AxiError, exitCodeForError };
 
+interface NotFoundOptions {
+  globals?: SuggestionGlobals;
+  suggestions?: string[];
+}
+
 /** A task id was referenced that does not exist in the backlog. */
-export function notFound(id: string, suggestions: string[] = []): AxiError {
+export function notFound(id: string, options: NotFoundOptions = {}): AxiError {
+  const suggestions =
+    options.suggestions ??
+    withSuggestionGlobals(
+      ["Run `tasks-axi list` to see existing tasks"],
+      options.globals,
+    );
   return new AxiError(
     `Task "${id}" not found in this backlog`,
     "NOT_FOUND",
-    suggestions.length > 0
-      ? suggestions
-      : ["Run `tasks-axi list` to see existing tasks"],
+    suggestions,
   );
 }
 
