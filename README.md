@@ -70,8 +70,9 @@ bin: ~/.local/bin/tasks-axi
 description: Agent ergonomic task & backlog manager for the current workspace...
 in_flight[1]{id,title,kind,repo}:
   homemux-h7,PERSISTENT SECONDMATE - owns HomeMux end to end,secondmate,homemux
-queued: 14
-ready: 13
+summary:
+  queued: 14
+  ready: 13
 queued[10]{id,title,kind,blocked_by}:
   firstmate-lease-adopt,adopt the durable lease,ship,treehouse-lease-t4
   ...
