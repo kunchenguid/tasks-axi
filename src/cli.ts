@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runAxiCli } from "axi-sdk-js";
+import { requireFlagValue } from "./args.js";
 import { resolveTasksContext, type TasksContext } from "./context.js";
 import {
   ADD_HELP,
@@ -132,7 +133,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
     commands: COMMANDS,
     getCommandHelp: (command) => COMMAND_HELP[command],
     resolveContext: ({ args }) => {
-      const { backend, file } = parseGlobalFlags(args);
+      const { backend, file } = parseGlobalFlags(args, false);
       return resolveTasksContext({
         ...(backend ? { backend } : {}),
         ...(file ? { file } : {}),
@@ -146,7 +147,7 @@ function withContext(handler: CommandFn): CommandFn {
   return (args, ctx) => handler(parseGlobalFlags(args).stripped, ctx);
 }
 
-function parseGlobalFlags(args: string[]): {
+function parseGlobalFlags(args: string[], validate = true): {
   backend?: string;
   file?: string;
   stripped: string[];
@@ -157,16 +158,28 @@ function parseGlobalFlags(args: string[]): {
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === "--backend" && i + 1 < args.length) {
-      backend = args[++i];
+    if (arg === "--backend") {
+      const value = readGlobalFlagValue(args, i, "--backend", validate);
+      if (value === undefined) {
+        stripped.push(arg);
+        continue;
+      }
+      backend = value;
+      i++;
       continue;
     }
     if (arg.startsWith("--backend=")) {
       backend = arg.slice("--backend=".length);
       continue;
     }
-    if (arg === "--file" && i + 1 < args.length) {
-      file = args[++i];
+    if (arg === "--file") {
+      const value = readGlobalFlagValue(args, i, "--file", validate);
+      if (value === undefined) {
+        stripped.push(arg);
+        continue;
+      }
+      file = value;
+      i++;
       continue;
     }
     if (arg.startsWith("--file=")) {
@@ -181,6 +194,18 @@ function parseGlobalFlags(args: string[]): {
     ...(file ? { file } : {}),
     stripped,
   };
+}
+
+function readGlobalFlagValue(
+  args: string[],
+  index: number,
+  flag: string,
+  validate: boolean,
+): string | undefined {
+  if (validate) return requireFlagValue(args, index, flag);
+  const value = args[index + 1];
+  if (value === undefined || value.startsWith("--")) return undefined;
+  return value;
 }
 
 function readPackageVersion(): string {

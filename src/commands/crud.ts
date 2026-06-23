@@ -82,11 +82,10 @@ function parseLinks(pr?: string, report?: string): TaskLink[] {
 
 function parsePriority(raw: string | undefined): number | undefined {
   if (raw === undefined) return undefined;
-  const n = parseInt(raw, 10);
-  if (isNaN(n) || n < 0 || n > 4) {
+  if (!/^[0-4]$/.test(raw)) {
     throw new AxiError("--priority must be an integer 0-4", "VALIDATION_ERROR");
   }
-  return n;
+  return Number(raw);
 }
 
 export async function addCommand(

@@ -259,13 +259,15 @@ export class MarkdownStore implements Store {
     });
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string): Promise<Task> {
     return withLock(this.path, () => {
       const doc = this.load();
       const found = this.findEntry(doc, id);
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
+      const task = found.entry.task;
       found.section.entries.splice(found.index, 1);
       this.persist(doc);
+      return task;
     });
   }
 

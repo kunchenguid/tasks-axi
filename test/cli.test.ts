@@ -83,6 +83,13 @@ describe("CLI entrypoint", () => {
     expect(c.read()).not.toContain("cert-cleanup");
   });
 
+  it("rejects a missing global flag value", async () => {
+    const c = capture();
+    await main({ argv: ["list", "--file", "--state"], stdout: c.stdout });
+    expect(c.read()).toContain("--file requires a value");
+    expect(process.exitCode).toBe(2);
+  });
+
   it("renders the home dashboard with no args", async () => {
     const c = capture();
     await main({ argv: [], stdout: c.stdout });

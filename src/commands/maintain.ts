@@ -1,6 +1,6 @@
-import { takeFlag } from "../args.js";
+import { parseNonNegativeIntegerFlag, takeFlag } from "../args.js";
 import { requireCtx, type TasksContext } from "../context.js";
-import { AxiError, unsupported } from "../errors.js";
+import { unsupported } from "../errors.js";
 import type { State } from "../model.js";
 import { getSuggestions } from "../suggestions.js";
 import { field, renderDetail, renderHelp, renderOutput } from "../toon.js";
@@ -29,10 +29,7 @@ export async function pruneCommand(
   }
 
   const keepRaw = takeFlag(args, "--keep");
-  const keep = keepRaw ? parseInt(keepRaw, 10) : config.doneKeep;
-  if (isNaN(keep) || keep < 0) {
-    throw new AxiError("--keep must be a non-negative integer", "VALIDATION_ERROR");
-  }
+  const keep = parseNonNegativeIntegerFlag("--keep", keepRaw, config.doneKeep);
   const state = (takeFlag(args, "--state") ?? "done") as State;
 
   const result = await store.prune({ state, keep, archive: true });

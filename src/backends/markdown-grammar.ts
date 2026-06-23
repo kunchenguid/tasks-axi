@@ -91,6 +91,7 @@ const TAIL_DEP = new RegExp(
 );
 const TAIL_REPO = /\s*\((?:[^()]*\+\s*)?repo:\s*([^)]+)\)\s*$/;
 const TAIL_KIND = /\s*\(kind:\s*([^)]+)\)\s*$/;
+const TAIL_PRIORITY = /\s*\(priority:\s*([0-4])\)\s*$/;
 const TAIL_SINCE = new RegExp(`\\s*\\(since\\s+(${DATE})\\)\\s*$`);
 const TAIL_CLOSED = new RegExp(
   `\\s*\\((?:merged|reported|done|closed)\\s+(${DATE})\\)\\s*$`,
@@ -148,6 +149,7 @@ interface ExtractedTags {
   deps: Dep[];
   created?: string;
   closed?: string;
+  priority?: number;
   links: TaskLink[];
 }
 
@@ -164,6 +166,7 @@ function extractTags(rest: string): ExtractedTags {
   let kindTag: string | undefined;
   let created: string | undefined;
   let closed: string | undefined;
+  let priority: number | undefined;
 
   let title = rest;
   let stripping = true;
@@ -191,6 +194,13 @@ function extractTags(rest: string): ExtractedTags {
       stripping = true;
       continue;
     }
+    m = title.match(TAIL_PRIORITY);
+    if (m) {
+      if (priority === undefined) priority = Number(m[1]);
+      title = title.slice(0, m.index);
+      stripping = true;
+      continue;
+    }
     m = title.match(TAIL_SINCE);
     if (m) {
       if (created === undefined) created = m[1];
@@ -210,7 +220,7 @@ function extractTags(rest: string): ExtractedTags {
   title = title.trim();
   const kind = kindTag ?? leadingKind(title);
 
-  return { title, kind, repo, deps, created, closed, links };
+  return { title, kind, repo, deps, created, closed, priority, links };
 }
 
 // ---------------------------------------------------------------------------
@@ -234,6 +244,7 @@ export function buildProse(task: Task): string {
   if (task.kind && !titleHasLeadingKind(task.title, task.kind)) {
     parts.push(`(kind: ${task.kind})`);
   }
+  if (task.priority !== undefined) parts.push(`(priority: ${task.priority})`);
   if (task.state !== "done" && task.created) {
     parts.push(`(since ${task.created})`);
   }
@@ -295,6 +306,7 @@ function buildTask(
   if (bodyLines.length > 0) task.body = bodyLines.join("\n");
   if (tags.created) task.created = tags.created;
   if (tags.closed) task.closed = tags.closed;
+  if (tags.priority !== undefined) task.priority = tags.priority;
   return task;
 }
 

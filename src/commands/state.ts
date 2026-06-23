@@ -4,6 +4,7 @@ import { MarkdownStore } from "../backends/markdown.js";
 import {
   getFlag,
   getPositional,
+  parseNonNegativeIntegerFlag,
   requireId,
   takeBoolFlag,
   takeFlag,
@@ -13,7 +14,7 @@ import { readyTasks } from "../derive.js";
 import { AxiError, notFound } from "../errors.js";
 import { formatCountLine } from "../format.js";
 import { validateDependencyId } from "../id.js";
-import type { Dep } from "../model.js";
+import type { Dep, Task, TaskInput } from "../model.js";
 import { getSuggestions } from "../suggestions.js";
 import { field, renderDetail, renderHelp, renderOutput } from "../toon.js";
 import { renderTaskList } from "../view.js";
@@ -94,6 +95,7 @@ export async function doneCommand(
   const keepRaw = takeFlag(args, "--keep");
   const noPrune = takeBoolFlag(args, "--no-prune");
   const id = requireId(getPositional(args, 0), "id");
+  const keep = parseNonNegativeIntegerFlag("--keep", keepRaw, config.doneKeep);
 
   const current = await store.get(id);
   if (!current) throw notFound(id);
@@ -117,10 +119,9 @@ export async function doneCommand(
 
   let pruned = 0;
   if (!noPrune && store.prune) {
-    const keep = keepRaw ? parseInt(keepRaw, 10) : config.doneKeep;
     const result = await store.prune({
       state: "done",
-      keep: isNaN(keep) ? config.doneKeep : keep,
+      keep,
       archive: true,
     });
     pruned = result.archived;
@@ -260,6 +261,24 @@ function resolveBacklogTarget(to: string): string {
   return base;
 }
 
+function taskToInput(task: Task): TaskInput {
+  const input: TaskInput = {
+    id: task.id,
+    title: task.title,
+    state: task.state,
+    deps: task.deps.map((dep) => ({ ...dep })),
+    links: task.links.map((link) => ({ ...link })),
+  };
+  if (task.kind) input.kind = task.kind;
+  if (task.repo) input.repo = task.repo;
+  if (task.body) input.body = task.body;
+  if (task.priority !== undefined) input.priority = task.priority;
+  if (task.created) input.created = task.created;
+  if (task.closed) input.closed = task.closed;
+  if (task.meta) input.meta = { ...task.meta };
+  return input;
+}
+
 export async function mvCommand(
   rawArgs: string[],
   context?: TasksContext,
@@ -275,8 +294,7 @@ export async function mvCommand(
   }
   const id = requireId(getPositional(args, 0), "id");
 
-  const task = await store.get(id);
-  if (!task) throw notFound(id);
+  if (!(await store.get(id))) throw notFound(id);
 
   const targetPath = resolveBacklogTarget(to);
   if (resolve(targetPath) === resolve(config.path)) {
@@ -293,21 +311,21 @@ export async function mvCommand(
     );
   }
 
-  await target.create({
-    id: task.id,
-    title: task.title,
-    state: task.state,
-    ...(task.kind ? { kind: task.kind } : {}),
-    ...(task.repo ? { repo: task.repo } : {}),
-    ...(task.body ? { body: task.body } : {}),
-    deps: task.deps,
-    links: task.links,
-    ...(task.priority !== undefined ? { priority: task.priority } : {}),
-    ...(task.created ? { created: task.created } : {}),
-    ...(task.closed ? { closed: task.closed } : {}),
-    ...(task.meta ? { meta: task.meta } : {}),
-  });
-  await store.remove(id);
+  const task = await store.remove(id);
+  const input = taskToInput(task);
+  try {
+    await target.create(input);
+  } catch (error) {
+    try {
+      await store.create(input);
+    } catch {
+      throw new AxiError(
+        "Move failed and the source task could not be restored",
+        "UNKNOWN",
+      );
+    }
+    throw error;
+  }
 
   return renderOutput([
     renderDetail("moved", { id, from: config.path, to: targetPath }, [

@@ -4,14 +4,27 @@ function flagEqualsPrefix(flag: string): string {
   return `${flag}=`;
 }
 
+export function requireFlagValue(
+  args: string[],
+  index: number,
+  flag: string,
+): string {
+  const value = args[index + 1];
+  if (value === undefined || value.startsWith("--")) {
+    throw new AxiError(`${flag} requires a value`, "VALIDATION_ERROR", [
+      `Pass ${flag}=... if the value begins with --`,
+    ]);
+  }
+  return value;
+}
+
 /** Get a flag's value from --flag value or --flag=value without modifying args. */
 export function getFlag(args: string[], name: string): string | undefined {
   const equalsPrefix = flagEqualsPrefix(name);
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === name) {
-      if (i + 1 >= args.length) return undefined;
-      return args[i + 1];
+      return requireFlagValue(args, i, name);
     }
     if (arg.startsWith(equalsPrefix)) {
       return arg.slice(equalsPrefix.length);
@@ -26,7 +39,7 @@ export function takeFlag(args: string[], flag: string): string | undefined {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === flag) {
-      const val = args[i + 1];
+      const val = requireFlagValue(args, i, flag);
       args.splice(i, 2);
       return val;
     }
@@ -61,6 +74,22 @@ export function takeAllFlags(args: string[], flag: string): string[] {
     value = takeFlag(args, flag);
   }
   return result;
+}
+
+export function parseNonNegativeIntegerFlag(
+  flag: string,
+  raw: string | undefined,
+  fallback: number,
+): number {
+  if (raw === undefined) return fallback;
+  if (!/^\d+$/.test(raw)) {
+    throw new AxiError(`${flag} must be a non-negative integer`, "VALIDATION_ERROR");
+  }
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value)) {
+    throw new AxiError(`${flag} must be a non-negative integer`, "VALIDATION_ERROR");
+  }
+  return value;
 }
 
 /**

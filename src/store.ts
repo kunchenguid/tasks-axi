@@ -54,7 +54,7 @@ export interface Store {
   create(input: TaskInput): Promise<Task>;
   get(id: string): Promise<Task | null>;
   update(id: string, patch: TaskPatch): Promise<Task>;
-  remove(id: string): Promise<void>;
+  remove(id: string): Promise<Task>;
 
   // query
   list(query: TaskQuery): Promise<{ items: Task[]; total: number }>;

@@ -80,6 +80,18 @@ describe("crud commands", () => {
       }
     });
 
+    it("persists priority through a fresh read", async () => {
+      const b = makeBacklog();
+      try {
+        await addCommand(["new-q1", "ranked task", "--priority", "2"], b.ctx);
+        const out = await showCommand(["new-q1"], b.ctx);
+        expect(out).toContain("priority: 2");
+        expect(b.read()).toContain("(priority: 2)");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("exposes usage help text", () => {
       expect(ADD_HELP).toContain("usage: tasks-axi add");
     });
@@ -209,6 +221,18 @@ describe("crud commands", () => {
         await expect(
           updateCommand(["cert-cleanup"], b.ctx),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("persists updated priority through a fresh read", async () => {
+      const b = makeBacklog();
+      try {
+        await updateCommand(["cert-cleanup", "--priority", "3"], b.ctx);
+        const out = await showCommand(["cert-cleanup"], b.ctx);
+        expect(out).toContain("priority: 3");
+        expect(b.read()).toContain("(priority: 3)");
       } finally {
         b.cleanup();
       }

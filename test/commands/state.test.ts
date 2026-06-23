@@ -10,6 +10,8 @@ import {
   startCommand,
   unblockCommand,
 } from "../../src/commands/state.js";
+import type { Task } from "../../src/model.js";
+import type { Store } from "../../src/store.js";
 import { makeBacklog } from "../helpers.js";
 
 describe("state commands", () => {
@@ -59,6 +61,33 @@ describe("state commands", () => {
       try {
         await doneCommand(["cert-cleanup", "--keep", "2"], b.ctx);
         expect(b.archive()).toContain("## Archived");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects a missing value before consuming the next flag", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          doneCommand(["cert-cleanup", "--pr", "--no-prune"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toContain("- [ ] cert-cleanup");
+        expect(b.read()).not.toContain("--no-prune");
+        expect(b.archive()).toBe("");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects negative keep before closing the task", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          doneCommand(["cert-cleanup", "--keep", "-1"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toContain("- [ ] cert-cleanup");
+        expect(b.archive()).toBe("");
       } finally {
         b.cleanup();
       }
@@ -198,6 +227,57 @@ describe("state commands", () => {
         ).toContain("cert-cleanup");
       } finally {
         b.cleanup();
+        target.cleanup();
+      }
+    });
+
+    it("moves the task returned by locked removal", async () => {
+      const target = makeBacklog("# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n");
+      const stale: Task = {
+        id: "race-q1",
+        title: "stale title",
+        state: "queued",
+        links: [],
+        deps: [],
+      };
+      const fresh: Task = { ...stale, title: "fresh title" };
+      let removed = false;
+      const store: Store = {
+        capabilities: () => ({
+          backend: "markdown",
+          deps: true,
+          prune: true,
+          comments: false,
+          fullTextSearch: false,
+          realtimeSync: false,
+          customStates: true,
+          serverMintsIds: false,
+        }),
+        create: async () => fresh,
+        get: async () => stale,
+        update: async () => fresh,
+        remove: async () => {
+          removed = true;
+          return fresh;
+        },
+        list: async () => ({ items: [fresh], total: 1 }),
+        transition: async () => fresh,
+        addDep: async () => true,
+        removeDep: async () => true,
+      };
+      try {
+        await mvCommand(["race-q1", "--to", target.path], {
+          store,
+          config: {
+            backend: "markdown",
+            path: join(target.dir, "source.md"),
+            doneKeep: 10,
+          },
+        });
+        expect(removed).toBe(true);
+        expect(readFileSync(target.path, "utf8")).toContain("fresh title");
+        expect(readFileSync(target.path, "utf8")).not.toContain("stale title");
+      } finally {
         target.cleanup();
       }
     });

@@ -108,6 +108,16 @@ describe("markdown grammar", () => {
       expect(task.title).toContain("report.md (reported 2026-06-22):");
     });
 
+    it("extracts a trailing priority tag", () => {
+      const doc = parseBacklog(
+        "# Backlog\n\n## Queued\n- [ ] prio-q1 - important work (priority: 2) (since 2026-07-01)\n",
+      );
+      const task = tasksOf(doc)[0];
+      expect(task.title).toBe("important work");
+      expect(task.priority).toBe(2);
+      expect(task.created).toBe("2026-07-01");
+    });
+
     it("reads indented continuation lines as the body", () => {
       const task = tasksOf(parseBacklog(FIXTURE)).find(
         (t) => t.id === "multi-line-w8",
@@ -136,12 +146,13 @@ describe("markdown grammar", () => {
         state: "queued",
         kind: "ship",
         repo: "acme",
+        priority: 2,
         links: [],
         deps: [{ type: "blocked-by", id: "y-t1" }],
         created: "2026-07-01",
       };
       expect(buildProse(task)).toBe(
-        "do a thing blocked-by: y-t1 (repo: acme) (kind: ship) (since 2026-07-01)",
+        "do a thing blocked-by: y-t1 (repo: acme) (kind: ship) (priority: 2) (since 2026-07-01)",
       );
     });
 
