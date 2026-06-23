@@ -37,7 +37,7 @@ describe("parseConfigToml", () => {
   });
 
   it("ignores unknown keys and tables", () => {
-    const cfg = parseConfigToml('[sqlite]\npath = ".tasks.db"\n');
+    const cfg = parseConfigToml('[sqlite]\npath = ".tasks.db"\npath: broken\n');
     expect(cfg.markdown).toBeUndefined();
   });
 
@@ -64,6 +64,21 @@ describe("parseConfigToml", () => {
     expect(() =>
       parseConfigToml("[markdown]\ndone_keep = many\n"),
     ).toThrow(/done_keep/);
+  });
+
+  it("rejects malformed assignments in the top-level scope", () => {
+    expect(() => parseConfigToml('backend: "markdown"\n')).toThrow(
+      /key = value/,
+    );
+  });
+
+  it("rejects malformed assignments in the markdown table", () => {
+    expect(() =>
+      parseConfigToml('[markdown]\npath: "data/backlog.md"\n'),
+    ).toThrow(/key = value/);
+    expect(() => parseConfigToml("[markdown]\ndone_keep 5\n")).toThrow(
+      /key = value/,
+    );
   });
 });
 

@@ -69,6 +69,22 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("rejects repo values that would inject canonical tags", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.create({
+            id: "inject-q1",
+            title: "bad tag",
+            repo: "demo) (kind: ship",
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("inject-q1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("filters list by state, repo, and kind with a true total", async () => {
       const b = makeBacklog();
       try {
@@ -197,6 +213,18 @@ describe("MarkdownStore", () => {
         expect(b.read()).toContain(
           "- [ ] cert-cleanup - port the post-upload cert pruning",
         );
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects kind values that would split canonical tags", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.update("cert-cleanup", { kind: "ship\nscout" }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("ship\nscout");
       } finally {
         b.cleanup();
       }

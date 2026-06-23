@@ -42,6 +42,7 @@ interface TomlConfig {
 
 const DEFAULT_KEEP = 10;
 const PATH_CANDIDATES = ["backlog.md", "data/backlog.md"];
+type ConfigTable = "root" | "markdown" | "unsupported";
 
 /**
  * Minimal TOML reader for the tiny config surface we need: a top-level
@@ -50,7 +51,7 @@ const PATH_CANDIDATES = ["backlog.md", "data/backlog.md"];
  */
 export function parseConfigToml(src: string): TomlConfig {
   const config: TomlConfig = {};
-  let table: "" | "markdown" = "";
+  let table: ConfigTable = "root";
 
   for (const rawLine of src.split("\n")) {
     const line = stripTomlComment(rawLine).trim();
@@ -58,18 +59,26 @@ export function parseConfigToml(src: string): TomlConfig {
 
     const section = line.match(/^\[([^\]]+)\]$/);
     if (section) {
-      table = section[1].trim() === "markdown" ? "markdown" : "";
+      table = section[1].trim() === "markdown" ? "markdown" : "unsupported";
       continue;
     }
 
+    if (table === "unsupported") continue;
+
     const kv = line.match(/^([A-Za-z0-9_]+)\s*=\s*(.*)$/);
-    if (!kv) continue;
+    if (!kv) {
+      throw new AxiError(
+        "Invalid config line: expected `key = value`",
+        "VALIDATION_ERROR",
+        ["Use `key = value` assignments in .tasks.toml"],
+      );
+    }
     const key = kv[1];
     const source = configKeySource(table, key);
     if (!source) continue;
     const value = parseTomlValue(kv[2], source);
 
-    if (table === "") {
+    if (table === "root") {
       config.backend = requireTomlString(value, source);
       continue;
     }
@@ -110,10 +119,10 @@ function stripTomlComment(raw: string): string {
 }
 
 function configKeySource(
-  table: "" | "markdown",
+  table: ConfigTable,
   key: string,
 ): string | undefined {
-  if (table === "" && key === "backend") return "backend";
+  if (table === "root" && key === "backend") return "backend";
   if (
     table === "markdown" &&
     (key === "path" || key === "archive" || key === "done_keep")

@@ -62,6 +62,21 @@ function normalizeTitle(title: string): string {
   return trimmed;
 }
 
+function normalizeTagValue(
+  value: string | undefined,
+  field: "kind" | "repo",
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (/[()\r\n]/.test(value)) {
+    throw new AxiError(
+      `Task ${field} must be a single line without parentheses`,
+      "VALIDATION_ERROR",
+    );
+  }
+  const trimmed = value.trim();
+  return trimmed === "" ? undefined : trimmed;
+}
+
 function appendTitleText(title: string, text: string): string {
   if (title.includes(text)) return title;
   return normalizeTitle(`${title} ${text}`);
@@ -193,6 +208,8 @@ export class MarkdownStore implements Store {
   private taskFromInput(input: TaskInput): Task {
     const state: State = input.state ?? "queued";
     let title = normalizeTitle(input.title);
+    const kind = normalizeTagValue(input.kind, "kind");
+    const repo = normalizeTagValue(input.repo, "repo");
     // Links live in the prose; fold any provided links into the title text.
     for (const link of input.links ?? []) {
       title = appendTitleText(title, link.url);
@@ -209,8 +226,8 @@ export class MarkdownStore implements Store {
           }))
         : [],
     };
-    if (input.kind) task.kind = input.kind;
-    if (input.repo) task.repo = input.repo;
+    if (kind) task.kind = kind;
+    if (repo) task.repo = repo;
     if (input.body) task.body = input.body;
     if (input.priority !== undefined) task.priority = input.priority;
     if (input.meta) task.meta = input.meta;
@@ -258,8 +275,12 @@ export class MarkdownStore implements Store {
           ? `${task.body}\n${patch.appendBody}`
           : patch.appendBody;
       }
-      if (patch.repo !== undefined) task.repo = patch.repo || undefined;
-      if (patch.kind !== undefined) task.kind = patch.kind || undefined;
+      if (patch.repo !== undefined) {
+        task.repo = normalizeTagValue(patch.repo, "repo");
+      }
+      if (patch.kind !== undefined) {
+        task.kind = normalizeTagValue(patch.kind, "kind");
+      }
       if (patch.priority !== undefined) task.priority = patch.priority;
       if (patch.meta) task.meta = { ...task.meta, ...patch.meta };
       for (const link of patch.addLinks ?? []) {
