@@ -101,6 +101,31 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("rejects invalid date tags before rendering", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.create({
+            id: "bad-created-q1",
+            title: "bad created",
+            created: "tomorrow",
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await expect(
+          b.store.create({
+            id: "bad-closed-q1",
+            title: "bad closed",
+            state: "done",
+            closed: "06/22",
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("bad-created-q1");
+        expect(b.read()).not.toContain("bad-closed-q1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("filters list by state, repo, and kind with a true total", async () => {
       const b = makeBacklog();
       try {
@@ -354,6 +379,18 @@ describe("MarkdownStore", () => {
       try {
         await expect(
           b.store.transition("cert-cleanup", "done", { pr: "" }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toContain("- [ ] cert-cleanup");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects invalid transition dates before moving", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.transition("cert-cleanup", "done", { date: "06/22" }),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         expect(b.read()).toContain("- [ ] cert-cleanup");
       } finally {

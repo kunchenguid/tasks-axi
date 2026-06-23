@@ -81,6 +81,16 @@ function parseDeps(args: string[]): Dep[] {
   }));
 }
 
+async function requireExistingBlockers(store: Store, deps: Dep[]): Promise<void> {
+  for (const dep of deps) {
+    if (dep.type !== "blocked-by") continue;
+    if (await store.get(dep.id)) continue;
+    throw new AxiError(`blocker "${dep.id}" not found`, "VALIDATION_ERROR", [
+      "Create the blocker task first, or choose an existing task id",
+    ]);
+  }
+}
+
 function parseLinks(pr?: string, report?: string): TaskLink[] {
   const links: TaskLink[] = [];
   const checkedPr = requireNonEmptyFlagValue("--pr", pr);
@@ -182,6 +192,8 @@ export async function addCommand(
       return renderOutput(blocks);
     }
   }
+
+  await requireExistingBlockers(store, deps);
 
   const state: State = start ? "in_flight" : "queued";
   const input: TaskInput = {

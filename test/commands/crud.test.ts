@@ -139,6 +139,33 @@ describe("crud commands", () => {
       }
     });
 
+    it("rejects a missing blocked-by target before creating a task", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          addCommand(["new-q1", "bad dep", "--blocked-by", "missing-q1"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("new-q1");
+        expect(b.read()).not.toContain("missing-q1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("records blocked-by when the target exists", async () => {
+      const b = makeBacklog();
+      try {
+        await addCommand(
+          ["new-q1", "blocked work", "--blocked-by", "lease-core-t4"],
+          b.ctx,
+        );
+        expect(b.read()).toContain("new-q1 - blocked work");
+        expect(b.read()).toContain("blocked-by: lease-core-t4");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects an empty link flag before creating a task", async () => {
       const b = makeBacklog();
       try {

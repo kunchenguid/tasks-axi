@@ -42,6 +42,7 @@ const HEADERS: Record<State, string> = {
   queued: "## Queued",
   done: "## Done",
 };
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function today(): string {
   // Local date (firstmate's dates are local, e.g. "2026-06-22"), not UTC.
@@ -99,10 +100,38 @@ function normalizePriority(priority: number | undefined): number | undefined {
   return priority;
 }
 
+function normalizeDate(value: string, field: string): string {
+  if (!DATE_RE.test(value)) {
+    throw new AxiError(
+      `Task ${field} must be YYYY-MM-DD`,
+      "VALIDATION_ERROR",
+    );
+  }
+  return value;
+}
+
 function appendTitleText(title: string, text: string): string {
   const url = normalizeLinkUrl(text);
   if (deriveLinks(title).some((link) => link.url === url)) return title;
   return normalizeTitle(`${title} ${url}`);
+}
+
+function taskToInput(task: Task): TaskInput {
+  const input: TaskInput = {
+    id: task.id,
+    title: task.title,
+    state: task.state,
+    deps: task.deps.map((dep) => ({ ...dep })),
+    links: task.links.map((link) => ({ ...link })),
+  };
+  if (task.kind) input.kind = task.kind;
+  if (task.repo) input.repo = task.repo;
+  if (task.body) input.body = task.body;
+  if (task.priority !== undefined) input.priority = task.priority;
+  input.created = task.created ?? null;
+  if (task.closed) input.closed = task.closed;
+  if (task.meta) input.meta = { ...task.meta };
+  return input;
 }
 
 export class MarkdownStore implements Store {
@@ -256,9 +285,15 @@ export class MarkdownStore implements Store {
     if (priority !== undefined) task.priority = priority;
     if (input.meta) task.meta = input.meta;
     if (input.created !== undefined) {
-      if (input.created) task.created = input.created;
-    } else if (state !== "done") task.created = this.now();
-    if (input.closed) task.closed = input.closed;
+      if (input.created !== null) {
+        task.created = normalizeDate(input.created, "created date");
+      }
+    } else if (state !== "done") {
+      task.created = normalizeDate(this.now(), "created date");
+    }
+    if (input.closed !== undefined) {
+      task.closed = normalizeDate(input.closed, "closed date");
+    }
     return task;
   }
 
@@ -332,6 +367,20 @@ export class MarkdownStore implements Store {
     });
   }
 
+  async moveTo(id: string, target: MarkdownStore): Promise<Task> {
+    return withLock(this.path, async () => {
+      const doc = this.load();
+      const found = this.findEntry(doc, id);
+      if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
+
+      const task = found.entry.task;
+      await target.create(taskToInput(task));
+      found.section.entries.splice(found.index, 1);
+      this.persist(doc);
+      return task;
+    });
+  }
+
   // -------------------------------------------------------------------------
   // State + dependencies
   // -------------------------------------------------------------------------
@@ -348,7 +397,7 @@ export class MarkdownStore implements Store {
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
 
       const task = found.entry.task;
-      const date = opts.date ?? this.now();
+      const date = normalizeDate(opts.date ?? this.now(), "transition date");
 
       // Record links / notes before stamping so closureVerb sees them.
       for (const url of [opts.pr, opts.report]) {

@@ -14,10 +14,11 @@ import { readyTasks } from "../derive.js";
 import { AxiError, notFound } from "../errors.js";
 import { formatCountLine } from "../format.js";
 import { validateDependencyId } from "../id.js";
-import type { Dep, Task, TaskInput } from "../model.js";
+import type { Dep, Task, TaskInput, TaskLink, TaskPatch } from "../model.js";
+import type { Store } from "../store.js";
 import { getSuggestions } from "../suggestions.js";
 import { field, renderDetail, renderHelp, renderOutput } from "../toon.js";
-import { renderTaskList } from "../view.js";
+import { renderTaskDetail, renderTaskList } from "../view.js";
 
 export const START_HELP = `usage: tasks-axi start <id>
 Move a task to In flight (idempotent).
@@ -110,7 +111,21 @@ export async function doneCommand(
   const current = await store.get(id);
   if (!current) throw notFound(id);
 
+  const opts: { pr?: string; report?: string; note?: string } = {};
+  if (pr !== undefined) opts.pr = pr;
+  if (report !== undefined) opts.report = report;
+  if (note !== undefined) opts.note = note;
+
   if (current.state === "done") {
+    const patch = doneMetadataPatch(pr, report, note);
+    if (Object.keys(patch).length > 0) {
+      const task = await store.update(id, patch);
+      const all = (await store.list({})).items;
+      return renderOutput([
+        "already: true",
+        renderTaskDetail(task, all, false),
+      ]);
+    }
     return renderOutput([
       "already: true",
       renderDetail("done", { id, state: "done", pruned: 0 }, [
@@ -121,10 +136,6 @@ export async function doneCommand(
     ]);
   }
 
-  const opts: { pr?: string; report?: string; note?: string } = {};
-  if (pr !== undefined) opts.pr = pr;
-  if (report !== undefined) opts.report = report;
-  if (note !== undefined) opts.note = note;
   const task = await store.transition(id, "done", opts);
 
   let pruned = 0;
@@ -145,6 +156,20 @@ export async function doneCommand(
     ]),
     renderHelp(getSuggestions({ action: "done", id })),
   ]);
+}
+
+function doneMetadataPatch(
+  pr: string | undefined,
+  report: string | undefined,
+  note: string | undefined,
+): TaskPatch {
+  const patch: TaskPatch = {};
+  const addLinks: TaskLink[] = [];
+  if (pr !== undefined) addLinks.push({ kind: "pr", url: pr });
+  if (report !== undefined) addLinks.push({ kind: "report", url: report });
+  if (addLinks.length > 0) patch.addLinks = addLinks;
+  if (note !== undefined) patch.appendBody = note;
+  return patch;
 }
 
 export async function reopenCommand(
@@ -193,6 +218,13 @@ function requireBy(args: string[]): string {
   return validateDependencyId(by);
 }
 
+async function requireExistingBlocker(store: Store, id: string): Promise<void> {
+  if (await store.get(id)) return;
+  throw new AxiError(`blocker "${id}" not found`, "VALIDATION_ERROR", [
+    "Create the blocker task first, or choose an existing task id",
+  ]);
+}
+
 export async function blockCommand(
   rawArgs: string[],
   context?: TasksContext,
@@ -204,6 +236,7 @@ export async function blockCommand(
   const id = requireId(positionals[0], "id");
 
   if (!(await store.get(id))) throw notFound(id);
+  await requireExistingBlocker(store, by);
   const dep: Dep = { type: "blocked-by", id: by };
   const added = await store.addDep(id, dep);
 
@@ -319,7 +352,8 @@ export async function mvCommand(
   const positionals = requirePositionals(args, 1, 1, MV_HELP.split("\n")[0]);
   const id = requireId(positionals[0], "id");
 
-  if (!(await store.get(id))) throw notFound(id);
+  const task = await store.get(id);
+  if (!task) throw notFound(id);
 
   const targetPath = resolveBacklogTarget(to);
   if (resolve(targetPath) === resolve(config.path)) {
@@ -336,20 +370,11 @@ export async function mvCommand(
     );
   }
 
-  const task = await store.remove(id);
-  const input = taskToInput(task);
-  try {
-    await target.create(input);
-  } catch (error) {
-    try {
-      await store.create(input);
-    } catch {
-      throw new AxiError(
-        "Move failed and the source task could not be restored",
-        "UNKNOWN",
-      );
-    }
-    throw error;
+  if (store instanceof MarkdownStore) {
+    await store.moveTo(id, target);
+  } else {
+    await target.create(taskToInput(task));
+    await store.remove(id);
   }
 
   return renderOutput([

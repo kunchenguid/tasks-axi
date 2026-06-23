@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -10,8 +10,6 @@ import {
   startCommand,
   unblockCommand,
 } from "../../src/commands/state.js";
-import type { Task } from "../../src/model.js";
-import type { Store } from "../../src/store.js";
 import { makeBacklog } from "../helpers.js";
 
 describe("state commands", () => {
@@ -152,6 +150,34 @@ describe("state commands", () => {
         b.cleanup();
       }
     });
+
+    it("backfills metadata on an already done task without pruning", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await doneCommand(
+          [
+            "lease-core-t4",
+            "--pr",
+            "https://github.com/o/r/pull/77",
+            "--note",
+            "backfilled review evidence",
+            "--keep",
+            "0",
+          ],
+          b.ctx,
+        );
+        expect(out).toContain("already: true");
+        expect(out).toContain("https://github.com/o/r/pull/77");
+        const read = b.read();
+        expect(read).toContain("https://github.com/o/r/pull/77");
+        expect(read).toContain("backfilled review evidence");
+        expect(read).toContain("(merged 2026-06-22)");
+        expect(read).not.toContain("(merged 2026-07-01)");
+        expect(b.archive()).toBe("");
+      } finally {
+        b.cleanup();
+      }
+    });
   });
 
   describe("reopen", () => {
@@ -227,6 +253,18 @@ describe("state commands", () => {
           unblockCommand(["cert-cleanup", "--by", "bad:id"], b.ctx),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         expect(b.read()).not.toContain("bad:id");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects a missing blocker target before changing dependencies", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          blockCommand(["cert-cleanup", "--by", "missing-q1"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("blocked-by: missing-q1");
       } finally {
         b.cleanup();
       }
@@ -316,53 +354,49 @@ describe("state commands", () => {
       }
     });
 
-    it("moves the task returned by locked removal", async () => {
+    it("moves the task from a fresh locked source read", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## Queued\n- [ ] race-q1 - stale title\n\n## Done\n",
+      );
       const target = makeBacklog("# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n");
-      const stale: Task = {
-        id: "race-q1",
-        title: "stale title",
-        state: "queued",
-        links: [],
-        deps: [],
-      };
-      const fresh: Task = { ...stale, title: "fresh title" };
-      let removed = false;
-      const store: Store = {
-        capabilities: () => ({
-          backend: "markdown",
-          deps: true,
-          prune: true,
-          comments: false,
-          fullTextSearch: false,
-          realtimeSync: false,
-          customStates: true,
-          serverMintsIds: false,
-        }),
-        create: async () => fresh,
-        get: async () => stale,
-        update: async () => fresh,
-        remove: async () => {
-          removed = true;
-          return fresh;
-        },
-        list: async () => ({ items: [fresh], total: 1 }),
-        transition: async () => fresh,
-        addDep: async () => true,
-        removeDep: async () => true,
+      const originalGet = b.store.get.bind(b.store);
+      let edited = false;
+      b.store.get = async (taskId: string) => {
+        const task = await originalGet(taskId);
+        if (taskId === "race-q1" && !edited) {
+          edited = true;
+          writeFileSync(
+            b.path,
+            "# Backlog\n\n## Queued\n- [ ] race-q1 - fresh title\n\n## Done\n",
+            "utf8",
+          );
+        }
+        return task;
       };
       try {
-        await mvCommand(["race-q1", "--to", target.path], {
-          store,
-          config: {
-            backend: "markdown",
-            path: join(target.dir, "source.md"),
-            doneKeep: 10,
-          },
-        });
-        expect(removed).toBe(true);
+        await mvCommand(["race-q1", "--to", target.path], b.ctx);
+        expect(edited).toBe(true);
         expect(readFileSync(target.path, "utf8")).toContain("fresh title");
         expect(readFileSync(target.path, "utf8")).not.toContain("stale title");
       } finally {
+        b.cleanup();
+        target.cleanup();
+      }
+    });
+
+    it("leaves the source intact when destination validation fails", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## Queued\n- [ ] bad-q1 - invalid parsed repo (repo: foo(bar)\n\n## Done\n",
+      );
+      const target = makeBacklog("# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n");
+      try {
+        await expect(
+          mvCommand(["bad-q1", "--to", target.path], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toContain("bad-q1");
+        expect(readFileSync(target.path, "utf8")).not.toContain("bad-q1");
+      } finally {
+        b.cleanup();
         target.cleanup();
       }
     });
