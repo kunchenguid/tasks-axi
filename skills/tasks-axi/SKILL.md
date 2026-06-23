@@ -46,5 +46,5 @@ Run `npx -y tasks-axi --help` for global flags, or `npx -y tasks-axi <command> -
 - Mutations are idempotent and report what changed (`already: true` on a no-op); re-running a mutation is safe.
 - `block <id> --by <other>` and `unblock` manage the dependency graph; `ready` lists only queued work with no unresolved blocker.
 - Filter `list` with `--state`, `--repo`, `--kind`, `--blocked`, `--limit`, and add columns with `--fields a,b,c`.
-- `update <id> --append "<note>"` grows a task's notes without rewriting the whole line; `render` normalizes the file; `mv <id> --to <path>` moves a task to another backlog.
+- `update <id> --append "<note>"` adds to a task's body; `update <id> --body "<text>"` or `--body-file <path>` replaces it, and `--title "<text>"` replaces the title; `render` normalizes the file; `mv <id> --to <path>` moves a task to another backlog.
 - Free-form (no-id) backlog lines are preserved verbatim and are never modified.

@@ -1,0 +1,51 @@
+
+> tasks-axi@0.1.0 prepack
+> npm run build
+
+
+> tasks-axi@0.1.0 build
+> tsc
+
+npm notice
+npm notice 📦  tasks-axi@0.1.0
+npm notice Tarball Contents
+npm notice 1.1kB LICENSE
+npm notice 9.3kB README.md
+npm notice 103B dist/bin/tasks-axi.js
+npm notice 5.7kB dist/src/args.js
+npm notice 4.9kB dist/src/backends/lock.js
+npm notice 11.2kB dist/src/backends/markdown-grammar.js
+npm notice 24.2kB dist/src/backends/markdown.js
+npm notice 1.9kB dist/src/body.js
+npm notice 6.2kB dist/src/cli.js
+npm notice 15.1kB dist/src/commands/crud.js
+npm notice 2.2kB dist/src/commands/home.js
+npm notice 2.3kB dist/src/commands/maintain.js
+npm notice 1.3kB dist/src/commands/setup.js
+npm notice 13.2kB dist/src/commands/state.js
+npm notice 6.3kB dist/src/config.js
+npm notice 1.0kB dist/src/context.js
+npm notice 1.8kB dist/src/derive.js
+npm notice 904B dist/src/errors.js
+npm notice 1.1kB dist/src/fields.js
+npm notice 809B dist/src/format.js
+npm notice 1.9kB dist/src/id.js
+npm notice 416B dist/src/model.js
+npm notice 4.6kB dist/src/skill.js
+npm notice 44B dist/src/store.js
+npm notice 6.0kB dist/src/suggestions.js
+npm notice 1.7kB dist/src/toon.js
+npm notice 2.8kB dist/src/view.js
+npm notice 1.5kB package.json
+npm notice 3.3kB skills/tasks-axi/SKILL.md
+npm notice Tarball Details
+npm notice name: tasks-axi
+npm notice version: 0.1.0
+npm notice filename: tasks-axi-0.1.0.tgz
+npm notice package size: 35.9 kB
+npm notice unpacked size: 132.9 kB
+npm notice shasum: 2b1892442e49bda3b209784a0ddbf09ee99deaa8
+npm notice integrity: sha512-cPnpEgay6FUp0[...]hMgZUwYIwB7gw==
+npm notice total files: 29
+npm notice
+tasks-axi-0.1.0.tgz
