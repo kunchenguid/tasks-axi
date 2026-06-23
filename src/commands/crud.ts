@@ -1,6 +1,7 @@
 import {
   parseOptionalNonNegativeIntegerFlag,
   parseStateFlag,
+  requireNonEmptyFlagValue,
   requirePositionals,
   requireId,
   takeAllFlags,
@@ -82,8 +83,12 @@ function parseDeps(args: string[]): Dep[] {
 
 function parseLinks(pr?: string, report?: string): TaskLink[] {
   const links: TaskLink[] = [];
-  if (pr) links.push({ kind: "pr", url: pr });
-  if (report) links.push({ kind: "report", url: report });
+  const checkedPr = requireNonEmptyFlagValue("--pr", pr);
+  const checkedReport = requireNonEmptyFlagValue("--report", report);
+  if (checkedPr !== undefined) links.push({ kind: "pr", url: checkedPr });
+  if (checkedReport !== undefined) {
+    links.push({ kind: "report", url: checkedReport });
+  }
   return links;
 }
 

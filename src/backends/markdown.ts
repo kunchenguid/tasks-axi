@@ -77,9 +77,21 @@ function normalizeTagValue(
   return trimmed === "" ? undefined : trimmed;
 }
 
+function normalizeLinkUrl(url: string): string {
+  if (/[\r\n]/.test(url)) {
+    throw new AxiError("Task link must be a single line", "VALIDATION_ERROR");
+  }
+  const trimmed = url.trim();
+  if (trimmed === "") {
+    throw new AxiError("Task link must not be empty", "VALIDATION_ERROR");
+  }
+  return trimmed;
+}
+
 function appendTitleText(title: string, text: string): string {
-  if (title.includes(text)) return title;
-  return normalizeTitle(`${title} ${text}`);
+  const url = normalizeLinkUrl(text);
+  if (deriveLinks(title).some((link) => link.url === url)) return title;
+  return normalizeTitle(`${title} ${url}`);
 }
 
 export class MarkdownStore implements Store {
@@ -326,8 +338,8 @@ export class MarkdownStore implements Store {
       const date = opts.date ?? this.now();
 
       // Record links / notes before stamping so closureVerb sees them.
-      for (const url of [opts.pr, opts.report].filter(Boolean) as string[]) {
-        task.title = appendTitleText(task.title, url);
+      for (const url of [opts.pr, opts.report]) {
+        if (url !== undefined) task.title = appendTitleText(task.title, url);
       }
       if (opts.note) {
         task.body = task.body ? `${task.body}\n${opts.note}` : opts.note;

@@ -3,6 +3,7 @@ import { existsSync, statSync } from "node:fs";
 import { MarkdownStore } from "../backends/markdown.js";
 import {
   parseNonNegativeIntegerFlag,
+  requireNonEmptyFlagValue,
   requirePositionals,
   requireId,
   takeBoolFlag,
@@ -94,9 +95,12 @@ export async function doneCommand(
   const { store, config } = requireCtx(context);
   const args = [...rawArgs];
 
-  const pr = takeFlag(args, "--pr");
-  const report = takeFlag(args, "--report");
-  const note = takeFlag(args, "--note");
+  const pr = requireNonEmptyFlagValue("--pr", takeFlag(args, "--pr"));
+  const report = requireNonEmptyFlagValue(
+    "--report",
+    takeFlag(args, "--report"),
+  );
+  const note = requireNonEmptyFlagValue("--note", takeFlag(args, "--note"));
   const keepRaw = takeFlag(args, "--keep");
   const noPrune = takeBoolFlag(args, "--no-prune");
   const positionals = requirePositionals(args, 1, 1, DONE_HELP.split("\n")[0]);
@@ -118,9 +122,9 @@ export async function doneCommand(
   }
 
   const opts: { pr?: string; report?: string; note?: string } = {};
-  if (pr) opts.pr = pr;
-  if (report) opts.report = report;
-  if (note) opts.note = note;
+  if (pr !== undefined) opts.pr = pr;
+  if (report !== undefined) opts.report = report;
+  if (note !== undefined) opts.note = note;
   const task = await store.transition(id, "done", opts);
 
   let pruned = 0;

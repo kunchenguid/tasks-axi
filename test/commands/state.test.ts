@@ -92,6 +92,32 @@ describe("state commands", () => {
       }
     });
 
+    it("rejects an empty link flag before closing the task", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          doneCommand(["cert-cleanup", "--pr=", "--no-prune"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toContain("- [ ] cert-cleanup");
+        expect(b.read()).not.toContain("- [x] cert-cleanup");
+        expect(b.archive()).toBe("");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects a whitespace note before closing the task", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          doneCommand(["cert-cleanup", "--note", "   ", "--no-prune"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toContain("- [ ] cert-cleanup");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects unknown flags before closing the task", async () => {
       const b = makeBacklog();
       try {

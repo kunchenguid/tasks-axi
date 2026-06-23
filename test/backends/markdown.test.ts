@@ -179,6 +179,43 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("dedupes added links by exact parsed url, not substring", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## Queued\n- [ ] task-q1 - title https://github.com/o/r/pull/10\n\n## Done\n",
+      );
+      try {
+        const task = await b.store.update("task-q1", {
+          addLinks: [{ kind: "pr", url: "https://github.com/o/r/pull/1" }],
+        });
+        expect(task.links).toContainEqual({
+          kind: "pr",
+          url: "https://github.com/o/r/pull/10",
+        });
+        expect(task.links).toContainEqual({
+          kind: "pr",
+          url: "https://github.com/o/r/pull/1",
+        });
+        const read = b.read();
+        expect(read).toContain("https://github.com/o/r/pull/10");
+        expect(read).toContain("https://github.com/o/r/pull/1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects empty added links before updating", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.update("cert-cleanup", {
+            addLinks: [{ kind: "pr", url: "" }],
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("throws NOT_FOUND for an unknown id", async () => {
       const b = makeBacklog();
       try {
@@ -255,6 +292,42 @@ describe("MarkdownStore", () => {
         const read = b.read();
         expect(read).toContain("https://github.com/o/r/pull/7");
         expect(read).toContain("(merged 2026-07-01)");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("records a shorter transition link when a longer one already exists", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## Queued\n- [ ] task-q1 - title https://github.com/o/r/pull/10\n\n## Done\n",
+      );
+      try {
+        const task = await b.store.transition("task-q1", "done", {
+          pr: "https://github.com/o/r/pull/1",
+        });
+        expect(task.links).toContainEqual({
+          kind: "pr",
+          url: "https://github.com/o/r/pull/10",
+        });
+        expect(task.links).toContainEqual({
+          kind: "pr",
+          url: "https://github.com/o/r/pull/1",
+        });
+        const read = b.read();
+        expect(read).toContain("https://github.com/o/r/pull/10");
+        expect(read).toContain("https://github.com/o/r/pull/1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects empty transition links before moving", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.transition("cert-cleanup", "done", { pr: "" }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toContain("- [ ] cert-cleanup");
       } finally {
         b.cleanup();
       }

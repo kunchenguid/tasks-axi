@@ -19,6 +19,19 @@ export function requireFlagValue(
   return value;
 }
 
+export function requireNonEmptyFlagValue(
+  flag: string,
+  value: string | undefined,
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (value.trim() === "") {
+    throw new AxiError(`${flag} requires a value`, "VALIDATION_ERROR", [
+      `Pass ${flag}=... with a non-empty value`,
+    ]);
+  }
+  return value;
+}
+
 /** Get a flag's value from --flag value or --flag=value without modifying args. */
 export function getFlag(args: string[], name: string): string | undefined {
   const equalsPrefix = flagEqualsPrefix(name);
