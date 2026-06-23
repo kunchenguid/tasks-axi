@@ -30,6 +30,10 @@ function tasksOf(doc: BacklogDoc): Task[] {
   return out;
 }
 
+function toCrlf(src: string): string {
+  return src.replace(/\r?\n/g, "\r\n");
+}
+
 describe("markdown grammar", () => {
   describe("byte-exact round-trip", () => {
     it("render(parse(src)) === src on the corpus fixture", () => {
@@ -37,7 +41,7 @@ describe("markdown grammar", () => {
     });
 
     it("round-trips CRLF fixtures while still recognizing tasks", () => {
-      const src = FIXTURE.replace(/\n/g, "\r\n");
+      const src = toCrlf(FIXTURE);
       const doc = parseBacklog(src);
       const tasks = tasksOf(doc);
       const ids = tasks.map((t) => t.id);
