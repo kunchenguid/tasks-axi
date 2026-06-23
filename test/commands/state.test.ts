@@ -357,6 +357,18 @@ describe("state commands", () => {
       }
     });
 
+    it("carries repo scope into empty ready suggestions", async () => {
+      const b = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      try {
+        const out = await readyCommand(["--repo", "monorepo"], b.ctx);
+        expect(out).toContain(
+          "Run `tasks-axi list --state queued --repo=monorepo` to see all queued work (incl. blocked)",
+        );
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects unknown flags", async () => {
       const b = makeBacklog();
       try {

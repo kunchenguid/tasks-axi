@@ -47,4 +47,25 @@ describe("suggestions", () => {
       "Run `tasks-axi show <id>` for full notes on a task",
     ]);
   });
+
+  it("suppresses scoped hints when an active kind filter cannot be preserved", () => {
+    const lines = getSuggestions({
+      action: "list",
+      filters: { kind: "docs" },
+    });
+    expect(lines).toEqual([
+      "Run `tasks-axi show <id>` for full notes on a task",
+    ]);
+  });
+
+  it("carries repo scope into empty ready follow-ups", () => {
+    const lines = getSuggestions({
+      action: "ready",
+      isEmpty: true,
+      filters: { repo: "demo repo" },
+    });
+    expect(lines).toEqual([
+      "Run `tasks-axi list --state queued --repo='demo repo'` to see all queued work (incl. blocked)",
+    ]);
+  });
 });

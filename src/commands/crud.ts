@@ -307,6 +307,7 @@ export async function listCommand(
         isEmpty,
         globals: context?.suggestionGlobals,
         filters: {
+          ...(state !== undefined ? { state } : {}),
           ...(repo !== undefined ? { repo } : {}),
           ...(kind !== undefined ? { kind } : {}),
         },

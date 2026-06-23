@@ -400,6 +400,19 @@ describe("crud commands", () => {
       }
     });
 
+    it("suppresses ready suggestions for kind-filtered lists", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await listCommand(["--kind", "ship"], b.ctx);
+        expect(out).toContain(
+          "Run `tasks-axi show <id>` for full notes on a task",
+        );
+        expect(out).not.toContain("Run `tasks-axi ready");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects an unknown --fields name", async () => {
       const b = makeBacklog();
       try {

@@ -22,6 +22,7 @@ export interface SuggestionGlobals {
 export interface SuggestionFilters {
   repo?: string;
   kind?: string;
+  state?: string;
 }
 
 type Entry = {
@@ -70,9 +71,14 @@ const table: Entry[] = [
   },
   {
     match: (c) => c.action === "ready" && c.isEmpty === true,
-    lines: () => [
-      "Run `tasks-axi list --state queued` to see all queued work (incl. blocked)",
-    ],
+    lines: (c) =>
+      compact([
+        suggestionLine(
+          "Run `tasks-axi list --state queued` to see all queued work (incl. blocked)",
+          c,
+          ["repo"],
+        ),
+      ]),
   },
   {
     match: (c) => c.action === "ready",
@@ -204,6 +210,12 @@ function filterSuffix(
   supportedFlags: ScopedFlag[],
 ): string | undefined {
   if (!filters) return "";
+  const supported = new Set<ScopedFlag>(supportedFlags);
+  for (const flag of Object.keys(filters) as ScopedFlag[]) {
+    if (filters[flag] !== undefined && !supported.has(flag)) {
+      return undefined;
+    }
+  }
   const parts: string[] = [];
   for (const flag of supportedFlags) {
     const value = filters[flag];
