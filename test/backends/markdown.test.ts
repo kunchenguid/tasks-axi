@@ -45,6 +45,18 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("rejects blank titles", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.create({ id: "blank-q1", title: "   " }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("blank-q1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("filters list by state, repo, and kind with a true total", async () => {
       const b = makeBacklog();
       try {
@@ -145,6 +157,20 @@ describe("MarkdownStore", () => {
         await expect(
           b.store.update("nope", { title: "x" }),
         ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects blank replacement titles", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.update("cert-cleanup", { title: "   " }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toContain(
+          "- [ ] cert-cleanup - port the post-upload cert pruning",
+        );
       } finally {
         b.cleanup();
       }

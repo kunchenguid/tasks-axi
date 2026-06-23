@@ -93,4 +93,26 @@ describe("resolveConfig", () => {
       /done_keep/,
     );
   });
+
+  it.each(["", "   "])(
+    "rejects an empty TASKS_AXI_FILE value %#",
+    (value) => {
+      expect(() =>
+        resolveConfig({ cwd: dir, home, env: { TASKS_AXI_FILE: value } }),
+      ).toThrow(/TASKS_AXI_FILE/);
+    },
+  );
+
+  it.each(["", "   "])(
+    "rejects an empty markdown path from toml %#",
+    (value) => {
+      writeFileSync(
+        join(dir, ".tasks.toml"),
+        `[markdown]\npath = "${value}"\n`,
+      );
+      expect(() => resolveConfig({ cwd: dir, home, env: {} })).toThrow(
+        /markdown\.path/,
+      );
+    },
+  );
 });

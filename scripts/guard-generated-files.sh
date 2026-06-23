@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -eu
+set -o pipefail
 
 base_sha="${1:?base sha required}"
 head_sha="${2:?head sha required}"

@@ -128,4 +128,15 @@ describe("guard-generated-files workflow helper", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(".release-please-manifest.json");
   });
+
+  it("fails closed when the diff range is invalid", () => {
+    const repo = initRepo();
+    writeFileSync(join(repo, "README.md"), "seed\n");
+    const base = commit(repo, "seed");
+
+    const result = runGuard(repo, base, "not-a-sha");
+
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).not.toContain("OK");
+  });
 });

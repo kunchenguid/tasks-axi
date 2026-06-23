@@ -68,6 +68,29 @@ describe("crud commands", () => {
       }
     });
 
+    it("rejects a blank title before creating a task", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(addCommand(["blank-q1", "   "], b.ctx)).rejects.toMatchObject(
+          { code: "VALIDATION_ERROR" },
+        );
+        expect(b.read()).not.toContain("blank-q1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects a blank minted title", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(addCommand(["   ", "--mint"], b.ctx)).rejects.toMatchObject(
+          { code: "VALIDATION_ERROR" },
+        );
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects unknown flags before creating a task", async () => {
       const b = makeBacklog();
       try {
@@ -311,6 +334,20 @@ describe("crud commands", () => {
           updateCommand(["cert-cleanup", "extra", "--append", "note"], b.ctx),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         expect(b.read()).not.toContain("\n  note");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects a blank replacement title before updating", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          updateCommand(["cert-cleanup", "--title", "   "], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toContain(
+          "- [ ] cert-cleanup - port the post-upload cert pruning",
+        );
       } finally {
         b.cleanup();
       }

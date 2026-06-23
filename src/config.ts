@@ -112,6 +112,19 @@ function resolveMarkdownPath(
   return resolve(cwd, PATH_CANDIDATES[0]);
 }
 
+function validatePathValue(
+  value: string | undefined,
+  source: string,
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (value.trim() === "") {
+    throw new AxiError(`${source} must not be empty`, "VALIDATION_ERROR", [
+      "Set it to a backlog path or remove the empty override",
+    ]);
+  }
+  return value;
+}
+
 function validateDoneKeep(value: number): number {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new AxiError(
@@ -131,6 +144,15 @@ export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
   const homeToml = loadToml(join(home, ".tasks-axi", "config.toml"));
   const projectToml = loadToml(resolve(cwd, ".tasks.toml"));
 
+  const explicitPath =
+    overrides.file !== undefined
+      ? validatePathValue(overrides.file, "--file")
+      : validatePathValue(env.TASKS_AXI_FILE, "TASKS_AXI_FILE");
+  const tomlPath =
+    projectToml.markdown?.path !== undefined
+      ? validatePathValue(projectToml.markdown.path, "markdown.path")
+      : validatePathValue(homeToml.markdown?.path, "markdown.path");
+
   const backend =
     overrides.backend ??
     env.TASKS_AXI_BACKEND ??
@@ -138,11 +160,7 @@ export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
     homeToml.backend ??
     "markdown";
 
-  const path = resolveMarkdownPath(
-    overrides.file ?? env.TASKS_AXI_FILE,
-    projectToml.markdown?.path ?? homeToml.markdown?.path,
-    cwd,
-  );
+  const path = resolveMarkdownPath(explicitPath, tomlPath, cwd);
 
   const archive = projectToml.markdown?.archive ?? homeToml.markdown?.archive;
   const doneKeep = validateDoneKeep(

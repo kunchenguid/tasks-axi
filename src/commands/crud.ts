@@ -95,6 +95,14 @@ function parsePriority(raw: string | undefined): number | undefined {
   return Number(raw);
 }
 
+function requireTitle(raw: string, message: string, suggestion: string): string {
+  const title = raw.trim();
+  if (title === "") {
+    throw new AxiError(message, "VALIDATION_ERROR", [suggestion]);
+  }
+  return title;
+}
+
 async function mintAvailableId(
   store: Store,
   title: string,
@@ -143,21 +151,19 @@ export async function addCommand(
   let id: string;
   let title: string;
   if (mint) {
-    title = titleFlag ?? positionals[0] ?? "";
-    if (!title) {
-      throw new AxiError("--mint requires a title", "VALIDATION_ERROR", [
-        'Run `tasks-axi add "<title>" --mint`',
-      ]);
-    }
+    title = requireTitle(
+      titleFlag ?? positionals[0] ?? "",
+      "--mint requires a title",
+      'Run `tasks-axi add "<title>" --mint`',
+    );
     id = await mintAvailableId(store, title, prefix);
   } else {
     id = validateId(requireId(positionals[0], "id"));
-    title = titleFlag ?? positionals[1] ?? "";
-    if (!title) {
-      throw new AxiError("A title is required", "VALIDATION_ERROR", [
-        'Run `tasks-axi add <id> "<title>"`',
-      ]);
-    }
+    title = requireTitle(
+      titleFlag ?? positionals[1] ?? "",
+      "A title is required",
+      'Run `tasks-axi add <id> "<title>"`',
+    );
   }
 
   if (!mint) {
@@ -309,7 +315,13 @@ export async function updateCommand(
   const id = requireId(positionals[0], "id");
 
   const patch: TaskPatch = {};
-  if (title !== undefined) patch.title = title;
+  if (title !== undefined) {
+    patch.title = requireTitle(
+      title,
+      "--title must not be empty",
+      'Pass a non-empty title, e.g. --title "new title"',
+    );
+  }
   if (body !== undefined) patch.body = body;
   if (append !== undefined) patch.appendBody = append;
   if (repo !== undefined) patch.repo = repo;

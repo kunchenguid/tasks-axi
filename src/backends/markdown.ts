@@ -51,6 +51,14 @@ function today(): string {
   return `${d.getFullYear()}-${month}-${day}`;
 }
 
+function normalizeTitle(title: string): string {
+  const trimmed = title.trim();
+  if (trimmed === "") {
+    throw new AxiError("Task title must not be empty", "VALIDATION_ERROR");
+  }
+  return trimmed;
+}
+
 export class MarkdownStore implements Store {
   private readonly path: string;
   private readonly archivePath: string;
@@ -176,7 +184,7 @@ export class MarkdownStore implements Store {
 
   private taskFromInput(input: TaskInput): Task {
     const state: State = input.state ?? "queued";
-    let title = input.title.trim();
+    let title = normalizeTitle(input.title);
     // Links live in the prose; fold any provided links into the title text.
     for (const link of input.links ?? []) {
       if (!title.includes(link.url)) title = `${title} ${link.url}`.trim();
@@ -235,7 +243,7 @@ export class MarkdownStore implements Store {
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
       const task = found.entry.task;
 
-      if (patch.title !== undefined) task.title = patch.title.trim();
+      if (patch.title !== undefined) task.title = normalizeTitle(patch.title);
       if (patch.body !== undefined) task.body = patch.body || undefined;
       if (patch.appendBody !== undefined && patch.appendBody !== "") {
         task.body = task.body
