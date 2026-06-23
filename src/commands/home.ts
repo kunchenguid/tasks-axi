@@ -4,7 +4,7 @@ import { blockedIds, readyTasks } from "../derive.js";
 import type { Task } from "../model.js";
 import { getSuggestions, withSuggestionGlobals } from "../suggestions.js";
 import { field, renderHelp, renderList, renderOutput } from "../toon.js";
-import { toRow } from "../view.js";
+import { showFullTextHint, toRow } from "../view.js";
 
 export const HOME_HELP = "";
 
@@ -36,7 +36,10 @@ export async function homeCommand(
   const blocked = blockedIds(all);
   const readyCount = readyTasks(all).length;
 
-  const rows = (tasks: Task[]) => tasks.map((t) => toRow(t, { all }));
+  const rows = (tasks: Task[]) =>
+    tasks.map((t) =>
+      toRow(t, { all, truncationHint: showFullTextHint(t) }),
+    );
 
   const blocks: string[] = [];
 

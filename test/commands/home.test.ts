@@ -1,5 +1,6 @@
 import { decode } from "@toon-format/toon";
 import { describe, expect, it } from "vitest";
+import { addCommand } from "../../src/commands/crud.js";
 import { homeCommand } from "../../src/commands/home.js";
 import { makeBacklog } from "../helpers.js";
 
@@ -28,6 +29,18 @@ describe("home", () => {
       const out = await homeCommand([], b.ctx);
       expect(out).toContain("in_flight: 0 tasks");
       expect(out).toContain("queued: 0 tasks");
+    } finally {
+      b.cleanup();
+    }
+  });
+
+  it("uses show --full as the dashboard truncation escape hatch", async () => {
+    const b = makeBacklog();
+    try {
+      await addCommand(["long-title-q1", "x".repeat(100)], b.ctx);
+      const out = await homeCommand([], b.ctx);
+      expect(out).toContain("use show long-title-q1 --full");
+      expect(out).not.toContain("use --full to see complete text");
     } finally {
       b.cleanup();
     }

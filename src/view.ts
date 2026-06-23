@@ -22,6 +22,10 @@ export interface RowOptions {
   truncationHint?: string;
 }
 
+export function showFullTextHint(task: Task): string {
+  return `use show ${task.id} --full to see complete text`;
+}
+
 export function toRow(task: Task, opts: RowOptions): Record<string, unknown> {
   const blockers = activeBlockers(task, opts.all);
   return {
@@ -96,7 +100,7 @@ export function renderTaskList(
   const rows = tasks.map((t) =>
     toRow(t, {
       all,
-      truncationHint: `use show ${t.id} --full to see complete text`,
+      truncationHint: showFullTextHint(t),
     }),
   );
   return renderList(label, rows, [...LIST_DEFAULT, ...extra]);
