@@ -106,7 +106,12 @@ export function renderTaskList(
   return renderList(label, rows, [...LIST_DEFAULT, ...extra]);
 }
 
-export function renderTaskDetail(task: Task, all: Task[], full: boolean): string {
-  const row = toRow(task, { all, full });
+export function renderTaskDetail(
+  task: Task,
+  all: Task[],
+  full: boolean,
+  truncationHint?: string,
+): string {
+  const row = toRow(task, { all, full, truncationHint });
   return renderDetail("task", row, DETAIL_SCHEMA);
 }

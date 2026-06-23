@@ -31,6 +31,7 @@ import {
   LIST_EXTRA_FIELDS,
   renderTaskDetail,
   renderTaskList,
+  showFullTextHint,
 } from "../view.js";
 
 export const ADD_HELP = `usage: tasks-axi add <id> "<title>" [flags]
@@ -255,7 +256,10 @@ export async function addCommand(
     const existing = await store.get(id);
     if (existing) {
       const all = (await store.list({})).items;
-      const blocks = ["already: true", renderTaskDetail(existing, all, false)];
+      const blocks = [
+        "already: true",
+        renderTaskDetail(existing, all, false, showFullTextHint(existing)),
+      ];
       return renderOutput(blocks);
     }
   }
@@ -276,7 +280,7 @@ export async function addCommand(
   const task = await store.create(input);
   const all = (await store.list({})).items;
   const blocks = [
-    renderTaskDetail(task, all, false),
+    renderTaskDetail(task, all, false, showFullTextHint(task)),
     renderHelp(
       getSuggestions({
         action: "add",
@@ -471,7 +475,7 @@ export async function updateCommand(
   const task = await store.update(id, patch);
   const all = (await store.list({})).items;
   const blocks = [
-    renderTaskDetail(task, all, false),
+    renderTaskDetail(task, all, false, showFullTextHint(task)),
     renderHelp(
       getSuggestions({
         action: "update",

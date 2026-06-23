@@ -19,7 +19,7 @@ import type { Dep, Task, TaskInput, TaskLink, TaskPatch } from "../model.js";
 import type { Store } from "../store.js";
 import { getSuggestions } from "../suggestions.js";
 import { field, renderDetail, renderHelp, renderOutput } from "../toon.js";
-import { renderTaskDetail, renderTaskList } from "../view.js";
+import { renderTaskDetail, renderTaskList, showFullTextHint } from "../view.js";
 
 export const START_HELP = `usage: tasks-axi start <id>
 Move a task to In flight (idempotent).
@@ -124,7 +124,7 @@ export async function doneCommand(
   if (note !== undefined) opts.note = note;
 
   if (current.state === "done") {
-    const patch = doneMetadataPatch(pr, report, note);
+    const patch = doneMetadataPatch(pr, report, note, current);
     const hasPatch = Object.keys(patch).length > 0;
     let task = current;
     if (hasPatch) {
@@ -141,7 +141,7 @@ export async function doneCommand(
     ];
     if (hasPatch) {
       const all = (await store.list({})).items;
-      blocks.push(renderTaskDetail(task, all, false));
+      blocks.push(renderTaskDetail(task, all, false, showFullTextHint(task)));
     }
     return renderOutput(blocks);
   }
@@ -183,14 +183,21 @@ function doneMetadataPatch(
   pr: string | undefined,
   report: string | undefined,
   note: string | undefined,
+  current?: Task,
 ): TaskPatch {
   const patch: TaskPatch = {};
   const addLinks: TaskLink[] = [];
   if (pr !== undefined) addLinks.push({ kind: "pr", url: pr });
   if (report !== undefined) addLinks.push({ kind: "report", url: report });
   if (addLinks.length > 0) patch.addLinks = addLinks;
-  if (note !== undefined) patch.appendBody = note;
+  if (note !== undefined && !bodyHasLine(current?.body, note)) {
+    patch.appendBody = note;
+  }
   return patch;
+}
+
+function bodyHasLine(body: string | undefined, line: string): boolean {
+  return body?.split("\n").includes(line) ?? false;
 }
 
 export async function reopenCommand(

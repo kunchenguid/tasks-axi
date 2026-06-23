@@ -38,6 +38,20 @@ describe("crud commands", () => {
       }
     });
 
+    it("uses show --full as the mutation truncation escape hatch", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await addCommand(
+          ["long-body-q1", "short task", "--body", "x".repeat(600)],
+          b.ctx,
+        );
+        expect(out).toContain("use show long-body-q1 --full");
+        expect(out).not.toContain("use --full to see complete text");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects conflicting placement flags before creating a task", async () => {
       const b = makeBacklog();
       try {
@@ -677,6 +691,56 @@ describe("crud commands", () => {
         expect(b.read()).not.toContain("cert-cleanup");
       } finally {
         b.cleanup();
+      }
+    });
+
+    it("rejects removing a task that active tasks still block on", async () => {
+      const b = makeBacklog();
+      try {
+        await b.store.addDep("cert-cleanup", {
+          type: "blocked-by",
+          id: "owns-widget-h7",
+        });
+        await expect(rmCommand(["owns-widget-h7"], b.ctx)).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: expect.stringContaining("cert-cleanup"),
+          suggestions: expect.arrayContaining([
+            expect.stringContaining(
+              "tasks-axi unblock cert-cleanup --by owns-widget-h7",
+            ),
+          ]),
+        });
+        expect(b.read()).toContain("owns-widget-h7");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("removes a blocker after dependents are unblocked or done", async () => {
+      const unblocked = makeBacklog();
+      const completed = makeBacklog();
+      try {
+        await unblocked.store.addDep("cert-cleanup", {
+          type: "blocked-by",
+          id: "owns-widget-h7",
+        });
+        await unblocked.store.removeDep("cert-cleanup", {
+          type: "blocked-by",
+          id: "owns-widget-h7",
+        });
+        await rmCommand(["owns-widget-h7"], unblocked.ctx);
+        expect(unblocked.read()).not.toContain("**owns-widget-h7**");
+
+        await completed.store.addDep("cert-cleanup", {
+          type: "blocked-by",
+          id: "owns-widget-h7",
+        });
+        await completed.store.transition("cert-cleanup", "done");
+        await rmCommand(["owns-widget-h7"], completed.ctx);
+        expect(completed.read()).not.toContain("**owns-widget-h7**");
+      } finally {
+        unblocked.cleanup();
+        completed.cleanup();
       }
     });
 

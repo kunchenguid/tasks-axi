@@ -260,6 +260,30 @@ export class MarkdownStore implements Store {
     }
   }
 
+  private activeDependents(doc: BacklogDoc, id: string): string[] {
+    return this.allTasks(doc)
+      .filter(
+        (task) =>
+          task.state !== "done" &&
+          task.deps.some(
+            (dep) => dep.type === "blocked-by" && dep.id === id,
+          ),
+      )
+      .map((task) => task.id);
+  }
+
+  private requireNoActiveDependents(doc: BacklogDoc, id: string): void {
+    const dependents = this.activeDependents(doc, id);
+    if (dependents.length === 0) return;
+    throw new AxiError(
+      `Task "${id}" is still blocking active tasks: ${dependents.join(", ")}`,
+      "VALIDATION_ERROR",
+      [
+        `Unblock them first, e.g. \`tasks-axi unblock ${dependents[0]} --by ${id}\``,
+      ],
+    );
+  }
+
   async get(id: string): Promise<Task | null> {
     const found = this.findEntry(this.load(), id);
     return found ? found.entry.task : null;
@@ -440,6 +464,7 @@ export class MarkdownStore implements Store {
       const found = this.findEntry(doc, id);
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
       const task = found.entry.task;
+      this.requireNoActiveDependents(doc, id);
       found.section.entries.splice(found.index, 1);
       this.persist(loaded);
       return task;
@@ -452,6 +477,7 @@ export class MarkdownStore implements Store {
       const { doc } = loaded;
       const found = this.findEntry(doc, id);
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
+      this.requireNoActiveDependents(doc, id);
 
       const targetLoaded = target.loadForUpdate();
       const { doc: targetDoc } = targetLoaded;

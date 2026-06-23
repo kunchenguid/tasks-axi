@@ -238,6 +238,23 @@ describe("state commands", () => {
         b.cleanup();
       }
     });
+
+    it("does not duplicate an already-done note on retry", async () => {
+      const b = makeBacklog();
+      try {
+        await doneCommand(
+          ["lease-core-t4", "--note", "retry-safe note", "--no-prune"],
+          b.ctx,
+        );
+        await doneCommand(
+          ["lease-core-t4", "--note", "retry-safe note", "--no-prune"],
+          b.ctx,
+        );
+        expect(b.read().match(/retry-safe note/g)).toHaveLength(1);
+      } finally {
+        b.cleanup();
+      }
+    });
   });
 
   describe("reopen", () => {
@@ -537,6 +554,33 @@ describe("state commands", () => {
       } finally {
         left.cleanup();
         right.cleanup();
+      }
+    });
+
+    it("rejects moving a task that active tasks still block on", async () => {
+      const b = makeBacklog();
+      const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      try {
+        await b.store.addDep("cert-cleanup", {
+          type: "blocked-by",
+          id: "owns-widget-h7",
+        });
+        await expect(
+          mvCommand(["owns-widget-h7", "--to", target.path], b.ctx),
+        ).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: expect.stringContaining("cert-cleanup"),
+          suggestions: expect.arrayContaining([
+            expect.stringContaining(
+              "tasks-axi unblock cert-cleanup --by owns-widget-h7",
+            ),
+          ]),
+        });
+        expect(b.read()).toContain("owns-widget-h7");
+        expect(readFileSync(target.path, "utf8")).not.toContain("owns-widget-h7");
+      } finally {
+        b.cleanup();
+        target.cleanup();
       }
     });
 
