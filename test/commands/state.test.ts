@@ -344,6 +344,21 @@ describe("state commands", () => {
         b.cleanup();
       }
     });
+
+    it.each<[string, string[]]>([
+      ["empty", ["--repo="]],
+      ["whitespace", ["--repo", "   "]],
+      ["multiline", ["--repo", "demo\nops"]],
+    ])("rejects a %s repo filter", async (_case, flagArgs) => {
+      const b = makeBacklog();
+      try {
+        await expect(readyCommand(flagArgs, b.ctx)).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+        });
+      } finally {
+        b.cleanup();
+      }
+    });
   });
 
   describe("mv", () => {

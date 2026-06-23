@@ -2,6 +2,7 @@ import {
   parseOptionalNonNegativeIntegerFlag,
   parseStateFlag,
   requireNonEmptyFlagValue,
+  requireNonEmptySingleLineFlagValue,
   requirePositionals,
   requireId,
   takeAllFlags,
@@ -147,8 +148,14 @@ export async function addCommand(
   const { store } = requireCtx(context);
   const args = [...rawArgs];
 
-  const kind = requireNonEmptyFlagValue("--kind", takeFlag(args, "--kind"));
-  const repo = requireNonEmptyFlagValue("--repo", takeFlag(args, "--repo"));
+  const kind = requireNonEmptySingleLineFlagValue(
+    "--kind",
+    takeFlag(args, "--kind"),
+  );
+  const repo = requireNonEmptySingleLineFlagValue(
+    "--repo",
+    takeFlag(args, "--repo"),
+  );
   const body = requireNonEmptyFlagValue("--body", takeBody(args));
   const pr = takeFlag(args, "--pr");
   const report = takeFlag(args, "--report");
@@ -157,12 +164,18 @@ export async function addCommand(
   const start = takeBoolFlag(args, "--start");
   const queue = takeBoolFlag(args, "--queue");
   const mint = takeBoolFlag(args, "--mint");
-  const prefix = takeFlag(args, "--prefix");
+  const rawPrefix = takeFlag(args, "--prefix");
   const titleFlag = takeFlag(args, "--title");
 
   if (start && queue) {
     throw new AxiError("Use only one of --start or --queue", "VALIDATION_ERROR");
   }
+  if (rawPrefix !== undefined && !mint) {
+    throw new AxiError("--prefix can only be used with --mint", "VALIDATION_ERROR", [
+      'Run `tasks-axi add "<title>" --mint --prefix <p>`, or omit --prefix',
+    ]);
+  }
+  const prefix = requireNonEmptySingleLineFlagValue("--prefix", rawPrefix);
 
   const positionals = requirePositionals(
     args,
@@ -237,8 +250,14 @@ export async function listCommand(
     LIST_EXTRA_FIELDS,
   );
   const state = parseStateFlag("--state", takeFlag(args, "--state"));
-  const repo = takeFlag(args, "--repo");
-  const kind = takeFlag(args, "--kind");
+  const repo = requireNonEmptySingleLineFlagValue(
+    "--repo",
+    takeFlag(args, "--repo"),
+  );
+  const kind = requireNonEmptySingleLineFlagValue(
+    "--kind",
+    takeFlag(args, "--kind"),
+  );
   const onlyBlocked = takeBoolFlag(args, "--blocked");
   const limit = parseOptionalNonNegativeIntegerFlag(
     "--limit",
@@ -329,8 +348,14 @@ export async function updateCommand(
   const title = takeFlag(args, "--title");
   const body = takeBody(args);
   const append = takeFlag(args, "--append");
-  const repo = takeFlag(args, "--repo");
-  const kind = takeFlag(args, "--kind");
+  const repo = requireNonEmptySingleLineFlagValue(
+    "--repo",
+    takeFlag(args, "--repo"),
+  );
+  const kind = requireNonEmptySingleLineFlagValue(
+    "--kind",
+    takeFlag(args, "--kind"),
+  );
   const priority = parsePriority(takeFlag(args, "--priority"));
   const pr = takeFlag(args, "--pr");
   const report = takeFlag(args, "--report");
@@ -357,10 +382,10 @@ export async function updateCommand(
     patch.appendBody = requireNonEmptyFlagValue("--append", append);
   }
   if (repo !== undefined) {
-    patch.repo = requireNonEmptyFlagValue("--repo", repo);
+    patch.repo = repo;
   }
   if (kind !== undefined) {
-    patch.kind = requireNonEmptyFlagValue("--kind", kind);
+    patch.kind = kind;
   }
   if (priority !== undefined) patch.priority = priority;
   const addLinks = parseLinks(pr, report);

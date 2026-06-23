@@ -59,6 +59,33 @@ describe("crud commands", () => {
       }
     });
 
+    it("rejects --prefix without --mint before creating a task", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          addCommand(["new-q1", "prefixed task", "--prefix", "fm"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("new-q1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it.each<[string, string[]]>([
+      ["empty", ["--prefix="]],
+      ["whitespace", ["--prefix", "   "]],
+      ["multiline", ["--prefix", "fm\nops"]],
+    ])("rejects a %s prefix while minting", async (_case, flagArgs) => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          addCommand(["prefixed task", "--mint", ...flagArgs], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("is idempotent for an existing id", async () => {
       const b = makeBacklog();
       try {
@@ -284,6 +311,21 @@ describe("crud commands", () => {
         await expect(
           listCommand(["--state", "in-flight"], b.ctx),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it.each<[string, string[]]>([
+      ["empty repo", ["--repo="]],
+      ["whitespace kind", ["--kind", "   "]],
+      ["multiline repo", ["--repo", "demo\nops"]],
+    ])("rejects a %s filter", async (_case, flagArgs) => {
+      const b = makeBacklog();
+      try {
+        await expect(listCommand(flagArgs, b.ctx)).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+        });
       } finally {
         b.cleanup();
       }

@@ -4,6 +4,7 @@ import { MarkdownStore } from "../backends/markdown.js";
 import {
   parseNonNegativeIntegerFlag,
   requireNonEmptyFlagValue,
+  requireNonEmptySingleLineFlagValue,
   requirePositionals,
   requireId,
   takeBoolFlag,
@@ -291,7 +292,10 @@ export async function readyCommand(
 ): Promise<string> {
   const { store } = requireCtx(context);
   const args = [...rawArgs];
-  const repo = takeFlag(args, "--repo");
+  const repo = requireNonEmptySingleLineFlagValue(
+    "--repo",
+    takeFlag(args, "--repo"),
+  );
   requirePositionals(args, 0, 0, READY_HELP.split("\n")[0]);
 
   const all = (await store.list({})).items;

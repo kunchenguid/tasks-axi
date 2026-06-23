@@ -71,4 +71,35 @@ describe("lock + atomic write", () => {
     expect(result).toBe("stole it");
     expect(existsSync(lockPath)).toBe(false);
   });
+
+  it("does not release another holder's reclaimed stale lock", async () => {
+    const path = join(dir, "b.md");
+    const lockPath = `${path}.lock`;
+    let releaseReclaimed: (() => void) | undefined;
+    let reclaimedFinished: Promise<void> | undefined;
+    let markReclaimedHolding!: () => void;
+    const reclaimedHolding = new Promise<void>((resolve) => {
+      markReclaimedHolding = resolve;
+    });
+
+    await withLock(path, async () => {
+      const old = new Date(Date.now() - 120_000);
+      utimesSync(lockPath, old, old);
+      reclaimedFinished = withLock(path, async () => {
+        markReclaimedHolding();
+        await new Promise<void>((resolve) => {
+          releaseReclaimed = resolve;
+        });
+      });
+      await reclaimedHolding;
+    });
+
+    expect(existsSync(lockPath)).toBe(true);
+    if (!releaseReclaimed || !reclaimedFinished) {
+      throw new Error("reclaimed lock was not acquired");
+    }
+    releaseReclaimed();
+    await reclaimedFinished;
+    expect(existsSync(lockPath)).toBe(false);
+  });
 });

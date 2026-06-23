@@ -25,6 +25,7 @@ import { AxiError } from "../errors.js";
 const LOCK_STALE_MS = 30_000;
 const LOCK_RETRIES = 100;
 const LOCK_RETRY_MS = 25;
+let lockTokenCounter = 0;
 
 export interface LockHandle {
   release(): void;
@@ -32,6 +33,11 @@ export interface LockHandle {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function lockToken(): string {
+  lockTokenCounter += 1;
+  return `${process.pid}:${Date.now()}:${performance.now()}:${lockTokenCounter}\n`;
 }
 
 function errno(error: unknown): string {
@@ -76,14 +82,16 @@ async function acquireLock(targetPath: string): Promise<LockHandle> {
   for (let attempt = 0; attempt < LOCK_RETRIES; attempt++) {
     try {
       const fd = openSync(lockPath, "wx");
+      const token = lockToken();
       try {
-        writeSync(fd, `${process.pid}\n`);
+        writeSync(fd, token);
       } finally {
         closeSync(fd);
       }
       return {
         release: () => {
           try {
+            if (readFileSync(lockPath, "utf8") !== token) return;
             unlinkSync(lockPath);
           } catch {
             // already gone

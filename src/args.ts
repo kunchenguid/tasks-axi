@@ -32,6 +32,20 @@ export function requireNonEmptyFlagValue(
   return value;
 }
 
+export function requireNonEmptySingleLineFlagValue(
+  flag: string,
+  value: string | undefined,
+): string | undefined {
+  const checked = requireNonEmptyFlagValue(flag, value);
+  if (checked === undefined) return undefined;
+  if (/[\r\n]/.test(checked)) {
+    throw new AxiError(`${flag} must be a single line`, "VALIDATION_ERROR", [
+      `Pass ${flag}=... without line breaks`,
+    ]);
+  }
+  return checked;
+}
+
 /** Get a flag's value from --flag value or --flag=value without modifying args. */
 export function getFlag(args: string[], name: string): string | undefined {
   const equalsPrefix = flagEqualsPrefix(name);

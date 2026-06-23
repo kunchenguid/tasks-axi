@@ -86,6 +86,19 @@ describe("guard-generated-files workflow helper", () => {
     expect(result.stdout).toContain("OK");
   });
 
+  it("rejects the one-time addition of a changelog", () => {
+    const repo = initRepo();
+    writeFileSync(join(repo, "README.md"), "seed\n");
+    const base = commit(repo, "seed");
+    writeFileSync(join(repo, "CHANGELOG.md"), "# Changelog\n");
+    const head = commit(repo, "add changelog");
+
+    const result = runGuard(repo, base, head);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("CHANGELOG.md");
+  });
+
   it("rejects deleting an existing generated file", () => {
     const repo = initRepo();
     writeFileSync(join(repo, "README.md"), "seed\n");

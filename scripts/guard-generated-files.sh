@@ -11,7 +11,10 @@ violated=$(
       function generated(path) {
         return path == "CHANGELOG.md" || path == ".release-please-manifest.json"
       }
-      $1 == "A" && generated($2) { next }
+      $1 == "A" && $2 == ".release-please-manifest.json" { next }
+      $1 == "A" && generated($2) {
+        printf " %s", $2
+      }
       $1 ~ /^[MDT]/ && generated($2) {
         printf " %s", $2
       }
