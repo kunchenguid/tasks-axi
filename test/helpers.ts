@@ -19,6 +19,20 @@ export const FIRSTMATE_FIXTURE = readFileSync(
   "utf8",
 );
 
+export const MULTI_REASON_FIXTURE = [
+  "# Backlog",
+  "",
+  "## In flight",
+  "- [ ] blocker-b - second blocker",
+  "",
+  "## Queued",
+  "- [ ] target-q1 - work (repo: app) blocked-by: blocker-a - first blocker done blocked-by: blocker-b - waits on second blocker",
+  "",
+  "## Done",
+  "- [x] blocker-a - first blocker done",
+  "",
+].join("\n");
+
 export interface TempBacklog {
   dir: string;
   path: string;

@@ -10,7 +10,11 @@ import {
   renderTaskLines,
 } from "../../src/backends/markdown-grammar.js";
 import type { Task } from "../../src/model.js";
-import { FIRSTMATE_FIXTURE, FIXTURE } from "../helpers.js";
+import {
+  FIRSTMATE_FIXTURE,
+  FIXTURE,
+  MULTI_REASON_FIXTURE,
+} from "../helpers.js";
 
 function markAllDirty(doc: BacklogDoc): void {
   for (const section of doc.sections) {
@@ -315,6 +319,32 @@ describe("markdown grammar", () => {
         id: "fix-login-k3",
         reason: "waits on the login refactor",
       });
+    });
+
+    it("parses multiple reason-bearing blockers without folding the later edge", () => {
+      const doc = parseBacklog(MULTI_REASON_FIXTURE);
+      const task = tasksOf(doc).find((t) => t.id === "target-q1")!;
+      expect(task.title).toBe("work");
+      expect(task.deps).toEqual([
+        {
+          type: "blocked-by",
+          id: "blocker-a",
+          reason: "first blocker done",
+        },
+        {
+          type: "blocked-by",
+          id: "blocker-b",
+          reason: "waits on second blocker",
+        },
+      ]);
+
+      markAllDirty(doc);
+      const once = renderBacklog(doc);
+      const normalized = parseBacklog(once);
+      const reparsed = tasksOf(normalized).find((t) => t.id === "target-q1")!;
+      expect(reparsed.deps).toEqual(task.deps);
+      markAllDirty(normalized);
+      expect(renderBacklog(normalized)).toBe(once);
     });
   });
 

@@ -52,4 +52,26 @@ describe("derive", () => {
     expect(blockedIds(withReason).has("p")).toBe(true);
     expect(readyTasks(withReason).map((t) => t.id)).toEqual([]);
   });
+
+  it("multiple reason-bearing blocked-by edges each participate in readiness", () => {
+    const withReasons: Task[] = [
+      task("p", "queued", [
+        {
+          type: "blocked-by",
+          id: "q",
+          reason: "first blocker done",
+        },
+        {
+          type: "blocked-by",
+          id: "r",
+          reason: "waits on second blocker",
+        },
+      ]),
+      task("q", "done"),
+      task("r", "in_flight"),
+    ];
+    expect(activeBlockers(withReasons[0], withReasons)).toEqual(["r"]);
+    expect(blockedIds(withReasons).has("p")).toBe(true);
+    expect(readyTasks(withReasons).map((t) => t.id)).toEqual([]);
+  });
 });

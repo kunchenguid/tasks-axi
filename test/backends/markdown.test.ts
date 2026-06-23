@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import { MarkdownStore } from "../../src/backends/markdown.js";
 import { readyTasks } from "../../src/derive.js";
 import { AxiError } from "../../src/errors.js";
-import { FIRSTMATE_FIXTURE, makeBacklog } from "../helpers.js";
+import {
+  FIRSTMATE_FIXTURE,
+  makeBacklog,
+  MULTI_REASON_FIXTURE,
+} from "../helpers.js";
 
 type MarkdownInternals = {
   appendArchive(lines: string[]): void;
@@ -885,6 +889,29 @@ describe("MarkdownStore", () => {
         ]);
         const { items } = await b.store.list({});
         // fix-login-k3 is still in flight, so add-tests-q7 must not be ready.
+        expect(readyTasks(items).map((t) => t.id)).toEqual([]);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("keeps an item with a later active reason-bearing blocker out of `ready`", async () => {
+      const b = makeBacklog(MULTI_REASON_FIXTURE);
+      try {
+        const blocked = await b.store.get("target-q1");
+        expect(blocked?.deps).toEqual([
+          {
+            type: "blocked-by",
+            id: "blocker-a",
+            reason: "first blocker done",
+          },
+          {
+            type: "blocked-by",
+            id: "blocker-b",
+            reason: "waits on second blocker",
+          },
+        ]);
+        const { items } = await b.store.list({});
         expect(readyTasks(items).map((t) => t.id)).toEqual([]);
       } finally {
         b.cleanup();

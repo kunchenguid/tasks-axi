@@ -98,10 +98,11 @@ function matchTaskBullet(
 const DATE = "\\d{4}-\\d{2}-\\d{2}";
 // A trailing dependency edge, optionally carrying firstmate's free-text reason
 // after a ` - ` delimiter, e.g. `blocked-by: fix-login-k3 - waits on the login
-// refactor`. The id stops at the first space, so the reason never bleeds into
-// it; the reason runs to the end of the (already tag-stripped) line.
+// refactor`. The id stops at the first space, and the reason stops before the
+// next trailing dependency marker.
+const DEP_MARKER = "(?:blocked-by|parent|discovered-from)";
 const TAIL_DEP = new RegExp(
-  `\\s*(blocked-by|parent|discovered-from):\\s*(${ID_CHARS})(?:\\s+-\\s+(.+?))?\\s*$`,
+  `\\s*(${DEP_MARKER}):\\s*(${ID_CHARS})(?:\\s+-\\s+((?:(?!\\s+${DEP_MARKER}:\\s).)+?))?\\s*$`,
 );
 const TAIL_REPO = /\s*\((?:[^()]*\+\s*)?repo:\s*([^)]+)\)\s*$/;
 const TAIL_KIND = /\s*\(kind:\s*([^)]+)\)\s*$/;
