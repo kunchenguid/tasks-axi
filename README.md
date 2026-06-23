@@ -86,7 +86,7 @@ The common mutations are one short, low-token command:
 
 ```sh
 # add a task (the id is the caller-supplied join key; --mint generates one)
-tasks-axi add lavish-foo-q9 "fix summary toggle" --kind ship --repo lavish-axi --start
+tasks-axi add lavish-foo-q9 "fix summary toggle" --kind ship --repo lavish-axi --priority 2 --start
 
 # move through the workflow
 tasks-axi start firstmate-lease-adopt
@@ -112,6 +112,7 @@ tasks-axi mv hibit-cert-cleanup --to ../homemux/data/backlog.md
 Output is [TOON](https://toonformat.dev)-encoded and token-efficient.
 The long task body is truncated by default — the whole point is that `list` stays cheap; use `--full` only when you need the complete notes.
 Mutations are idempotent and report what changed (`already: true` on a no-op), so re-running one is safe.
+Running `done` again on an already Done task can still backfill a new `--pr`, `--report`, or `--note` without changing the original close date.
 
 Run `tasks-axi --help` for the command list, or `tasks-axi <command> --help` for per-command usage.
 
@@ -119,7 +120,8 @@ Run `tasks-axi --help` for the command list, or `tasks-axi <command> --help` for
 
 `backlog.md` stays the hand-editable source of truth.
 tasks-axi parses it leniently into a model, mutates the targeted item, and re-renders **in place** with a byte-exact round-trip on a file nobody has changed — `render(parse(src)) === src`.
-A single mutation only ever touches the one item it targets; every other line, including free-form (no-id) notes, is preserved verbatim.
+Targeted task mutations re-render only the affected task; every other line, including free-form (no-id) notes, is preserved verbatim.
+Maintenance commands are explicit exceptions: `render` normalizes every recognized task, `prune` trims the chosen section into the archive, and `mv` writes both source and destination backlogs.
 
 The read-modify-write window is guarded by an advisory lockfile, an atomic write (temp file + rename), and a fresh re-read on every invocation, so a hand-edit and a CLI-edit cannot clobber each other.
 
@@ -128,14 +130,17 @@ It gently formalizes the inline tags a backlog already uses as the canonical fie
 - `(repo: X)` — the repo a task belongs to
 - `blocked-by: <id>` — a dependency edge (also `parent:` / `discovered-from:`)
 - `(since <date>)` — when a task started; `(merged <date>)` / `(reported <date>)` when it closed
-- `(kind: X)` — task kind, when not already implied by a leading `SHIP` / `SCOUT` word
-- PR urls and `data/<id>/report.md` paths — typed links
+- `(kind: X)` — task kind, when not already implied by a leading `SHIP` / `SCOUT` / `DOCS-ONLY` / `PERSISTENT SECONDMATE` word
+- `(priority: 0-4)` — optional priority, also accepted through `add` / `update --priority`
+- PR urls, `data/<id>/report.md` paths, and other `http(s)` urls — typed links
 
 `tasks-axi render` rewrites every id'd task into this canonical form; free-form lines are left untouched.
+`add --blocked-by` and `block --by` require the referenced task to exist, and `rm` / `mv` refuse to remove a task that still blocks active work.
 
 ## Configuration
 
-Backend and path are resolved in this order: `--backend` / `--file` flag, then `TASKS_AXI_BACKEND` / `TASKS_AXI_FILE` env, then a project `.tasks.toml`, then `~/.tasks-axi/config.toml`, then the defaults (markdown, `backlog.md`).
+Backend and path are resolved in this order: `--backend` / `--file` flags passed after the command, then `TASKS_AXI_BACKEND` / `TASKS_AXI_FILE` env, then a project `.tasks.toml`, then `~/.tasks-axi/config.toml`, then the defaults.
+Without an explicit path, tasks-axi uses `backlog.md` when present, then `data/backlog.md` when present, and otherwise targets `backlog.md` for future writes.
 
 ```toml
 # .tasks.toml in the project root
@@ -143,8 +148,11 @@ backend = "markdown"
 
 [markdown]
 path = "data/backlog.md"
+archive = "data/done-archive.md"
 done_keep = 10
 ```
+
+`archive` is optional; when omitted, pruned tasks are appended to `done-archive.md` next to the active backlog.
 
 ## Backends
 

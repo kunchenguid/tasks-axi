@@ -9,7 +9,7 @@ import type { Dep, State, Task, TaskLink } from "../model.js";
  *    equals `src` byte-for-byte on a file nobody has mutated.
  *  - When a task is mutated, it is marked `dirty` and re-rendered from its
  *    structured fields into a canonical, re-parseable form. Untouched entries
- *    stay verbatim, so a single mutation never disturbs the rest of the file.
+ *    stay verbatim, so a targeted task edit never disturbs the rest of the file.
  *  - `render()` (the verb) marks every task dirty to normalize the whole file.
  *
  * Free-form (no-id) lines are preserved verbatim and never operated on by id

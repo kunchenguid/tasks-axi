@@ -6,9 +6,10 @@ import type { Task } from "./model.js";
  * so every backend gets it for free).
  *
  * A task is `blocked` iff it is not done and has a `blocked-by` edge pointing
- * at a task that exists and is not done. A dangling edge (the blocker is not in
- * the backlog) is treated as resolved — firstmate drops the edge when the
- * blocker lands, so a missing blocker almost always means it is done.
+ * at a task that exists and is not done. Command mutations reject new dangling
+ * blockers, but a legacy hand-edited dangling edge is treated as resolved -
+ * firstmate drops the edge when the blocker lands, so a missing blocker almost
+ * always means it is done.
  */
 export function blockedIds(tasks: Task[]): Set<string> {
   const byId = new Map(tasks.map((t) => [t.id, t]));

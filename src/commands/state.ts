@@ -28,6 +28,7 @@ examples:
 
 export const DONE_HELP = `usage: tasks-axi done <id> [flags]
 aliases: close
+Re-running on an already Done task backfills links/notes without changing the close date.
 flags:
   --pr <url>, --report <path>, --note "<text>"
   --keep <n> (default from config), --no-prune
@@ -40,6 +41,7 @@ Move a Done/In flight task back to Queued (idempotent).`;
 
 export const BLOCK_HELP = `usage: tasks-axi block <id> --by <other>
 Record a blocked-by dependency edge (idempotent).
+The blocker named by --by must already exist.
 examples:
   tasks-axi block firstmate-treehouse-lease-adopt --by treehouse-lease-t4`;
 
@@ -51,6 +53,7 @@ List unblocked queued work - the tasks dispatchable right now.`;
 
 export const MV_HELP = `usage: tasks-axi mv <id> --to <path-or-dir>
 Move a task to another backlog file (generalizes a hand-rolled line move).
+Fails while active tasks still block on this id.
 examples:
   tasks-axi mv hibit-cert-cleanup --to ../homemux/data/backlog.md`;
 

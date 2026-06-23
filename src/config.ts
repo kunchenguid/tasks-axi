@@ -9,7 +9,8 @@ import { AxiError } from "./errors.js";
  *
  * Override order:
  *   --backend / --file flag > TASKS_AXI_* env > project .tasks.toml >
- *   ~/.tasks-axi/config.toml > defaults (markdown, backlog.md).
+ *   ~/.tasks-axi/config.toml > defaults (markdown, first existing
+ *   backlog.md/data/backlog.md, otherwise backlog.md).
  *
  * P1 ships only the markdown backend; the Store seam keeps sqlite/remote
  * additions invisible to the CLI layer.
@@ -17,8 +18,9 @@ import { AxiError } from "./errors.js";
 
 export interface ResolvedConfig {
   backend: string;
-  /** Markdown backlog path (absolute or cwd-relative). */
+  /** Markdown backlog path (resolved to an absolute path). */
   path: string;
+  /** Optional archive path for pruned tasks (resolved to an absolute path). */
   archivePath?: string;
   doneKeep: number;
 }
@@ -47,6 +49,7 @@ type ConfigTable = "root" | "markdown" | "unsupported";
 /**
  * Minimal TOML reader for the tiny config surface we need: a top-level
  * `backend` key and a `[markdown]` table with `path` / `archive` / `done_keep`.
+ * `archive` points at the file that receives pruned tasks.
  * Intentionally not a general TOML parser.
  */
 export function parseConfigToml(src: string): TomlConfig {

@@ -39,7 +39,7 @@ aliases: create
 flags:
   --kind <ship|scout|docs|...>, --repo <name>, --body <text> or --body-file <path>
   --start (place in In flight) | --queue (place in Queued, default)
-  --blocked-by <id> (repeatable), --pr <url>, --report <path>, --priority <0-4>
+  --blocked-by <id> (repeatable, must exist), --pr <url>, --report <path>, --priority <0-4>
   --mint [--prefix <p>]   mint a slug-xx id from the title instead of passing one
 examples:
   tasks-axi add lavish-foo-q9 "fix summary toggle" --kind ship --repo lavish-axi --start
@@ -74,6 +74,7 @@ examples:
 
 export const RM_HELP = `usage: tasks-axi rm <id>
 aliases: delete
+Fails while active tasks still block on this id.
 examples:
   tasks-axi rm stale-task-q1`;
 

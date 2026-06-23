@@ -44,7 +44,7 @@ export interface Task {
   repo?: string;
   /** The long, accumulating notes (truncated in list/show). */
   body?: string;
-  /** Typed links: a PR url or a data/<id>/report.md path. */
+  /** Typed links: PR url, data/<id>/report.md path, or generic doc url. */
   links: TaskLink[];
   /** Typed dependency edges (firstmate uses blocked-by today). */
   deps: Dep[];
@@ -53,7 +53,7 @@ export interface Task {
   /** Maps to `(since ...)`. */
   created?: string;
   updated?: string;
-  /** Maps to `(merged ...)` / `(reported ...)`. */
+  /** Maps to `(merged ...)` / `(reported ...)` / `(done ...)` on render. */
   closed?: string;
   /** Home, harness, external-tracker id/url, and other exotica. */
   meta?: Record<string, unknown>;
