@@ -8,7 +8,9 @@ describe("home", () => {
     try {
       const out = await homeCommand([], b.ctx);
       expect(out).toContain("in_flight[");
+      expect(out).toContain("summary:");
       expect(out).toContain("queued[");
+      expect(out.match(/^queued(?:\[|:)/gm)).toHaveLength(1);
       expect(out).toContain("done:");
       expect(out).toContain("help[");
       // the long body never appears in the dashboard

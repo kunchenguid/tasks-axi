@@ -147,9 +147,9 @@ export async function addCommand(
   const { store } = requireCtx(context);
   const args = [...rawArgs];
 
-  const kind = takeFlag(args, "--kind");
-  const repo = takeFlag(args, "--repo");
-  const body = takeBody(args);
+  const kind = requireNonEmptyFlagValue("--kind", takeFlag(args, "--kind"));
+  const repo = requireNonEmptyFlagValue("--repo", takeFlag(args, "--repo"));
+  const body = requireNonEmptyFlagValue("--body", takeBody(args));
   const pr = takeFlag(args, "--pr");
   const report = takeFlag(args, "--report");
   const priority = parsePriority(takeFlag(args, "--priority"));

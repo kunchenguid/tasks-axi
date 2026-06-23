@@ -48,7 +48,9 @@ export async function homeCommand(
 
   if (queued.length > 0) {
     const preview = queued.slice(0, QUEUED_PREVIEW);
-    blocks.push(encode({ queued: queued.length, ready: readyCount }));
+    blocks.push(
+      encode({ summary: { queued: queued.length, ready: readyCount } }),
+    );
     blocks.push(renderList("queued", rows(preview), queuedSchema));
   } else {
     blocks.push("queued: 0 tasks");

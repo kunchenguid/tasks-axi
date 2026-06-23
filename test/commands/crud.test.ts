@@ -202,6 +202,25 @@ describe("crud commands", () => {
       }
     });
 
+    it.each<[string, string[]]>([
+      ["--body", ["--body", "   "]],
+      ["--repo", ["--repo="]],
+      ["--kind", ["--kind", "   "]],
+    ])(
+      "rejects an empty %s value before creating a task",
+      async (_flag, flagArgs) => {
+        const b = makeBacklog();
+        try {
+          await expect(
+            addCommand(["new-q1", "metadata task", ...flagArgs], b.ctx),
+          ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+          expect(b.read()).not.toContain("new-q1");
+        } finally {
+          b.cleanup();
+        }
+      },
+    );
+
     it("persists priority through a fresh read", async () => {
       const b = makeBacklog();
       try {

@@ -519,6 +519,38 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("rejects addDep when the dependency target is missing", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.addDep("cert-cleanup", {
+            type: "blocked-by",
+            id: "missing-q1",
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("blocked-by: missing-q1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects create when a dependency target is missing", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.create({
+            id: "new-q1",
+            title: "missing dep",
+            deps: [{ type: "blocked-by", id: "missing-q1" }],
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("new-q1");
+        expect(b.read()).not.toContain("missing-q1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("removeDep returns false when there is no such edge", async () => {
       const b = makeBacklog();
       try {

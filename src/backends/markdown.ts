@@ -236,6 +236,16 @@ export class MarkdownStore implements Store {
     return null;
   }
 
+  private requireExistingDeps(doc: BacklogDoc, deps: Dep[]): void {
+    for (const dep of deps) {
+      if (this.findEntry(doc, dep.id)) continue;
+      const label = dep.type === "blocked-by" ? "blocker" : "dependency";
+      throw new AxiError(`${label} "${dep.id}" not found`, "VALIDATION_ERROR", [
+        "Create the dependency task first, or choose an existing task id",
+      ]);
+    }
+  }
+
   async get(id: string): Promise<Task | null> {
     const found = this.findEntry(this.load(), id);
     return found ? found.entry.task : null;
@@ -352,6 +362,7 @@ export class MarkdownStore implements Store {
         );
       }
       const task = this.taskFromInput(input);
+      this.requireExistingDeps(doc, task.deps);
       const entry: TaskEntry = { kind: "task", task, raw: [], dirty: true };
       // New in_flight work goes to the top; queued work appends to the bottom.
       this.insert(this.section(doc, task.state), entry, task.state === "in_flight");
@@ -491,6 +502,7 @@ export class MarkdownStore implements Store {
       ) {
         return false;
       }
+      this.requireExistingDeps(doc, [checkedDep]);
       task.deps.push(checkedDep);
       found.entry.dirty = true;
       this.persist(doc);
