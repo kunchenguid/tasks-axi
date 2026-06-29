@@ -8,9 +8,32 @@ describe("maintenance commands", () => {
       const b = makeBacklog();
       try {
         const out = await pruneCommand(["--keep", "2"], b.ctx);
-        expect(out).toContain("prune:");
-        expect(out).toMatch(/archived: [1-9]/);
+        expect(out).toMatch(/ok: prune done -> archived [1-9]\d* \(kept 2\)/);
         expect(b.archive()).toContain("## Archived");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("emits a machine-readable result with --json", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await pruneCommand(["--keep", "2", "--json"], b.ctx);
+        const parsed = JSON.parse(out) as {
+          ok: boolean;
+          action: string;
+          state: string;
+          kept: number;
+          archived: number;
+          ids: string[];
+        };
+        expect(parsed.ok).toBe(true);
+        expect(parsed.action).toBe("prune");
+        expect(parsed.state).toBe("done");
+        expect(parsed.kept).toBe(2);
+        expect(parsed.archived).toBeGreaterThan(0);
+        expect(Array.isArray(parsed.ids)).toBe(true);
+        expect(out).not.toContain("help[");
       } finally {
         b.cleanup();
       }
@@ -70,7 +93,24 @@ describe("maintenance commands", () => {
       const b = makeBacklog();
       try {
         const out = await renderCommand([], b.ctx);
-        expect(out).toMatch(/normalized: \d+/);
+        expect(out).toMatch(/ok: render -> normalized \d+/);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("emits a machine-readable result with --json", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await renderCommand(["--json"], b.ctx);
+        const parsed = JSON.parse(out) as {
+          ok: boolean;
+          action: string;
+          normalized: number;
+        };
+        expect(parsed.ok).toBe(true);
+        expect(parsed.action).toBe("render");
+        expect(typeof parsed.normalized).toBe("number");
       } finally {
         b.cleanup();
       }
@@ -79,9 +119,9 @@ describe("maintenance commands", () => {
     it("rejects extra arguments before rendering", async () => {
       const b = makeBacklog();
       try {
-        await expect(
-          renderCommand(["extra"], b.ctx),
-        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await expect(renderCommand(["extra"], b.ctx)).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+        });
       } finally {
         b.cleanup();
       }

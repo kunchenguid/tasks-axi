@@ -10,6 +10,12 @@ export interface SuggestionContext {
   isEmpty?: boolean;
   /** A blocked task suggests unblocking; an empty ready list suggests listing. */
   blocked?: boolean;
+  /**
+   * The resulting state after a mutation. Lets hints stay state-aware so a
+   * command never suggests an action it just performed (e.g. no "run start"
+   * after `add --start`).
+   */
+  state?: string;
   globals?: SuggestionGlobals;
   filters?: SuggestionFilters;
 }
@@ -45,11 +51,10 @@ const table: Entry[] = [
     match: (c) => c.action === "list" && c.isEmpty === true,
     lines: (c) =>
       compact([
-        suggestionLine(
-          'Run `tasks-axi add <id> "<title>"` to add a task',
-          c,
-          ["repo", "kind"],
-        ),
+        suggestionLine('Run `tasks-axi add <id> "<title>"` to add a task', c, [
+          "repo",
+          "kind",
+        ]),
         suggestionLine(
           "Run `tasks-axi list --state done` to see completed work",
           c,
@@ -92,6 +97,21 @@ const table: Entry[] = [
     ],
   },
   {
+    // `add --start` (or re-adding an in-flight task) already moved it, so the
+    // genuinely useful next step is closing it, never "run start".
+    match: (c) => c.action === "add" && c.state === "in_flight",
+    lines: (c) => [
+      `Run \`tasks-axi done ${c.id} --pr <url>\` when it ships`,
+      `Run \`tasks-axi block ${c.id} --by <other>\` to record a dependency`,
+    ],
+  },
+  {
+    match: (c) => c.action === "add" && c.state === "done",
+    lines: (c) => [
+      `Run \`tasks-axi reopen ${c.id}\` to move it back to queued`,
+    ],
+  },
+  {
     match: (c) => c.action === "add",
     lines: (c) => [
       `Run \`tasks-axi start ${c.id}\` to move it to in flight`,
@@ -100,9 +120,7 @@ const table: Entry[] = [
   },
   {
     match: (c) => c.action === "start",
-    lines: (c) => [
-      `Run \`tasks-axi done ${c.id} --pr <url>\` when it ships`,
-    ],
+    lines: (c) => [`Run \`tasks-axi done ${c.id} --pr <url>\` when it ships`],
   },
   {
     match: (c) => c.action === "done",
@@ -133,7 +151,17 @@ const table: Entry[] = [
   },
   {
     match: (c) => c.action === "prune",
-    lines: () => ["Run `tasks-axi list --state done` to see retained Done items"],
+    lines: () => [
+      "Run `tasks-axi list --state done` to see retained Done items",
+    ],
+  },
+  {
+    match: (c) => c.action === "mv",
+    lines: () => ["Run `tasks-axi list` to see remaining tasks"],
+  },
+  {
+    match: (c) => c.action === "render",
+    lines: () => ["Run `tasks-axi list` to see the normalized backlog"],
   },
 ];
 
@@ -159,7 +187,9 @@ export function withSuggestionGlobals(
   });
 }
 
-function globalSuffix(globals: SuggestionGlobals | undefined): string | undefined {
+function globalSuffix(
+  globals: SuggestionGlobals | undefined,
+): string | undefined {
   if (!globals) return "";
   const parts: string[] = [];
   if (globals.backend !== undefined) {
@@ -175,7 +205,10 @@ function globalSuffix(globals: SuggestionGlobals | undefined): string | undefine
   return parts.length > 0 ? ` ${parts.join(" ")}` : "";
 }
 
-function appendSuffixToCommand(line: string, suffix: string): string | undefined {
+function appendSuffixToCommand(
+  line: string,
+  suffix: string,
+): string | undefined {
   const first = line.indexOf("`");
   if (first === -1) return undefined;
   const second = line.indexOf("`", first + 1);

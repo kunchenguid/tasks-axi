@@ -2,7 +2,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runAxiCli } from "axi-sdk-js";
-import { requireFlagValue, requireNonEmptySingleLineFlagValue } from "./args.js";
+import {
+  requireFlagValue,
+  requireNonEmptySingleLineFlagValue,
+} from "./args.js";
 import { resolveTasksContext, type TasksContext } from "./context.js";
 import {
   ADD_HELP,
@@ -57,8 +60,8 @@ type MainOptions = {
 export const TOP_HELP = `usage: tasks-axi [command] [args] [flags]
 commands[16]:
   (none)=dashboard, add, list, show, start, done, reopen, update, rm, block, unblock, ready, mv, prune, render, setup
-flags[3]:
-  --backend <name> (after command), --file <path> (after command), --help, -v/-V/--version
+flags[4]:
+  --backend <name> (after command), --file <path> (after command), --json (mutations: machine-readable result), --help, -v/-V/--version
 examples:
   tasks-axi
   tasks-axi add homemux-h7 "owns HomeMux end to end" --kind secondmate --start

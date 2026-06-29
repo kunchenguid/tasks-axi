@@ -41,7 +41,8 @@ describe("state commands", () => {
       const b = makeBacklog();
       try {
         const out = await startCommand(["cert-cleanup"], b.ctx);
-        expect(out).toContain("state: in_flight");
+        expect(out).toContain("ok: start cert-cleanup -> In flight");
+        expect(out).toContain("Run `tasks-axi done cert-cleanup --pr <url>`");
       } finally {
         b.cleanup();
       }
@@ -53,6 +54,30 @@ describe("state commands", () => {
         await startCommand(["cert-cleanup"], b.ctx);
         const out = await startCommand(["cert-cleanup"], b.ctx);
         expect(out).toContain("already: true");
+        expect(out).toContain("ok: start cert-cleanup already in flight");
+        // Even on a no-op, the hint reflects the post-op state (done, not start).
+        expect(out).toContain("Run `tasks-axi done cert-cleanup --pr <url>`");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("emits a machine-readable task with --json", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await startCommand(["cert-cleanup", "--json"], b.ctx);
+        const parsed = JSON.parse(out) as {
+          ok: boolean;
+          action: string;
+          task: { id: string; state: string };
+        };
+        expect(parsed.ok).toBe(true);
+        expect(parsed.action).toBe("start");
+        expect(parsed.task).toMatchObject({
+          id: "cert-cleanup",
+          state: "in_flight",
+        });
+        expect(out).not.toContain("help[");
       } finally {
         b.cleanup();
       }
@@ -76,14 +101,56 @@ describe("state commands", () => {
       const b = makeBacklog();
       try {
         const out = await doneCommand(
-          ["cert-cleanup", "--pr", "https://github.com/o/r/pull/9", "--no-prune"],
+          [
+            "cert-cleanup",
+            "--pr",
+            "https://github.com/o/r/pull/9",
+            "--no-prune",
+          ],
           b.ctx,
         );
-        expect(out).toContain("state: done");
-        expect(out).toContain("pruned: 0");
+        expect(out).toContain(
+          "done cert-cleanup -> Done (pr https://github.com/o/r/pull/9)",
+        );
         const read = b.read();
         expect(read).toContain("https://github.com/o/r/pull/9");
         expect(read).toContain("(merged 2026-07-01)");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("emits a machine-readable task and pruned count with --json", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await doneCommand(
+          [
+            "cert-cleanup",
+            "--pr",
+            "https://github.com/o/r/pull/9",
+            "--no-prune",
+            "--json",
+          ],
+          b.ctx,
+        );
+        const parsed = JSON.parse(out) as {
+          ok: boolean;
+          action: string;
+          pruned: number;
+          task: {
+            id: string;
+            state: string;
+            links: { kind: string; url: string }[];
+          };
+        };
+        expect(parsed.ok).toBe(true);
+        expect(parsed.action).toBe("done");
+        expect(parsed.pruned).toBe(0);
+        expect(parsed.task.state).toBe("done");
+        expect(parsed.task.links).toContainEqual({
+          kind: "pr",
+          url: "https://github.com/o/r/pull/9",
+        });
       } finally {
         b.cleanup();
       }
@@ -112,7 +179,7 @@ describe("state commands", () => {
         rmSync(archivePath, { recursive: true, force: true });
         const out = await doneCommand(["cert-cleanup", "--keep", "2"], b.ctx);
         expect(out).toContain("already: true");
-        expect(out).toContain("pruned: ");
+        expect(out).toMatch(/; pruned [1-9]/);
         expect(b.archive()).toContain("## Archived");
       } finally {
         b.cleanup();
@@ -262,7 +329,8 @@ describe("state commands", () => {
       const b = makeBacklog();
       try {
         const out = await reopenCommand(["lease-core-t4"], b.ctx);
-        expect(out).toContain("state: queued");
+        expect(out).toContain("ok: reopen lease-core-t4 -> Queued");
+        expect(out).toContain("Run `tasks-axi start lease-core-t4`");
       } finally {
         b.cleanup();
       }
@@ -289,7 +357,9 @@ describe("state commands", () => {
           ["cert-cleanup", "--by", "owns-widget-h7"],
           b.ctx,
         );
-        expect(added).toContain("blocked_by: owns-widget-h7");
+        expect(added).toContain(
+          "ok: block cert-cleanup -> blocked-by owns-widget-h7",
+        );
         expect(b.read()).toContain("blocked-by: owns-widget-h7");
 
         const again = await blockCommand(
@@ -297,13 +367,42 @@ describe("state commands", () => {
           b.ctx,
         );
         expect(again).toContain("already: true");
+        expect(again).toContain(
+          "ok: block cert-cleanup already blocked-by owns-widget-h7",
+        );
 
         const cleared = await unblockCommand(
           ["cert-cleanup", "--by", "owns-widget-h7"],
           b.ctx,
         );
         expect(cleared).not.toContain("already: true");
+        expect(cleared).toContain(
+          "ok: unblock cert-cleanup -> cleared owns-widget-h7",
+        );
         expect(b.read()).not.toContain("blocked-by: owns-widget-h7");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("emits a machine-readable task with --json", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await blockCommand(
+          ["cert-cleanup", "--by", "owns-widget-h7", "--json"],
+          b.ctx,
+        );
+        const parsed = JSON.parse(out) as {
+          ok: boolean;
+          action: string;
+          blocked_by: string;
+          task: { id: string; blocked: boolean; blocked_by: string[] };
+        };
+        expect(parsed.ok).toBe(true);
+        expect(parsed.action).toBe("block");
+        expect(parsed.blocked_by).toBe("owns-widget-h7");
+        expect(parsed.task.blocked).toBe(true);
+        expect(parsed.task.blocked_by).toContain("owns-widget-h7");
       } finally {
         b.cleanup();
       }
@@ -363,7 +462,10 @@ describe("state commands", () => {
       const b = makeBacklog();
       try {
         await expect(
-          blockCommand(["cert-cleanup", "extra", "--by", "owns-widget-h7"], b.ctx),
+          blockCommand(
+            ["cert-cleanup", "extra", "--by", "owns-widget-h7"],
+            b.ctx,
+          ),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         expect(b.read()).not.toContain("blocked-by: owns-widget-h7");
       } finally {
@@ -437,11 +539,44 @@ describe("state commands", () => {
   describe("mv", () => {
     it("moves a task to another backlog file", async () => {
       const b = makeBacklog();
-      const target = makeBacklog("# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n");
+      const target = makeBacklog(
+        "# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n",
+      );
       try {
-        const out = await mvCommand(["cert-cleanup", "--to", target.path], b.ctx);
-        expect(out).toContain("moved:");
+        const out = await mvCommand(
+          ["cert-cleanup", "--to", target.path],
+          b.ctx,
+        );
+        expect(out).toContain(`ok: mv cert-cleanup -> ${target.path}`);
         expect(b.read()).not.toContain("cert-cleanup");
+        expect(readFileSync(target.path, "utf8")).toContain("cert-cleanup");
+      } finally {
+        b.cleanup();
+        target.cleanup();
+      }
+    });
+
+    it("emits a machine-readable result with --json", async () => {
+      const b = makeBacklog();
+      const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      try {
+        const out = await mvCommand(
+          ["cert-cleanup", "--to", target.path, "--json"],
+          b.ctx,
+        );
+        const parsed = JSON.parse(out) as {
+          ok: boolean;
+          action: string;
+          id: string;
+          from: string;
+          to: string;
+        };
+        expect(parsed).toMatchObject({
+          ok: true,
+          action: "mv",
+          id: "cert-cleanup",
+          to: target.path,
+        });
         expect(readFileSync(target.path, "utf8")).toContain("cert-cleanup");
       } finally {
         b.cleanup();
@@ -474,7 +609,9 @@ describe("state commands", () => {
       const b = makeBacklog(
         "# Backlog\n\n## Queued\n- [ ] race-q1 - stale title\n\n## Done\n",
       );
-      const target = makeBacklog("# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n");
+      const target = makeBacklog(
+        "# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n",
+      );
       const originalGet = b.store.get.bind(b.store);
       let edited = false;
       b.store.get = async (taskId: string) => {
@@ -504,7 +641,9 @@ describe("state commands", () => {
       const b = makeBacklog(
         "# Backlog\n\n## Queued\n- [ ] bad-q1 - invalid parsed repo (repo: foo(bar)\n\n## Done\n",
       );
-      const target = makeBacklog("# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n");
+      const target = makeBacklog(
+        "# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n",
+      );
       try {
         await expect(
           mvCommand(["bad-q1", "--to", target.path], b.ctx),
@@ -521,7 +660,9 @@ describe("state commands", () => {
       const b = makeBacklog(
         "# Backlog\n\n## Queued\n- [ ] legacy-q1 - legacy without since\n\n## Done\n",
       );
-      const target = makeBacklog("# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n");
+      const target = makeBacklog(
+        "# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n",
+      );
       try {
         await mvCommand(["legacy-q1", "--to", target.path], b.ctx);
 
@@ -577,7 +718,9 @@ describe("state commands", () => {
           ]),
         });
         expect(b.read()).toContain("owns-widget-h7");
-        expect(readFileSync(target.path, "utf8")).not.toContain("owns-widget-h7");
+        expect(readFileSync(target.path, "utf8")).not.toContain(
+          "owns-widget-h7",
+        );
       } finally {
         b.cleanup();
         target.cleanup();

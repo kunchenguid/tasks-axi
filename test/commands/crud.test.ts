@@ -31,9 +31,99 @@ describe("crud commands", () => {
     it("adds directly to In flight with --start", async () => {
       const b = makeBacklog();
       try {
-        await addCommand(["new-h1", "started task", "--start"], b.ctx);
+        const out = await addCommand(
+          [
+            "new-h1",
+            "started task",
+            "--kind",
+            "ship",
+            "--repo",
+            "demo",
+            "--start",
+          ],
+          b.ctx,
+        );
+        // The confirmation line leads with the resulting state.
+        expect(out).toContain(
+          "ok: added new-h1 (ship, repo demo) -> In flight",
+        );
+        // State-aware hints never suggest the action --start already performed.
+        expect(out).not.toContain("Run `tasks-axi start new-h1`");
+        expect(out).toContain("Run `tasks-axi done new-h1 --pr <url>`");
         // In-flight items use firstmate's `- [ ]` checkbox form under the header.
         expect(b.read()).toMatch(/## In flight[\s\S]*- \[ \] new-h1/);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("keeps the confirmation-forward output valid TOON", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await addCommand(
+          [
+            "toon-q1",
+            "round trips",
+            "--kind",
+            "ship",
+            "--repo",
+            "demo",
+            "--start",
+          ],
+          b.ctx,
+        );
+        // The leading ok: line carries commas (`(ship, repo demo)`) yet the
+        // whole block still decodes - it is the human-readable success signal.
+        const decoded = decode(out) as { ok: string };
+        expect(decoded.ok).toBe("added toon-q1 (ship, repo demo) -> In flight");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("confirms a queued add and suggests start, not done", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await addCommand(["new-q9", "queued task"], b.ctx);
+        expect(out).toContain("ok: added new-q9 -> Queued");
+        expect(out).toContain("Run `tasks-axi start new-q9`");
+        expect(out).not.toContain("Run `tasks-axi done new-q9");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("emits a machine-readable task with --json", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await addCommand(
+          [
+            "json-q1",
+            "json task",
+            "--kind",
+            "ship",
+            "--repo",
+            "demo",
+            "--json",
+          ],
+          b.ctx,
+        );
+        const parsed = JSON.parse(out) as {
+          ok: boolean;
+          action: string;
+          task: { id: string; state: string; kind: string; repo: string };
+        };
+        expect(parsed.ok).toBe(true);
+        expect(parsed.action).toBe("add");
+        expect(parsed.task).toMatchObject({
+          id: "json-q1",
+          state: "queued",
+          kind: "ship",
+          repo: "demo",
+        });
+        // --json suppresses the human-readable TOON blocks.
+        expect(out).not.toContain("help[");
+        expect(out).not.toContain("task:");
       } finally {
         b.cleanup();
       }
@@ -117,16 +207,19 @@ describe("crud commands", () => {
       ["missing blocker", "dup title", ["--blocked-by", "missing-q1"]],
       ["tag-injecting repo", "dup title", ["--repo", "foo(bar)"]],
       ["tagging title", "dup title (repo: foo)", []],
-    ])("rejects %s before duplicate add no-ops", async (_case, title, flagArgs) => {
-      const b = makeBacklog();
-      try {
-        await expect(
-          addCommand(["lease-adopt", title, ...flagArgs], b.ctx),
-        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
-      } finally {
-        b.cleanup();
-      }
-    });
+    ])(
+      "rejects %s before duplicate add no-ops",
+      async (_case, title, flagArgs) => {
+        const b = makeBacklog();
+        try {
+          await expect(
+            addCommand(["lease-adopt", title, ...flagArgs], b.ctx),
+          ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        } finally {
+          b.cleanup();
+        }
+      },
+    );
 
     it("rejects an invalid id", async () => {
       const b = makeBacklog();
@@ -142,9 +235,9 @@ describe("crud commands", () => {
     it("rejects a blank title before creating a task", async () => {
       const b = makeBacklog();
       try {
-        await expect(addCommand(["blank-q1", "   "], b.ctx)).rejects.toMatchObject(
-          { code: "VALIDATION_ERROR" },
-        );
+        await expect(
+          addCommand(["blank-q1", "   "], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         expect(b.read()).not.toContain("blank-q1");
       } finally {
         b.cleanup();
@@ -166,9 +259,9 @@ describe("crud commands", () => {
     it("rejects a blank minted title", async () => {
       const b = makeBacklog();
       try {
-        await expect(addCommand(["   ", "--mint"], b.ctx)).rejects.toMatchObject(
-          { code: "VALIDATION_ERROR" },
-        );
+        await expect(
+          addCommand(["   ", "--mint"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
       } finally {
         b.cleanup();
       }
@@ -214,7 +307,10 @@ describe("crud commands", () => {
       const b = makeBacklog();
       try {
         await expect(
-          addCommand(["new-q1", "bad dep", "--blocked-by", "missing-q1"], b.ctx),
+          addCommand(
+            ["new-q1", "bad dep", "--blocked-by", "missing-q1"],
+            b.ctx,
+          ),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         expect(b.read()).not.toContain("new-q1");
         expect(b.read()).not.toContain("missing-q1");
@@ -227,7 +323,10 @@ describe("crud commands", () => {
       const b = makeBacklog();
       try {
         await expect(
-          addCommand(["new-q1", "self blocked", "--blocked-by", "new-q1"], b.ctx),
+          addCommand(
+            ["new-q1", "self blocked", "--blocked-by", "new-q1"],
+            b.ctx,
+          ),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         expect(b.read()).not.toContain("new-q1");
       } finally {
@@ -557,8 +656,45 @@ describe("crud commands", () => {
           ["cert-cleanup", "--append", "step 2 in progress"],
           b.ctx,
         );
+        expect(out).toContain("ok: updated cert-cleanup (note)");
         expect(out).toContain("id: cert-cleanup");
         expect(b.read()).toContain("\n  step 2 in progress");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("lists every changed field in the confirmation", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await updateCommand(
+          ["cert-cleanup", "--title", "renamed", "--repo", "demo"],
+          b.ctx,
+        );
+        expect(out).toContain("ok: updated cert-cleanup (title, repo)");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("emits a machine-readable task with --json", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await updateCommand(
+          ["cert-cleanup", "--append", "json note", "--json"],
+          b.ctx,
+        );
+        const parsed = JSON.parse(out) as {
+          ok: boolean;
+          action: string;
+          changed: string[];
+          task: { id: string };
+        };
+        expect(parsed.ok).toBe(true);
+        expect(parsed.action).toBe("update");
+        expect(parsed.changed).toContain("note");
+        expect(parsed.task.id).toBe("cert-cleanup");
+        expect(out).not.toContain("help[");
       } finally {
         b.cleanup();
       }
@@ -688,7 +824,29 @@ describe("crud commands", () => {
       const b = makeBacklog();
       try {
         const out = await rmCommand(["cert-cleanup"], b.ctx);
-        expect(out).toContain("removed:");
+        expect(out).toContain("ok: removed cert-cleanup");
+        expect(b.read()).not.toContain("cert-cleanup");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("emits a machine-readable result with --json", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await rmCommand(["cert-cleanup", "--json"], b.ctx);
+        const parsed = JSON.parse(out) as {
+          ok: boolean;
+          action: string;
+          id: string;
+          removed: boolean;
+        };
+        expect(parsed).toMatchObject({
+          ok: true,
+          action: "rm",
+          id: "cert-cleanup",
+          removed: true,
+        });
         expect(b.read()).not.toContain("cert-cleanup");
       } finally {
         b.cleanup();
@@ -702,7 +860,9 @@ describe("crud commands", () => {
           type: "blocked-by",
           id: "owns-widget-h7",
         });
-        await expect(rmCommand(["owns-widget-h7"], b.ctx)).rejects.toMatchObject({
+        await expect(
+          rmCommand(["owns-widget-h7"], b.ctx),
+        ).rejects.toMatchObject({
           code: "VALIDATION_ERROR",
           message: expect.stringContaining("cert-cleanup"),
           suggestions: expect.arrayContaining([

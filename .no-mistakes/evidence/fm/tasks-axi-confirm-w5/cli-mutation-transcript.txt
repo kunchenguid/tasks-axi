@@ -1,0 +1,203 @@
+tasks-axi mutation-output E2E evidence
+backlog: .no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md
+
+$ pnpm --silent dev add grok-harness-g7 confirm\ mutation\ output --kind ship --repo firstmate --start --file .no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md
+ok: added grok-harness-g7 (ship, repo firstmate) -> In flight
+task:
+  id: grok-harness-g7
+  title: confirm mutation output
+  state: in_flight
+  blocked: no
+  blocked_by: none
+  kind: ship
+  repo: firstmate
+  priority: "-"
+  created: 2026-06-29
+  closed: "-"
+  deps: none
+  links: none
+  body: ""
+help[2]:
+  - Run `tasks-axi done grok-harness-g7 --pr <url> --file=.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md` when it ships
+  - Run `tasks-axi block grok-harness-g7 --by <other> --file=.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md` to record a dependency
+
+$ pnpm --silent dev done grok-harness-g7 --pr https://github.com/kunchenguid/tasks-axi/pull/123 --no-prune --file .no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md
+ok: done grok-harness-g7 -> Done (pr https://github.com/kunchenguid/tasks-axi/pull/123)
+help[1]:
+  - Run `tasks-axi ready --file=.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md` to dispatch work unblocked by this
+
+$ pnpm --silent dev add queued-next-q1 queued\ follow-up --repo firstmate --file .no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md
+ok: added queued-next-q1 (repo firstmate) -> Queued
+task:
+  id: queued-next-q1
+  title: queued follow-up
+  state: queued
+  blocked: no
+  blocked_by: none
+  kind: task
+  repo: firstmate
+  priority: "-"
+  created: 2026-06-29
+  closed: "-"
+  deps: none
+  links: none
+  body: ""
+help[2]:
+  - Run `tasks-axi start queued-next-q1 --file=.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md` to move it to in flight
+  - Run `tasks-axi block queued-next-q1 --by <other> --file=.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md` to record a dependency
+
+$ pnpm --silent dev start queued-next-q1 --file .no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md
+ok: start queued-next-q1 -> In flight
+help[1]:
+  - Run `tasks-axi done queued-next-q1 --pr <url> --file=.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md` when it ships
+
+$ pnpm --silent dev block queued-next-q1 --by fix-login-k3 --file .no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md
+ok: block queued-next-q1 -> blocked-by fix-login-k3
+help[2]:
+  - Run `tasks-axi unblock queued-next-q1 --by <other> --file=.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md` to clear it
+  - Run `tasks-axi ready --file=.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md` to see what is still dispatchable
+
+$ pnpm --silent dev unblock queued-next-q1 --by fix-login-k3 --file .no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md
+ok: unblock queued-next-q1 -> cleared fix-login-k3
+help[1]:
+  - Run `tasks-axi ready --file=.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md` to see newly unblocked work
+
+$ pnpm --silent dev update queued-next-q1 --title renamed\ follow-up --append Evidence\ note\ added\ through\ update. --file .no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md
+ok: updated queued-next-q1 (title, note)
+task:
+  id: queued-next-q1
+  title: renamed follow-up
+  state: in_flight
+  blocked: no
+  blocked_by: none
+  kind: task
+  repo: firstmate
+  priority: "-"
+  created: 2026-06-29
+  closed: "-"
+  deps: none
+  links: none
+  body: Evidence note added through update.
+help[1]:
+  - Run `tasks-axi show queued-next-q1 --full --file=.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md` to see the result
+
+$ pnpm --silent dev reopen grok-harness-g7 --file .no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md
+ok: reopen grok-harness-g7 -> Queued
+help[1]:
+  - Run `tasks-axi start grok-harness-g7 --file=.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md` to move it to in flight
+
+$ pnpm --silent dev rm queued-next-q1 --file .no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md
+ok: removed queued-next-q1
+help[1]:
+  - Run `tasks-axi list --file=.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md` to see remaining tasks
+
+$ pnpm --silent dev add move-me-q1 move\ candidate --file .no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md
+ok: added move-me-q1 -> Queued
+task:
+  id: move-me-q1
+  title: move candidate
+  state: queued
+  blocked: no
+  blocked_by: none
+  kind: task
+  repo: "-"
+  priority: "-"
+  created: 2026-06-29
+  closed: "-"
+  deps: none
+  links: none
+  body: ""
+help[2]:
+  - Run `tasks-axi start move-me-q1 --file=.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md` to move it to in flight
+  - Run `tasks-axi block move-me-q1 --by <other> --file=.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md` to record a dependency
+
+$ pnpm --silent dev mv move-me-q1 --to .no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-destination.md --file .no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md
+ok: mv move-me-q1 -> /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KWAQXHGJT5N3C63TF37X05YN/.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-destination.md
+help[1]:
+  - Run `tasks-axi list --file=.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md` to see remaining tasks
+
+$ pnpm --silent dev add archive-candidate-q1 archive\ candidate --file .no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md
+ok: added archive-candidate-q1 -> Queued
+task:
+  id: archive-candidate-q1
+  title: archive candidate
+  state: queued
+  blocked: no
+  blocked_by: none
+  kind: task
+  repo: "-"
+  priority: "-"
+  created: 2026-06-29
+  closed: "-"
+  deps: none
+  links: none
+  body: ""
+help[2]:
+  - Run `tasks-axi start archive-candidate-q1 --file=.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md` to move it to in flight
+  - Run `tasks-axi block archive-candidate-q1 --by <other> --file=.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md` to record a dependency
+
+$ pnpm --silent dev done archive-candidate-q1 --no-prune --file .no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md
+ok: done archive-candidate-q1 -> Done
+help[1]:
+  - Run `tasks-axi ready --file=.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md` to dispatch work unblocked by this
+
+$ pnpm --silent dev prune --keep 1 --file .no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md
+ok: prune done -> archived 1 (kept 1)
+help[1]:
+  - Run `tasks-axi list --state done --file=.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md` to see retained Done items
+
+$ pnpm --silent dev render --file .no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md
+ok: render -> normalized 4
+help[1]:
+  - Run `tasks-axi list --file=.no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md` to see the normalized backlog
+
+$ pnpm --silent dev add json-q1 machine\ readable\ confirmation --repo firstmate --json --file .no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md
+{
+  "ok": true,
+  "action": "add",
+  "task": {
+    "id": "json-q1",
+    "title": "machine readable confirmation",
+    "state": "queued",
+    "kind": null,
+    "repo": "firstmate",
+    "priority": null,
+    "created": "2026-06-29",
+    "closed": null,
+    "deps": [],
+    "links": [],
+    "body": null,
+    "blocked": false,
+    "blocked_by": []
+  }
+}
+
+$ sed -n 1\,220p .no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-backlog.md
+# Backlog
+
+## In flight
+- [ ] fix-login-k3 - one line (repo: app, since 2026-06-20)
+
+## Queued
+- [ ] add-tests-q7 - one line (repo: app) blocked-by: fix-login-k3 - waits on the login refactor
+- [ ] grok-harness-g7 - confirm mutation output https://github.com/kunchenguid/tasks-axi/pull/123 (repo: firstmate) (kind: ship)
+- [ ] json-q1 - machine readable confirmation (repo: firstmate) (since 2026-06-29)
+
+## Done
+- [x] archive-candidate-q1 - archive candidate (done 2026-06-29)
+
+$ sed -n 1\,220p .no-mistakes/evidence/fm/tasks-axi-confirm-w5/e2e-destination.md
+# Backlog
+
+## In flight
+
+## Queued
+- [ ] move-me-q1 - move candidate (since 2026-06-29)
+
+## Done
+
+$ sed -n 1\,220p .no-mistakes/evidence/fm/tasks-axi-confirm-w5/done-archive.md
+
+## Archived 2026-06-29
+- [x] legacy-done-z1 - one line - https://github.com/o/r/pull/12 (merged 2026-06-21)
+

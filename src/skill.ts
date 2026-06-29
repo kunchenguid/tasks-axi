@@ -69,7 +69,8 @@ Use tasks-axi whenever a task touches the backlog: filing or dispatching work, m
 3. The long notes never appear in \`list\`; run \`show <id> --full\` to read a task's complete body.
 4. \`add\` takes a caller-supplied id (the join key), e.g. \`tasks-axi add fm-x "title" --kind ship --repo firstmate --start\`; or pass \`--mint\` to generate a slug-xx id from the title.
 5. \`done <id> --pr <url>\` (or \`--report <path>\`) closes a task, records the link, and prunes the Done list (archived, never deleted). Then \`ready\` shows work it unblocked.
-6. Every response ends with contextual next-step hints under \`help:\` - follow them.
+6. Human-readable responses include contextual next-step hints under \`help:\` when there is a useful follow-up - follow them.
+7. \`--json\` mutation responses skip \`help:\` and return the deterministic result object instead.
 
 ## Commands
 
@@ -81,8 +82,11 @@ Run \`npx -y tasks-axi --help\` for global flags, or \`npx -y tasks-axi <command
 
 ## Tips
 
-- Output is TOON-encoded and token-efficient; the long task body is truncated by default - the whole point is that \`list\` stays cheap. Use \`--full\` only when you need the complete notes.
-- Mutations are idempotent and report what changed (\`already: true\` on a no-op); re-running a mutation is safe.
+- Output is TOON-encoded and token-efficient; the long task body is truncated by default - the whole point is that \`list\` stays cheap.
+  Use \`--full\` only when you need the complete notes.
+- Every write leads with an \`ok:\` line confirming the write result, including the resulting task state when the command changes one (e.g. \`ok: start <id> -> In flight\`, \`ok: done <id> -> Done (pr <url>)\`, \`ok: render -> normalized <n>\`), then state-aware next-step hints.
+  Mutations are idempotent and add \`already: true\` on a no-op; re-running is safe.
+- Pass \`--json\` to any mutation (\`add\`, \`start\`, \`done\`, \`reopen\`, \`update\`, \`rm\`, \`block\`, \`unblock\`, \`mv\`, \`prune\`, \`render\`) for a machine-readable result object (\`{ "ok": true, "action": ..., "task": { ... } }\` or operation-specific result fields) instead of TOON - confirm a write deterministically without a follow-up read.
 - \`block <id> --by <other>\` and \`unblock\` manage the dependency graph; \`ready\` lists only queued work with no unresolved blocker.
 - Filter \`list\` with \`--state\`, \`--repo\`, \`--kind\`, \`--blocked\`, \`--limit\`, and add columns with \`--fields a,b,c\`.
 - \`update <id> --append "<note>"\` adds to a task's body; \`update <id> --body "<text>"\` or \`--body-file <path>\` replaces it, and \`--title "<text>"\` replaces the title; \`render\` normalizes the file; \`mv <id> --to <path>\` moves a task to another backlog.

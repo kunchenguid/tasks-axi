@@ -93,12 +93,27 @@ describe("CLI entrypoint", () => {
   it("performs a mutation end to end", async () => {
     const c = capture();
     await main({ argv: ["start", "cert-cleanup"], stdout: c.stdout });
-    expect(c.read()).toContain("state: in_flight");
+    expect(c.read()).toContain("ok: start cert-cleanup -> In flight");
     // In-flight items render in firstmate's `- [ ]` checkbox form, under the
     // In flight header (the section, not the bullet, carries the state).
     expect(readFileSync(path, "utf8")).toMatch(
       /## In flight[\s\S]*- \[ \] cert-cleanup/,
     );
+  });
+
+  it("emits machine-readable JSON for a mutation with --json", async () => {
+    const c = capture();
+    await main({ argv: ["start", "cert-cleanup", "--json"], stdout: c.stdout });
+    const parsed = JSON.parse(c.read()) as {
+      ok: boolean;
+      action: string;
+      task: { id: string; state: string };
+    };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.action).toBe("start");
+    expect(parsed.task.id).toBe("cert-cleanup");
+    expect(parsed.task.state).toBe("in_flight");
+    expect(process.exitCode).toBeFalsy();
   });
 
   it("rejects unknown mutation flags instead of shifting positionals", async () => {
