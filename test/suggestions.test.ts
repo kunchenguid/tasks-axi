@@ -58,6 +58,29 @@ describe("suggestions", () => {
     ]);
   });
 
+  it("never suggests start after an in-flight add (state-aware)", () => {
+    const lines = getSuggestions({ action: "add", id: "x-q1", state: "in_flight" });
+    expect(lines).toEqual([
+      "Run `tasks-axi done x-q1 --pr <url>` when it ships",
+      "Run `tasks-axi block x-q1 --by <other>` to record a dependency",
+    ]);
+    expect(lines.some((l) => l.includes("tasks-axi start"))).toBe(false);
+  });
+
+  it("suggests start after a queued add", () => {
+    const lines = getSuggestions({ action: "add", id: "x-q1", state: "queued" });
+    expect(lines).toContain(
+      "Run `tasks-axi start x-q1` to move it to in flight",
+    );
+  });
+
+  it("suggests reopen after re-adding a done task", () => {
+    const lines = getSuggestions({ action: "add", id: "x-q1", state: "done" });
+    expect(lines).toEqual([
+      "Run `tasks-axi reopen x-q1` to move it back to queued",
+    ]);
+  });
+
   it("carries repo scope into empty ready follow-ups", () => {
     const lines = getSuggestions({
       action: "ready",

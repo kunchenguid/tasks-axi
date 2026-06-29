@@ -115,8 +115,10 @@ tasks-axi mv hibit-cert-cleanup --to ../homemux/data/backlog.md
 
 Output is [TOON](https://toonformat.dev)-encoded and token-efficient.
 The long task body is truncated by default — the whole point is that `list` stays cheap; use `--full` only when you need the complete notes.
+Every write leads with a terse `ok:` line confirming the resulting state (e.g. `ok: start lavish-share -> In flight`, `ok: done grok-harness-g7 -> Done (pr <url>)`), followed by state-aware next-step hints that never suggest an action the command just performed.
 Mutations are idempotent and report what changed (`already: true` on a no-op), so re-running one is safe.
 Running `done` again on an already Done task can still backfill a new `--pr`, `--report`, or `--note` without changing the original close date.
+Pass `--json` to any mutation for a machine-readable result object (`{ "ok": true, "action": …, "task": { … } }`) instead of TOON, so an agent can confirm a write deterministically without a follow-up read.
 
 Run `tasks-axi --help` for the command list, or `tasks-axi <command> --help` for per-command usage.
 

@@ -13,7 +13,7 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 - `src/model.ts` — the `Task` data model (report §5).
 - `src/derive.ts` — `blocked` / `ready` are derived in the CLI from `list` + the dep graph, never a Store method, so every backend gets them for free.
 - `src/backends/markdown*.ts` — the only P1 backend.
-- `src/commands/*` — one file per verb group; `src/view.ts` owns the TOON projection.
+- `src/commands/*` — one file per verb group; `src/view.ts` owns the read-side TOON projection; `src/confirm.ts` owns the write-side output (the `ok:` confirmation line, the `--json` payload, and `renderMutation`, which assembles both).
 - Shared helpers copied from the family: `args.ts`, `body.ts`, `format.ts`, `fields.ts`, `toon.ts`, `suggestions.ts`, `skill.ts`.
 
 ## Markdown grammar invariants (the hard part — do not regress)
@@ -42,6 +42,9 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 - **Dependency mutations validate targets.** `add --blocked-by` and `block --by` reject missing blockers and self-blocks. Parsed dangling blockers are still treated as resolved for legacy hand-edited files.
 - **Blocking tasks are protected.** `rm` and `mv` reject a task that still blocks active dependents; unblock or complete the dependents first.
 - Idempotent mutations exit 0 with `already: true`; errors are `AxiError` with SDK exit codes (VALIDATION_ERROR→2, else 1).
+- **Write ops are confirmation-forward.** Every mutation (`add`/`start`/`done`/`reopen`/`update`/`rm`/`block`/`unblock`/`mv`/`prune`/`render`) leads with a terse `ok: <verb> <id> ... -> <Resulting State>` line (built in `confirm.ts`), then optional structured detail (`add`/`update` keep the full `task:` record), then state-aware hints. The `ok:` line is a plain top-level TOON scalar (no `encode()` quoting) - confirmation messages are built from bounded values (ids, names, validated urls/paths, counts) so the combined output still decodes as TOON.
+- **Hints are state-aware, never contradictory.** A command must not suggest an action it just performed. `add` branches its suggestion on the resulting state (`getSuggestions({action:"add", state})`): `--start`/in-flight → suggest `done`, queued → suggest `start`, done → suggest `reopen`. This killed the `add --start` → "run start" bug. Idempotent paths emit the same state-aware hint as the fresh path.
+- **`--json` is the machine-readable success signal.** Every mutation accepts `--json`, which replaces the TOON output with a single pretty-printed object `{ ok: true, action, [already], task|id|..., ... }` (see `renderMutation` / `taskToJson`). Lets an agent confirm a write deterministically without a follow-up read. Errors still use structured-error output + non-zero exit (not JSON), so `exit 0` + `ok:true` = success.
 
 ## Build / test / ship
 

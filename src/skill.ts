@@ -82,7 +82,8 @@ Run \`npx -y tasks-axi --help\` for global flags, or \`npx -y tasks-axi <command
 ## Tips
 
 - Output is TOON-encoded and token-efficient; the long task body is truncated by default - the whole point is that \`list\` stays cheap. Use \`--full\` only when you need the complete notes.
-- Mutations are idempotent and report what changed (\`already: true\` on a no-op); re-running a mutation is safe.
+- Every write leads with an \`ok:\` line confirming the resulting state (e.g. \`ok: start <id> -> In flight\`, \`ok: done <id> -> Done (pr <url>)\`), then state-aware next-step hints. Mutations are idempotent and add \`already: true\` on a no-op; re-running is safe.
+- Pass \`--json\` to any mutation (\`add\`, \`start\`, \`done\`, \`reopen\`, \`update\`, \`rm\`, \`block\`, \`unblock\`, \`mv\`, \`prune\`, \`render\`) for a machine-readable result object (\`{ "ok": true, "action": ..., "task": { ... } }\`) instead of TOON - confirm a write deterministically without a follow-up read.
 - \`block <id> --by <other>\` and \`unblock\` manage the dependency graph; \`ready\` lists only queued work with no unresolved blocker.
 - Filter \`list\` with \`--state\`, \`--repo\`, \`--kind\`, \`--blocked\`, \`--limit\`, and add columns with \`--fields a,b,c\`.
 - \`update <id> --append "<note>"\` adds to a task's body; \`update <id> --body "<text>"\` or \`--body-file <path>\` replaces it, and \`--title "<text>"\` replaces the title; \`render\` normalizes the file; \`mv <id> --to <path>\` moves a task to another backlog.

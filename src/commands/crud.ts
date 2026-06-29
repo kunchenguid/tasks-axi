@@ -11,6 +11,11 @@ import {
 } from "../args.js";
 import { takeBody } from "../body.js";
 import { deriveLinks, extractTags } from "../backends/markdown-grammar.js";
+import {
+  renderMutation,
+  stateLabel,
+  taskToJson,
+} from "../confirm.js";
 import { requireCtx, type TasksContext } from "../context.js";
 import { blockedIds } from "../derive.js";
 import { AxiError, notFound } from "../errors.js";
@@ -41,6 +46,7 @@ flags:
   --start (place in In flight) | --queue (place in Queued, default)
   --blocked-by <id> (repeatable, must exist), --pr <url>, --report <path>, --priority <0-4>
   --mint [--prefix <p>]   mint a slug-xx id from the title instead of passing one
+  --json   print the resulting task as a JSON object
 examples:
   tasks-axi add lavish-foo-q9 "fix summary toggle" --kind ship --repo lavish-axi --start
   tasks-axi add fm-x "adopt lease" --blocked-by treehouse-lease-t4
@@ -68,6 +74,7 @@ aliases: edit
 flags:
   --title <text>, --body <text> or --body-file <path>, --append "<note>"
   --repo <name>, --kind <name>, --priority <0-4>, --pr <url>, --report <path>
+  --json   print the resulting task as a JSON object
 examples:
   tasks-axi update nm-release-validation --append "step 3 in progress on lavish #87"
   tasks-axi update fm-x --repo firstmate --kind ship`;
@@ -75,6 +82,8 @@ examples:
 export const RM_HELP = `usage: tasks-axi rm <id>
 aliases: delete
 Fails while active tasks still block on this id.
+flags:
+  --json   print the result as a JSON object
 examples:
   tasks-axi rm stale-task-q1`;
 
@@ -207,6 +216,7 @@ export async function addCommand(
   const report = takeFlag(args, "--report");
   const priority = parsePriority(takeFlag(args, "--priority"));
   const deps = parseDeps(args);
+  const json = takeBoolFlag(args, "--json");
   const start = takeBoolFlag(args, "--start");
   const queue = takeBoolFlag(args, "--queue");
   const mint = takeBoolFlag(args, "--mint");
@@ -257,11 +267,24 @@ export async function addCommand(
     const existing = await store.get(id);
     if (existing) {
       const all = (await store.list({})).items;
-      const blocks = [
-        "already: true",
-        renderTaskDetail(existing, all, false, showFullTextHint(existing)),
-      ];
-      return renderOutput(blocks);
+      return renderMutation({
+        json,
+        confirm: `add ${id} already exists -> ${stateLabel(existing.state)}`,
+        already: true,
+        jsonPayload: {
+          ok: true,
+          action: "add",
+          already: true,
+          task: taskToJson(existing, all),
+        },
+        detail: renderTaskDetail(existing, all, false, showFullTextHint(existing)),
+        suggestions: getSuggestions({
+          action: "add",
+          id,
+          state: existing.state,
+          globals: context?.suggestionGlobals,
+        }),
+      });
     }
   }
 
@@ -280,17 +303,26 @@ export async function addCommand(
 
   const task = await store.create(input);
   const all = (await store.list({})).items;
-  const blocks = [
-    renderTaskDetail(task, all, false, showFullTextHint(task)),
-    renderHelp(
-      getSuggestions({
-        action: "add",
-        id,
-        globals: context?.suggestionGlobals,
-      }),
-    ),
-  ];
-  return renderOutput(blocks);
+  return renderMutation({
+    json,
+    confirm: `added ${id}${addAttrs(task)} -> ${stateLabel(task.state)}`,
+    jsonPayload: { ok: true, action: "add", task: taskToJson(task, all) },
+    detail: renderTaskDetail(task, all, false, showFullTextHint(task)),
+    suggestions: getSuggestions({
+      action: "add",
+      id,
+      state: task.state,
+      globals: context?.suggestionGlobals,
+    }),
+  });
+}
+
+/** The `(kind, repo X)` parenthetical for an add confirmation, omitted when bare. */
+function addAttrs(task: { kind?: string; repo?: string }): string {
+  const parts: string[] = [];
+  if (task.kind) parts.push(task.kind);
+  if (task.repo) parts.push(`repo ${task.repo}`);
+  return parts.length > 0 ? ` (${parts.join(", ")})` : "";
 }
 
 export async function listCommand(
@@ -418,6 +450,7 @@ export async function updateCommand(
   const { store } = requireCtx(context);
   const args = [...rawArgs];
 
+  const json = takeBoolFlag(args, "--json");
   const title = takeFlag(args, "--title");
   const body = takeBody(args);
   const append = takeFlag(args, "--append");
@@ -475,17 +508,38 @@ export async function updateCommand(
   }
   const task = await store.update(id, patch);
   const all = (await store.list({})).items;
-  const blocks = [
-    renderTaskDetail(task, all, false, showFullTextHint(task)),
-    renderHelp(
-      getSuggestions({
-        action: "update",
-        id,
-        globals: context?.suggestionGlobals,
-      }),
-    ),
+  return renderMutation({
+    json,
+    confirm: `updated ${id} (${changedFields(patch).join(", ")})`,
+    jsonPayload: {
+      ok: true,
+      action: "update",
+      changed: changedFields(patch),
+      task: taskToJson(task, all),
+    },
+    detail: renderTaskDetail(task, all, false, showFullTextHint(task)),
+    suggestions: getSuggestions({
+      action: "update",
+      id,
+      globals: context?.suggestionGlobals,
+    }),
+  });
+}
+
+/** Friendly names of the fields a patch touched, for the update confirmation. */
+function changedFields(patch: TaskPatch): string[] {
+  const labels: Array<[keyof TaskPatch, string]> = [
+    ["title", "title"],
+    ["body", "body"],
+    ["appendBody", "note"],
+    ["repo", "repo"],
+    ["kind", "kind"],
+    ["priority", "priority"],
+    ["addLinks", "links"],
   ];
-  return renderOutput(blocks);
+  return labels
+    .filter(([key]) => patch[key] !== undefined)
+    .map(([, label]) => label);
 }
 
 export async function rmCommand(
@@ -493,12 +547,9 @@ export async function rmCommand(
   context?: TasksContext,
 ): Promise<string> {
   const { store } = requireCtx(context);
-  const positionals = requirePositionals(
-    [...rawArgs],
-    1,
-    1,
-    RM_HELP.split("\n")[0],
-  );
+  const args = [...rawArgs];
+  const json = takeBoolFlag(args, "--json");
+  const positionals = requirePositionals(args, 1, 1, RM_HELP.split("\n")[0]);
   const id = requireId(positionals[0], "id");
 
   if (!(await store.get(id))) {
@@ -506,15 +557,14 @@ export async function rmCommand(
   }
   await store.remove(id);
 
-  const blocks = [
-    `removed:\n  id: ${id}`,
-    renderHelp(
-      getSuggestions({
-        action: "rm",
-        id,
-        globals: context?.suggestionGlobals,
-      }),
-    ),
-  ];
-  return renderOutput(blocks);
+  return renderMutation({
+    json,
+    confirm: `removed ${id}`,
+    jsonPayload: { ok: true, action: "rm", id, removed: true },
+    suggestions: getSuggestions({
+      action: "rm",
+      id,
+      globals: context?.suggestionGlobals,
+    }),
+  });
 }
