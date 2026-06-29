@@ -1,10 +1,12 @@
 /**
  * Confirmation-forward output for write operations (AXI house style §6, §9).
  *
- * Every mutation leads with a terse `ok:` line that confirms the *resulting
- * state*, not just the next step, so an agent can see what landed without a
- * follow-up read. The same verbs also accept `--json` for a deterministic,
- * machine-readable result object (the human-readable TOON form stays default).
+ * Every mutation leads with a terse `ok:` line that confirms the write result,
+ * not just the next step, so an agent can see what landed without a follow-up
+ * read.
+ * Task-state mutations include the resulting state.
+ * The same verbs also accept `--json` for a deterministic, machine-readable
+ * result object (the human-readable TOON form stays default).
  */
 
 import { activeBlockers } from "./derive.js";
@@ -25,10 +27,10 @@ export function stateLabel(state: State): string {
 /**
  * The leading confirmation line every mutation prints. Emitted as a plain
  * `ok: <message>` line (a top-level TOON scalar) so it stays a readable,
- * terse confirmation of the resulting state and a deterministic success
- * marker. Confirmation messages are built from bounded values (ids, names,
- * validated urls/paths, counts), so the line round-trips through TOON without
- * quoting; the `--json` form is the guaranteed-parseable machine signal.
+ * terse confirmation of the write result and a deterministic success marker.
+ * Confirmation messages are built from bounded values (ids, names, validated
+ * urls/paths, counts), so the line round-trips through TOON without quoting;
+ * the `--json` form is the guaranteed-parseable machine signal.
  */
 export function renderConfirm(message: string): string {
   return `ok: ${message}`;
@@ -44,7 +46,7 @@ export interface MutationOutput {
   json: boolean;
   /** The machine-readable result object for `--json`. */
   jsonPayload: Record<string, unknown>;
-  /** The leading `ok:` confirmation message (resulting state). */
+  /** The leading `ok:` confirmation message (write result). */
   confirm: string;
   /** Emit the `already: true` no-op signal. */
   already?: boolean;

@@ -42,9 +42,16 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 - **Dependency mutations validate targets.** `add --blocked-by` and `block --by` reject missing blockers and self-blocks. Parsed dangling blockers are still treated as resolved for legacy hand-edited files.
 - **Blocking tasks are protected.** `rm` and `mv` reject a task that still blocks active dependents; unblock or complete the dependents first.
 - Idempotent mutations exit 0 with `already: true`; errors are `AxiError` with SDK exit codes (VALIDATION_ERROR→2, else 1).
-- **Write ops are confirmation-forward.** Every mutation (`add`/`start`/`done`/`reopen`/`update`/`rm`/`block`/`unblock`/`mv`/`prune`/`render`) leads with a terse `ok: <verb> <id> ... -> <Resulting State>` line (built in `confirm.ts`), then optional structured detail (`add`/`update` keep the full `task:` record), then state-aware hints. The `ok:` line is a plain top-level TOON scalar (no `encode()` quoting) - confirmation messages are built from bounded values (ids, names, validated urls/paths, counts) so the combined output still decodes as TOON.
-- **Hints are state-aware, never contradictory.** A command must not suggest an action it just performed. `add` branches its suggestion on the resulting state (`getSuggestions({action:"add", state})`): `--start`/in-flight → suggest `done`, queued → suggest `start`, done → suggest `reopen`. This killed the `add --start` → "run start" bug. Idempotent paths emit the same state-aware hint as the fresh path.
-- **`--json` is the machine-readable success signal.** Every mutation accepts `--json`, which replaces the TOON output with a single pretty-printed object `{ ok: true, action, [already], task|id|..., ... }` (see `renderMutation` / `taskToJson`). Lets an agent confirm a write deterministically without a follow-up read. Errors still use structured-error output + non-zero exit (not JSON), so `exit 0` + `ok:true` = success.
+- **Write ops are confirmation-forward.** Every mutation (`add`/`start`/`done`/`reopen`/`update`/`rm`/`block`/`unblock`/`mv`/`prune`/`render`) leads with a terse `ok:` line (built in `confirm.ts`) confirming the write result.
+  Task-state mutations include the resulting state (e.g. `ok: start <id> -> In flight`), while maintenance/removal commands confirm their own result shape (e.g. `ok: render -> normalized <n>`, `ok: removed <id>`).
+  Optional structured detail follows (`add`/`update` keep the full `task:` record), then state-aware hints.
+  The `ok:` line is a plain top-level TOON scalar (no `encode()` quoting) - confirmation messages are built from bounded values (ids, names, validated urls/paths, counts) so the combined output still decodes as TOON.
+- **Hints are state-aware, never contradictory.** A command must not suggest an action it just performed.
+  `add` branches its suggestion on the resulting state (`getSuggestions({action:"add", state})`): `--start`/in-flight → suggest `done`, queued → suggest `start`, done → suggest `reopen`.
+  Idempotent paths emit the same state-aware hint as the fresh path.
+- **`--json` is the machine-readable success signal.** Every mutation accepts `--json`, which replaces the TOON output with a single pretty-printed object `{ ok: true, action, [already], task|id|operation fields... }` (see `renderMutation` / `taskToJson`).
+  This lets an agent confirm a write deterministically without a follow-up read.
+  Errors still use structured-error output + non-zero exit (not JSON), so `exit 0` + `ok:true` = success.
 
 ## Build / test / ship
 
