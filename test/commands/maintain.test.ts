@@ -119,9 +119,9 @@ describe("maintenance commands", () => {
     it("rejects extra arguments before rendering", async () => {
       const b = makeBacklog();
       try {
-        await expect(
-          renderCommand(["extra"], b.ctx),
-        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await expect(renderCommand(["extra"], b.ctx)).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+        });
       } finally {
         b.cleanup();
       }

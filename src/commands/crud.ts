@@ -11,11 +11,7 @@ import {
 } from "../args.js";
 import { takeBody } from "../body.js";
 import { deriveLinks, extractTags } from "../backends/markdown-grammar.js";
-import {
-  renderMutation,
-  stateLabel,
-  taskToJson,
-} from "../confirm.js";
+import { renderMutation, stateLabel, taskToJson } from "../confirm.js";
 import { requireCtx, type TasksContext } from "../context.js";
 import { blockedIds } from "../derive.js";
 import { AxiError, notFound } from "../errors.js";
@@ -94,7 +90,10 @@ function parseDeps(args: string[]): Dep[] {
   }));
 }
 
-async function requireExistingBlockers(store: Store, deps: Dep[]): Promise<void> {
+async function requireExistingBlockers(
+  store: Store,
+  deps: Dep[],
+): Promise<void> {
   for (const dep of deps) {
     if (dep.type !== "blocked-by") continue;
     if (await store.get(dep.id)) continue;
@@ -111,9 +110,11 @@ function requireSafeTagFlagValue(
   const checked = requireNonEmptySingleLineFlagValue(flag, value);
   if (checked === undefined) return undefined;
   if (/[()]/.test(checked)) {
-    throw new AxiError(`${flag} must not contain parentheses`, "VALIDATION_ERROR", [
-      `Pass ${flag}=... without parentheses`,
-    ]);
+    throw new AxiError(
+      `${flag} must not contain parentheses`,
+      "VALIDATION_ERROR",
+      [`Pass ${flag}=... without parentheses`],
+    );
   }
   return checked.trim();
 }
@@ -131,7 +132,9 @@ function requireTypedLinkUrl(
     ]);
   }
   const url = checked.trim();
-  if (!deriveLinks(url).some((link) => link.kind === kind && link.url === url)) {
+  if (
+    !deriveLinks(url).some((link) => link.kind === kind && link.url === url)
+  ) {
     const expected =
       kind === "pr"
         ? "an http(s) pull request URL ending in /pull/<number>"
@@ -160,7 +163,11 @@ function parsePriority(raw: string | undefined): number | undefined {
   return Number(raw);
 }
 
-function requireTitle(raw: string, message: string, suggestion: string): string {
+function requireTitle(
+  raw: string,
+  message: string,
+  suggestion: string,
+): string {
   if (/[\r\n]/.test(raw)) {
     throw new AxiError("Task title must be a single line", "VALIDATION_ERROR");
   }
@@ -203,14 +210,8 @@ export async function addCommand(
   const { store } = requireCtx(context);
   const args = [...rawArgs];
 
-  const kind = requireSafeTagFlagValue(
-    "--kind",
-    takeFlag(args, "--kind"),
-  );
-  const repo = requireSafeTagFlagValue(
-    "--repo",
-    takeFlag(args, "--repo"),
-  );
+  const kind = requireSafeTagFlagValue("--kind", takeFlag(args, "--kind"));
+  const repo = requireSafeTagFlagValue("--repo", takeFlag(args, "--repo"));
   const body = requireNonEmptyFlagValue("--body", takeBody(args));
   const pr = takeFlag(args, "--pr");
   const report = takeFlag(args, "--report");
@@ -224,12 +225,17 @@ export async function addCommand(
   const titleFlag = takeFlag(args, "--title");
 
   if (start && queue) {
-    throw new AxiError("Use only one of --start or --queue", "VALIDATION_ERROR");
+    throw new AxiError(
+      "Use only one of --start or --queue",
+      "VALIDATION_ERROR",
+    );
   }
   if (rawPrefix !== undefined && !mint) {
-    throw new AxiError("--prefix can only be used with --mint", "VALIDATION_ERROR", [
-      'Run `tasks-axi add "<title>" --mint --prefix <p>`, or omit --prefix',
-    ]);
+    throw new AxiError(
+      "--prefix can only be used with --mint",
+      "VALIDATION_ERROR",
+      ['Run `tasks-axi add "<title>" --mint --prefix <p>`, or omit --prefix'],
+    );
   }
   const prefix = requireNonEmptySingleLineFlagValue("--prefix", rawPrefix);
 
@@ -277,7 +283,12 @@ export async function addCommand(
           already: true,
           task: taskToJson(existing, all),
         },
-        detail: renderTaskDetail(existing, all, false, showFullTextHint(existing)),
+        detail: renderTaskDetail(
+          existing,
+          all,
+          false,
+          showFullTextHint(existing),
+        ),
         suggestions: getSuggestions({
           action: "add",
           id,

@@ -59,7 +59,11 @@ describe("suggestions", () => {
   });
 
   it("never suggests start after an in-flight add (state-aware)", () => {
-    const lines = getSuggestions({ action: "add", id: "x-q1", state: "in_flight" });
+    const lines = getSuggestions({
+      action: "add",
+      id: "x-q1",
+      state: "in_flight",
+    });
     expect(lines).toEqual([
       "Run `tasks-axi done x-q1 --pr <url>` when it ships",
       "Run `tasks-axi block x-q1 --by <other>` to record a dependency",
@@ -68,7 +72,11 @@ describe("suggestions", () => {
   });
 
   it("suggests start after a queued add", () => {
-    const lines = getSuggestions({ action: "add", id: "x-q1", state: "queued" });
+    const lines = getSuggestions({
+      action: "add",
+      id: "x-q1",
+      state: "queued",
+    });
     expect(lines).toContain(
       "Run `tasks-axi start x-q1` to move it to in flight",
     );

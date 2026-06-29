@@ -10,11 +10,7 @@ import {
   takeBoolFlag,
   takeFlag,
 } from "../args.js";
-import {
-  renderMutation,
-  stateLabel,
-  taskToJson,
-} from "../confirm.js";
+import { renderMutation, stateLabel, taskToJson } from "../confirm.js";
 import { requireCtx, type TasksContext } from "../context.js";
 import { readyTasks } from "../derive.js";
 import { AxiError, notFound } from "../errors.js";
@@ -193,7 +189,10 @@ export async function doneCommand(
 }
 
 /** The `(pr X, report Y)` parenthetical for a done confirmation, omitted when bare. */
-function doneExtras(pr: string | undefined, report: string | undefined): string {
+function doneExtras(
+  pr: string | undefined,
+  report: string | undefined,
+): string {
   const parts: string[] = [];
   if (pr !== undefined) parts.push(`pr ${pr}`);
   if (report !== undefined) parts.push(`report ${report}`);
@@ -247,7 +246,12 @@ export async function reopenCommand(
   const { store } = requireCtx(context);
   const args = [...rawArgs];
   const json = takeBoolFlag(args, "--json");
-  const positionals = requirePositionals(args, 1, 1, REOPEN_HELP.split("\n")[0]);
+  const positionals = requirePositionals(
+    args,
+    1,
+    1,
+    REOPEN_HELP.split("\n")[0],
+  );
   const id = requireId(positionals[0], "id");
 
   const current = await store.get(id);

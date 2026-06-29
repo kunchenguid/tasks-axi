@@ -51,11 +51,10 @@ const table: Entry[] = [
     match: (c) => c.action === "list" && c.isEmpty === true,
     lines: (c) =>
       compact([
-        suggestionLine(
-          'Run `tasks-axi add <id> "<title>"` to add a task',
-          c,
-          ["repo", "kind"],
-        ),
+        suggestionLine('Run `tasks-axi add <id> "<title>"` to add a task', c, [
+          "repo",
+          "kind",
+        ]),
         suggestionLine(
           "Run `tasks-axi list --state done` to see completed work",
           c,
@@ -121,9 +120,7 @@ const table: Entry[] = [
   },
   {
     match: (c) => c.action === "start",
-    lines: (c) => [
-      `Run \`tasks-axi done ${c.id} --pr <url>\` when it ships`,
-    ],
+    lines: (c) => [`Run \`tasks-axi done ${c.id} --pr <url>\` when it ships`],
   },
   {
     match: (c) => c.action === "done",
@@ -154,7 +151,9 @@ const table: Entry[] = [
   },
   {
     match: (c) => c.action === "prune",
-    lines: () => ["Run `tasks-axi list --state done` to see retained Done items"],
+    lines: () => [
+      "Run `tasks-axi list --state done` to see retained Done items",
+    ],
   },
   {
     match: (c) => c.action === "mv",
@@ -188,7 +187,9 @@ export function withSuggestionGlobals(
   });
 }
 
-function globalSuffix(globals: SuggestionGlobals | undefined): string | undefined {
+function globalSuffix(
+  globals: SuggestionGlobals | undefined,
+): string | undefined {
   if (!globals) return "";
   const parts: string[] = [];
   if (globals.backend !== undefined) {
@@ -204,7 +205,10 @@ function globalSuffix(globals: SuggestionGlobals | undefined): string | undefine
   return parts.length > 0 ? ` ${parts.join(" ")}` : "";
 }
 
-function appendSuffixToCommand(line: string, suffix: string): string | undefined {
+function appendSuffixToCommand(
+  line: string,
+  suffix: string,
+): string | undefined {
   const first = line.indexOf("`");
   if (first === -1) return undefined;
   const second = line.indexOf("`", first + 1);

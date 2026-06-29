@@ -32,7 +32,15 @@ describe("crud commands", () => {
       const b = makeBacklog();
       try {
         const out = await addCommand(
-          ["new-h1", "started task", "--kind", "ship", "--repo", "demo", "--start"],
+          [
+            "new-h1",
+            "started task",
+            "--kind",
+            "ship",
+            "--repo",
+            "demo",
+            "--start",
+          ],
           b.ctx,
         );
         // The confirmation line leads with the resulting state.
@@ -53,7 +61,15 @@ describe("crud commands", () => {
       const b = makeBacklog();
       try {
         const out = await addCommand(
-          ["toon-q1", "round trips", "--kind", "ship", "--repo", "demo", "--start"],
+          [
+            "toon-q1",
+            "round trips",
+            "--kind",
+            "ship",
+            "--repo",
+            "demo",
+            "--start",
+          ],
           b.ctx,
         );
         // The leading ok: line carries commas (`(ship, repo demo)`) yet the
@@ -81,7 +97,15 @@ describe("crud commands", () => {
       const b = makeBacklog();
       try {
         const out = await addCommand(
-          ["json-q1", "json task", "--kind", "ship", "--repo", "demo", "--json"],
+          [
+            "json-q1",
+            "json task",
+            "--kind",
+            "ship",
+            "--repo",
+            "demo",
+            "--json",
+          ],
           b.ctx,
         );
         const parsed = JSON.parse(out) as {
@@ -183,16 +207,19 @@ describe("crud commands", () => {
       ["missing blocker", "dup title", ["--blocked-by", "missing-q1"]],
       ["tag-injecting repo", "dup title", ["--repo", "foo(bar)"]],
       ["tagging title", "dup title (repo: foo)", []],
-    ])("rejects %s before duplicate add no-ops", async (_case, title, flagArgs) => {
-      const b = makeBacklog();
-      try {
-        await expect(
-          addCommand(["lease-adopt", title, ...flagArgs], b.ctx),
-        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
-      } finally {
-        b.cleanup();
-      }
-    });
+    ])(
+      "rejects %s before duplicate add no-ops",
+      async (_case, title, flagArgs) => {
+        const b = makeBacklog();
+        try {
+          await expect(
+            addCommand(["lease-adopt", title, ...flagArgs], b.ctx),
+          ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        } finally {
+          b.cleanup();
+        }
+      },
+    );
 
     it("rejects an invalid id", async () => {
       const b = makeBacklog();
@@ -208,9 +235,9 @@ describe("crud commands", () => {
     it("rejects a blank title before creating a task", async () => {
       const b = makeBacklog();
       try {
-        await expect(addCommand(["blank-q1", "   "], b.ctx)).rejects.toMatchObject(
-          { code: "VALIDATION_ERROR" },
-        );
+        await expect(
+          addCommand(["blank-q1", "   "], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         expect(b.read()).not.toContain("blank-q1");
       } finally {
         b.cleanup();
@@ -232,9 +259,9 @@ describe("crud commands", () => {
     it("rejects a blank minted title", async () => {
       const b = makeBacklog();
       try {
-        await expect(addCommand(["   ", "--mint"], b.ctx)).rejects.toMatchObject(
-          { code: "VALIDATION_ERROR" },
-        );
+        await expect(
+          addCommand(["   ", "--mint"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
       } finally {
         b.cleanup();
       }
@@ -280,7 +307,10 @@ describe("crud commands", () => {
       const b = makeBacklog();
       try {
         await expect(
-          addCommand(["new-q1", "bad dep", "--blocked-by", "missing-q1"], b.ctx),
+          addCommand(
+            ["new-q1", "bad dep", "--blocked-by", "missing-q1"],
+            b.ctx,
+          ),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         expect(b.read()).not.toContain("new-q1");
         expect(b.read()).not.toContain("missing-q1");
@@ -293,7 +323,10 @@ describe("crud commands", () => {
       const b = makeBacklog();
       try {
         await expect(
-          addCommand(["new-q1", "self blocked", "--blocked-by", "new-q1"], b.ctx),
+          addCommand(
+            ["new-q1", "self blocked", "--blocked-by", "new-q1"],
+            b.ctx,
+          ),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         expect(b.read()).not.toContain("new-q1");
       } finally {
@@ -827,7 +860,9 @@ describe("crud commands", () => {
           type: "blocked-by",
           id: "owns-widget-h7",
         });
-        await expect(rmCommand(["owns-widget-h7"], b.ctx)).rejects.toMatchObject({
+        await expect(
+          rmCommand(["owns-widget-h7"], b.ctx),
+        ).rejects.toMatchObject({
           code: "VALIDATION_ERROR",
           message: expect.stringContaining("cert-cleanup"),
           suggestions: expect.arrayContaining([

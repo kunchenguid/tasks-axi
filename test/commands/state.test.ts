@@ -101,7 +101,12 @@ describe("state commands", () => {
       const b = makeBacklog();
       try {
         const out = await doneCommand(
-          ["cert-cleanup", "--pr", "https://github.com/o/r/pull/9", "--no-prune"],
+          [
+            "cert-cleanup",
+            "--pr",
+            "https://github.com/o/r/pull/9",
+            "--no-prune",
+          ],
           b.ctx,
         );
         expect(out).toContain(
@@ -132,7 +137,11 @@ describe("state commands", () => {
           ok: boolean;
           action: string;
           pruned: number;
-          task: { id: string; state: string; links: { kind: string; url: string }[] };
+          task: {
+            id: string;
+            state: string;
+            links: { kind: string; url: string }[];
+          };
         };
         expect(parsed.ok).toBe(true);
         expect(parsed.action).toBe("done");
@@ -348,7 +357,9 @@ describe("state commands", () => {
           ["cert-cleanup", "--by", "owns-widget-h7"],
           b.ctx,
         );
-        expect(added).toContain("ok: block cert-cleanup -> blocked-by owns-widget-h7");
+        expect(added).toContain(
+          "ok: block cert-cleanup -> blocked-by owns-widget-h7",
+        );
         expect(b.read()).toContain("blocked-by: owns-widget-h7");
 
         const again = await blockCommand(
@@ -365,7 +376,9 @@ describe("state commands", () => {
           b.ctx,
         );
         expect(cleared).not.toContain("already: true");
-        expect(cleared).toContain("ok: unblock cert-cleanup -> cleared owns-widget-h7");
+        expect(cleared).toContain(
+          "ok: unblock cert-cleanup -> cleared owns-widget-h7",
+        );
         expect(b.read()).not.toContain("blocked-by: owns-widget-h7");
       } finally {
         b.cleanup();
@@ -449,7 +462,10 @@ describe("state commands", () => {
       const b = makeBacklog();
       try {
         await expect(
-          blockCommand(["cert-cleanup", "extra", "--by", "owns-widget-h7"], b.ctx),
+          blockCommand(
+            ["cert-cleanup", "extra", "--by", "owns-widget-h7"],
+            b.ctx,
+          ),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         expect(b.read()).not.toContain("blocked-by: owns-widget-h7");
       } finally {
@@ -523,9 +539,14 @@ describe("state commands", () => {
   describe("mv", () => {
     it("moves a task to another backlog file", async () => {
       const b = makeBacklog();
-      const target = makeBacklog("# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n");
+      const target = makeBacklog(
+        "# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n",
+      );
       try {
-        const out = await mvCommand(["cert-cleanup", "--to", target.path], b.ctx);
+        const out = await mvCommand(
+          ["cert-cleanup", "--to", target.path],
+          b.ctx,
+        );
         expect(out).toContain(`ok: mv cert-cleanup -> ${target.path}`);
         expect(b.read()).not.toContain("cert-cleanup");
         expect(readFileSync(target.path, "utf8")).toContain("cert-cleanup");
@@ -588,7 +609,9 @@ describe("state commands", () => {
       const b = makeBacklog(
         "# Backlog\n\n## Queued\n- [ ] race-q1 - stale title\n\n## Done\n",
       );
-      const target = makeBacklog("# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n");
+      const target = makeBacklog(
+        "# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n",
+      );
       const originalGet = b.store.get.bind(b.store);
       let edited = false;
       b.store.get = async (taskId: string) => {
@@ -618,7 +641,9 @@ describe("state commands", () => {
       const b = makeBacklog(
         "# Backlog\n\n## Queued\n- [ ] bad-q1 - invalid parsed repo (repo: foo(bar)\n\n## Done\n",
       );
-      const target = makeBacklog("# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n");
+      const target = makeBacklog(
+        "# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n",
+      );
       try {
         await expect(
           mvCommand(["bad-q1", "--to", target.path], b.ctx),
@@ -635,7 +660,9 @@ describe("state commands", () => {
       const b = makeBacklog(
         "# Backlog\n\n## Queued\n- [ ] legacy-q1 - legacy without since\n\n## Done\n",
       );
-      const target = makeBacklog("# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n");
+      const target = makeBacklog(
+        "# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n",
+      );
       try {
         await mvCommand(["legacy-q1", "--to", target.path], b.ctx);
 
@@ -691,7 +718,9 @@ describe("state commands", () => {
           ]),
         });
         expect(b.read()).toContain("owns-widget-h7");
-        expect(readFileSync(target.path, "utf8")).not.toContain("owns-widget-h7");
+        expect(readFileSync(target.path, "utf8")).not.toContain(
+          "owns-widget-h7",
+        );
       } finally {
         b.cleanup();
         target.cleanup();
