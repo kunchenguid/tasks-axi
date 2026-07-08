@@ -242,6 +242,26 @@ function addBodyLine(body: string | undefined, line: string): string {
   return body ? `${body}\n${line}` : line;
 }
 
+function sameHold(left: Hold | undefined, right: Hold | undefined): boolean {
+  return (
+    left?.reason === right?.reason &&
+    left?.kind === right?.kind &&
+    left?.until === right?.until
+  );
+}
+
+function sameMeta(
+  left: Record<string, unknown> | undefined,
+  right: Record<string, unknown> | undefined,
+): boolean {
+  const leftKeys = Object.keys(left ?? {});
+  const rightKeys = Object.keys(right ?? {});
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every((key) => Object.is(left?.[key], right?.[key]))
+  );
+}
+
 function taskToInput(task: Task): TaskInput {
   const input: TaskInput = {
     id: task.id,
@@ -555,10 +575,12 @@ export class MarkdownStore implements Store {
       const found = this.findEntry(doc, id);
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
       const task = found.entry.task;
+      const nextBody =
+        patch.body !== undefined ? patch.body || undefined : task.body;
       const supersededBody =
         patch.archiveBody &&
         patch.body !== undefined &&
-        task.body !== patch.body
+        task.body !== nextBody
           ? task.body
           : undefined;
       const archivedTask =
@@ -571,36 +593,82 @@ export class MarkdownStore implements Store {
             }
           : undefined;
 
-      if (patch.title !== undefined) task.title = normalizeTitle(patch.title);
-      if (patch.body !== undefined) task.body = patch.body || undefined;
+      let changed = false;
+      if (patch.title !== undefined) {
+        const title = normalizeTitle(patch.title);
+        if (task.title !== title) {
+          task.title = title;
+          changed = true;
+        }
+      }
+      if (patch.body !== undefined && task.body !== nextBody) {
+        task.body = nextBody;
+        changed = true;
+      }
       for (const line of patch.addBodyLines ?? []) {
         if (line !== "" && !bodyHasLine(task.body, line)) {
           task.body = addBodyLine(task.body, line);
+          changed = true;
         }
       }
       if (patch.repo !== undefined) {
-        task.repo = normalizeTagValue(patch.repo, "repo");
+        const repo = normalizeTagValue(patch.repo, "repo");
+        if (task.repo !== repo) {
+          if (repo === undefined) {
+            delete task.repo;
+          } else {
+            task.repo = repo;
+          }
+          changed = true;
+        }
       }
       if (patch.kind !== undefined) {
-        task.kind = normalizeTagValue(patch.kind, "kind");
+        const kind = normalizeTagValue(patch.kind, "kind");
+        if (task.kind !== kind) {
+          if (kind === undefined) {
+            delete task.kind;
+          } else {
+            task.kind = kind;
+          }
+          changed = true;
+        }
       }
       if (patch.hold !== undefined) {
         const hold = normalizeHold(patch.hold ?? undefined);
-        if (hold) {
-          task.hold = hold;
-        } else {
-          delete task.hold;
+        if (!sameHold(task.hold, hold)) {
+          if (hold) {
+            task.hold = hold;
+          } else {
+            delete task.hold;
+          }
+          changed = true;
         }
       }
-      const priority = normalizePriority(patch.priority);
-      if (priority !== undefined) task.priority = priority;
-      if (patch.meta) task.meta = { ...task.meta, ...patch.meta };
-      for (const link of patch.addLinks ?? []) {
-        task.title = appendTitleLink(task.title, link);
+      if (patch.priority !== undefined) {
+        const priority = normalizePriority(patch.priority);
+        if (task.priority !== priority) {
+          task.priority = priority;
+          changed = true;
+        }
       }
+      if (patch.meta) {
+        const meta = { ...task.meta, ...patch.meta };
+        if (!sameMeta(task.meta, meta)) {
+          task.meta = meta;
+          changed = true;
+        }
+      }
+      for (const link of patch.addLinks ?? []) {
+        const title = appendTitleLink(task.title, link);
+        if (task.title !== title) {
+          task.title = title;
+          changed = true;
+        }
+      }
+      if (!changed) return task;
+
       task.links = deriveLinks(task.title);
       task.updated = this.now();
-
       found.entry.dirty = true;
       let archiveRestorePoint: ArchiveRestorePoint | undefined;
       if (archivedTask) {

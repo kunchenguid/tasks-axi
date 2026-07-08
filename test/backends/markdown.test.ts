@@ -349,6 +349,21 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("does not rewrite when added body lines already exist", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## Done\n- [x] task-q1 - manually spaced title   (done 2026-07-01)\n  old note\n\n",
+      );
+      try {
+        const before = b.read();
+        await b.store.update("task-q1", {
+          addBodyLines: ["old note"],
+        });
+        expect(b.read()).toBe(before);
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("archives the superseded body before replacing it", async () => {
       const b = makeBacklog(
         "# Backlog\n\n## Queued\n- [ ] task-q1 - title\n  old note\n  second old note\n\n## Done\n",

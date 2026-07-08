@@ -364,6 +364,23 @@ describe("state commands", () => {
         b.cleanup();
       }
     });
+
+    it("does not rewrite when an already-done note already exists", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## Done\n- [x] done-q1 - manually spaced title   (done 2026-07-01)\n  retry-safe note\n\n",
+      );
+      try {
+        const before = b.read();
+        const out = await doneCommand(
+          ["done-q1", "--note", "retry-safe note", "--no-prune"],
+          b.ctx,
+        );
+        expect(out).toContain("already: true");
+        expect(b.read()).toBe(before);
+      } finally {
+        b.cleanup();
+      }
+    });
   });
 
   describe("reopen", () => {
