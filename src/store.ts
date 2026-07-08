@@ -55,6 +55,7 @@ export interface Store {
   // CRUD
   create(input: TaskInput): Promise<Task>;
   get(id: string): Promise<Task | null>;
+  /** Apply a patch and report which fields actually changed. */
   update(id: string, patch: TaskPatch): Promise<TaskUpdateResult>;
   remove(id: string): Promise<Task>;
 

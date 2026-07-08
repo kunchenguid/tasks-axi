@@ -75,7 +75,8 @@ examples:
 export const UPDATE_HELP = `usage: tasks-axi update <id> [flags]
 aliases: edit
 flags:
-  --title <text>, --body <text> or --body-file <path>, --archive-body
+  --title <text>, --body <text> or --body-file <path>
+  --archive-body   with --body/--body-file, archive the previous body
   --repo <name>, --kind <name>, --priority <0-4>, --pr <url>, --report <path>
   --json   print the resulting task as a JSON object
 examples:

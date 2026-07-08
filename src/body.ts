@@ -1,7 +1,7 @@
 /**
  * Shared truncation for long text fields (AXI house style §3).
  *
- * The whole token win of tasks-axi is that the long, accumulating notes never
+ * The whole token win of tasks-axi is that long task bodies never
  * appear in `list` and are truncated in `show` unless the agent asks for the
  * complete text with `--full`. Truncation always reveals the escape hatch and
  * the true size so the agent knows how much it is missing.

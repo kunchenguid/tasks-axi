@@ -10,7 +10,7 @@
 Task and backlog manager for agents — designed with [AXI](https://github.com/kunchenguid/axi) (Agent eXperience Interface).
 
 tasks-axi makes a tiny structured change to a human-readable backlog at near-zero output-token cost.
-It edits a hand-editable `backlog.md` in place with a byte-exact round-trip, so the markdown stays the source of truth while the long, accumulating notes never bloat a `list`.
+It edits a hand-editable `backlog.md` in place with a byte-exact round-trip, so the markdown stays the source of truth while long task bodies never bloat a `list`.
 It borrows the dependency-graph and ready-query model from [beads](https://github.com/gastownhall/beads), adds structured dispatch holds, and keeps the house style from its `*-axi` siblings - token-efficient TOON output, contextual next-step suggestions, idempotent mutations, and structured errors.
 
 ## Why
