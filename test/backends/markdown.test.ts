@@ -156,6 +156,56 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("creates and reads structured holds", async () => {
+      const b = makeBacklog();
+      try {
+        await b.store.create({
+          id: "held-q1",
+          title: "wait for launch",
+          hold: {
+            reason: "load clears",
+            kind: "load",
+            until: "2999-01-01",
+          },
+        });
+        const got = await b.store.get("held-q1");
+        expect(got?.hold).toEqual({
+          reason: "load clears",
+          kind: "load",
+          until: "2999-01-01",
+        });
+        expect(b.read()).toContain(
+          "(hold: load clears) (hold-kind: load) (hold-until: 2999-01-01)",
+        );
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects unsafe hold fields before rendering", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.create({
+            id: "bad-hold-q1",
+            title: "bad hold",
+            hold: { reason: "wait (blocked)" },
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await expect(
+          b.store.create({
+            id: "bad-until-q1",
+            title: "bad until",
+            hold: { reason: "wait", until: "tomorrow" },
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("bad-hold-q1");
+        expect(b.read()).not.toContain("bad-until-q1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects invalid date tags before rendering", async () => {
       const b = makeBacklog();
       try {
@@ -225,6 +275,19 @@ describe("MarkdownStore", () => {
         // no original line is removed; the note is simply added as a continuation
         for (const line of before) expect(after).toContain(line);
         expect(after).toMatch(/\r?\n[ ]{2}a note/);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("a no-holds backlog still renders byte-exactly after parsing", async () => {
+      const b = makeBacklog();
+      try {
+        const before = b.read();
+        const { parseBacklog, renderBacklog } = await import(
+          "../../src/backends/markdown-grammar.js"
+        );
+        expect(renderBacklog(parseBacklog(before))).toBe(before);
       } finally {
         b.cleanup();
       }

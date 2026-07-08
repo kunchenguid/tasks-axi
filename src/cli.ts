@@ -22,18 +22,22 @@ import {
 import {
   BLOCK_HELP,
   DONE_HELP,
+  HOLD_HELP,
   MV_HELP,
   READY_HELP,
   REOPEN_HELP,
   START_HELP,
   UNBLOCK_HELP,
+  UNHOLD_HELP,
   blockCommand,
   doneCommand,
+  holdCommand,
   mvCommand,
   readyCommand,
   reopenCommand,
   startCommand,
   unblockCommand,
+  unholdCommand,
 } from "./commands/state.js";
 import {
   PRUNE_HELP,
@@ -58,8 +62,8 @@ type MainOptions = {
 };
 
 export const TOP_HELP = `usage: tasks-axi [command] [args] [flags]
-commands[16]:
-  (none)=dashboard, add, list, show, start, done, reopen, update, rm, block, unblock, ready, mv, prune, render, setup
+commands[18]:
+  (none)=dashboard, add, list, show, start, done, reopen, update, rm, block, unblock, hold, unhold, ready, mv, prune, render, setup
 flags[4]:
   --backend <name> (after command), --file <path> (after command), --json (mutations: machine-readable result), --help, -v/-V/--version
 examples:
@@ -69,6 +73,7 @@ examples:
   tasks-axi show homemux-h7 --full
   tasks-axi done sm-idle-handoff-q8 --pr https://github.com/o/r/pull/42
   tasks-axi block fm-x --by treehouse-lease-t4
+  tasks-axi hold fm-x --reason "captain decision pending" --kind captain
   tasks-axi ready
   tasks-axi setup hooks
 `;
@@ -92,6 +97,8 @@ const COMMANDS: Record<string, CommandFn> = {
   delete: withContext(rmCommand),
   block: withContext(blockCommand),
   unblock: withContext(unblockCommand),
+  hold: withContext(holdCommand),
+  unhold: withContext(unholdCommand),
   ready: withContext(readyCommand),
   mv: withContext(mvCommand),
   prune: withContext(pruneCommand),
@@ -115,6 +122,8 @@ const COMMAND_HELP: Record<string, string> = {
   delete: RM_HELP,
   block: BLOCK_HELP,
   unblock: UNBLOCK_HELP,
+  hold: HOLD_HELP,
+  unhold: UNHOLD_HELP,
   ready: READY_HELP,
   mv: MV_HELP,
   prune: PRUNE_HELP,

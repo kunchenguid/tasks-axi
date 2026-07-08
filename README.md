@@ -96,7 +96,10 @@ tasks-axi reopen some-task
 
 # dependencies and the ready queue
 tasks-axi block firstmate-lease-adopt --by treehouse-lease-t4
+tasks-axi hold firstmate-lease-adopt --reason "captain decision pending" --kind captain
+tasks-axi unhold firstmate-lease-adopt
 tasks-axi ready
+tasks-axi ready --include-held
 
 # edit the body and title: --append adds to the body, --body or --body-file replaces it, --title replaces the title
 tasks-axi update nm-release-validation --append "step 3 in progress on lavish #87"
@@ -118,6 +121,10 @@ The long task body is truncated by default — the whole point is that `list` st
 Every write leads with a terse `ok:` line confirming the write result, including the resulting task state when the command changes one (e.g. `ok: start lavish-share -> In flight`, `ok: done grok-harness-g7 -> Done (pr <url>)`, `ok: render -> normalized 3`), followed by state-aware next-step hints that never suggest an action the command just performed.
 Mutations are idempotent and report what changed (`already: true` on a no-op), so re-running one is safe.
 Running `done` again on an already Done task can still backfill a new `--pr`, `--report`, or `--note` without changing the original close date.
+`hold <id> --reason "<text>"` records an intentional pause without turning it into prose, and `unhold <id>` clears it.
+Active holds are excluded from `ready`; a hold with `--until YYYY-MM-DD` becomes inactive on and after that date, so the task can surface as ready again if nothing else blocks it.
+Use `ready --include-held` to show dispatchable ready work and a separate `held` group with the hold reason, kind, and until date.
+Use `list --state held` or `list --fields held,hold_reason,hold_kind,hold_until` when you need to scan hold state directly.
 Pass `--json` to any mutation for a machine-readable result object (`{ "ok": true, "action": …, "task": { … } }` or operation-specific result fields) instead of TOON, so an agent can confirm a write deterministically without a follow-up read.
 
 Run `tasks-axi --help` for the command list, or `tasks-axi <command> --help` for per-command usage.
@@ -141,11 +148,13 @@ It gently formalizes the inline tags a backlog already uses as the canonical fie
 - `(since <date>)` - when a task started; `(merged <date>)` / `(reported <date>)` when it closed
 - `(kind: X)` - task kind, when not already implied by a leading `SHIP` / `SCOUT` / `DOCS-ONLY` / `PERSISTENT SECONDMATE` word
 - `(priority: 0-4)` - optional priority, also accepted through `add` / `update --priority`
+- `(hold: <reason>)`, `(hold-kind: captain|external|load|parked|future)`, `(hold-until: YYYY-MM-DD)` - structured dispatch holds written by `hold`
 - PR urls, `data/<id>/report.md` paths, and other `http(s)` urls - typed links
 
 `tasks-axi render` rewrites every id'd task into this canonical form; free-form lines are left untouched.
 Bare dependency edges render immediately after the title, while reason-bearing dependency edges render after the parenthetical tags so the reason stays attached to the edge on the next parse.
 Dependency reasons are preserved metadata only; readiness still keys off the blocker id.
+Hold reasons are preserved metadata too, but active holds are a readiness gate until cleared or until their date gate expires.
 `add --blocked-by` and `block --by` require the referenced task to exist, and `rm` / `mv` refuse to remove a task that still blocks active work.
 
 ## Configuration

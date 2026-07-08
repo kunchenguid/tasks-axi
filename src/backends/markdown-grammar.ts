@@ -1,4 +1,5 @@
-import type { Dep, State, Task, TaskLink } from "../model.js";
+import type { Dep, Hold, HoldKind, State, Task, TaskLink } from "../model.js";
+import { HOLD_KINDS } from "../model.js";
 
 /**
  * The markdown grammar: pure parse / render with no I/O.
@@ -111,6 +112,13 @@ const TAIL_SINCE = new RegExp(`\\s*\\(since\\s+(${DATE})\\)\\s*$`);
 const TAIL_CLOSED = new RegExp(
   `\\s*\\((?:merged|reported|done|closed)\\s+(${DATE})\\)\\s*$`,
 );
+const TAIL_HOLD = /\s*\(hold:\s*([^()]+)\)\s*$/;
+const TAIL_HOLD_KIND = new RegExp(
+  `\\s*\\(hold-kind:\\s*(${HOLD_KINDS.join("|")})\\)\\s*$`,
+);
+const TAIL_HOLD_UNTIL = new RegExp(
+  `\\s*\\(hold-until:\\s*(${DATE})\\)\\s*$`,
+);
 
 const PR_LINK = /https?:\/\/\S+?\/pull\/\d+/g;
 const REPORT_LINK = /\bdata\/\S+?\/report\.md\b/g;
@@ -165,6 +173,7 @@ export interface ExtractedTags {
   created?: string;
   closed?: string;
   priority?: number;
+  hold?: Hold;
   links: TaskLink[];
 }
 
@@ -181,6 +190,9 @@ export function extractTags(rest: string): ExtractedTags {
   let created: string | undefined;
   let closed: string | undefined;
   let priority: number | undefined;
+  let holdReason: string | undefined;
+  let holdKind: HoldKind | undefined;
+  let holdUntil: string | undefined;
 
   let title = rest;
   let stripping = true;
@@ -231,13 +243,42 @@ export function extractTags(rest: string): ExtractedTags {
       stripping = true;
       continue;
     }
+    m = title.match(TAIL_HOLD_UNTIL);
+    if (m) {
+      if (holdUntil === undefined) holdUntil = m[1];
+      title = title.slice(0, m.index);
+      stripping = true;
+      continue;
+    }
+    m = title.match(TAIL_HOLD_KIND);
+    if (m) {
+      if (holdKind === undefined) holdKind = m[1] as HoldKind;
+      title = title.slice(0, m.index);
+      stripping = true;
+      continue;
+    }
+    m = title.match(TAIL_HOLD);
+    if (m) {
+      if (holdReason === undefined) holdReason = m[1].trim();
+      title = title.slice(0, m.index);
+      stripping = true;
+      continue;
+    }
   }
 
   title = title.trim();
   const kind = kindTag ?? leadingKind(title);
   const links = deriveLinks(title);
+  const hold =
+    holdReason !== undefined
+      ? {
+          reason: holdReason,
+          ...(holdKind !== undefined ? { kind: holdKind } : {}),
+          ...(holdUntil !== undefined ? { until: holdUntil } : {}),
+        }
+      : undefined;
 
-  return { title, kind, repo, deps, created, closed, priority, links };
+  return { title, kind, repo, deps, created, closed, priority, hold, links };
 }
 
 // ---------------------------------------------------------------------------
@@ -269,6 +310,11 @@ export function buildProse(task: Task): string {
   }
   if (task.state === "done" && task.closed) {
     parts.push(`(${closureVerb(task)} ${task.closed})`);
+  }
+  if (task.hold) {
+    parts.push(`(hold: ${task.hold.reason})`);
+    if (task.hold.kind) parts.push(`(hold-kind: ${task.hold.kind})`);
+    if (task.hold.until) parts.push(`(hold-until: ${task.hold.until})`);
   }
   // A reason runs as free text to the end of the line, so an edge that has one
   // is emitted after the parenthetical tags - both to match firstmate's real
@@ -336,6 +382,7 @@ function buildTask(
   if (tags.created) task.created = tags.created;
   if (tags.closed) task.closed = tags.closed;
   if (tags.priority !== undefined) task.priority = tags.priority;
+  if (tags.hold) task.hold = tags.hold;
   return task;
 }
 

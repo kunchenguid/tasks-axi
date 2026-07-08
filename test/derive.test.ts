@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { activeBlockers, blockedIds, readyTasks } from "../src/derive.js";
+import {
+  activeBlockers,
+  blockedIds,
+  heldTasks,
+  isHoldActive,
+  readyTasks,
+} from "../src/derive.js";
 import type { Task } from "../src/model.js";
 
 function task(id: string, state: Task["state"], deps: Task["deps"] = []): Task {
@@ -31,6 +37,37 @@ describe("derive", () => {
   it("ready = queued tasks with no unresolved blocker", () => {
     const ready = readyTasks(tasks).map((t) => t.id).sort();
     expect(ready).toEqual(["c", "e", "f"]);
+  });
+
+  it("excludes active held tasks from ready unless requested", () => {
+    const held = {
+      ...task("held-q1", "queued"),
+      hold: { reason: "wait for captain", kind: "captain" as const },
+    };
+    const normal = task("normal-q1", "queued");
+    expect(readyTasks([held, normal]).map((t) => t.id)).toEqual(["normal-q1"]);
+    expect(
+      readyTasks([held, normal], { includeHeld: true }).map((t) => t.id),
+    ).toEqual(["held-q1", "normal-q1"]);
+  });
+
+  it("date-gates holds by local YYYY-MM-DD", () => {
+    const future = {
+      ...task("future-q1", "queued"),
+      hold: { reason: "future", until: "2999-01-01" },
+    };
+    const past = {
+      ...task("past-q1", "queued"),
+      hold: { reason: "past", until: "2000-01-01" },
+    };
+    expect(isHoldActive(future, { today: "2026-07-08" })).toBe(true);
+    expect(isHoldActive(past, { today: "2026-07-08" })).toBe(false);
+    expect(heldTasks([future, past], { today: "2026-07-08" })).toEqual([
+      future,
+    ]);
+    expect(readyTasks([future, past], { today: "2026-07-08" })).toEqual([
+      past,
+    ]);
   });
 
   it("activeBlockers lists only the unresolved blockers", () => {

@@ -1,5 +1,22 @@
 import type { Task } from "./model.js";
 
+export interface DateGatedOptions {
+  /** YYYY-MM-DD local date used for date-gated holds. Defaults to today. */
+  today?: string;
+}
+
+export interface ReadyOptions extends DateGatedOptions {
+  /** Include active held tasks in the ready projection. */
+  includeHeld?: boolean;
+}
+
+export function currentLocalDate(): string {
+  const d = new Date();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${month}-${day}`;
+}
+
 /**
  * Derived `blocked` / `ready` projections, computed in the CLI from the full
  * task list + the dependency graph (report §8: `ready` is not a Store method,
@@ -28,10 +45,34 @@ export function blockedIds(tasks: Task[]): Set<string> {
   return blocked;
 }
 
-/** Unblocked queued work — the literal implementation of "dispatch what was unblocked". */
-export function readyTasks(tasks: Task[]): Task[] {
+/** True when a structured hold is currently active. */
+export function isHoldActive(
+  task: Task,
+  options: DateGatedOptions = {},
+): boolean {
+  if (!task.hold) return false;
+  if (!task.hold.until) return task.state !== "done";
+  const today = options.today ?? currentLocalDate();
+  return task.state !== "done" && task.hold.until > today;
+}
+
+/** Active held work, excluding Done tasks. */
+export function heldTasks(
+  tasks: Task[],
+  options: DateGatedOptions = {},
+): Task[] {
+  return tasks.filter((task) => isHoldActive(task, options));
+}
+
+/** Unblocked queued work - the literal implementation of "dispatch what was unblocked". */
+export function readyTasks(tasks: Task[], options: ReadyOptions = {}): Task[] {
   const blocked = blockedIds(tasks);
-  return tasks.filter((t) => t.state === "queued" && !blocked.has(t.id));
+  return tasks.filter(
+    (t) =>
+      t.state === "queued" &&
+      !blocked.has(t.id) &&
+      (options.includeHeld || !isHoldActive(t, options)),
+  );
 }
 
 /** The unresolved blocked-by edges for a task (blockers that are not done). */

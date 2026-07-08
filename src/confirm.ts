@@ -9,7 +9,7 @@
  * result object (the human-readable TOON form stays default).
  */
 
-import { activeBlockers } from "./derive.js";
+import { activeBlockers, isHoldActive } from "./derive.js";
 import type { State, Task } from "./model.js";
 import { renderHelp, renderOutput } from "./toon.js";
 
@@ -92,6 +92,13 @@ export function taskToJson(task: Task, all?: Task[]): Record<string, unknown> {
       id: d.id,
       ...(d.reason !== undefined ? { reason: d.reason } : {}),
     })),
+    hold: task.hold
+      ? {
+          reason: task.hold.reason,
+          kind: task.hold.kind ?? null,
+          until: task.hold.until ?? null,
+        }
+      : null,
     links: task.links.map((l) => ({ kind: l.kind, url: l.url })),
     body: task.body ?? null,
   };
@@ -99,6 +106,7 @@ export function taskToJson(task: Task, all?: Task[]): Record<string, unknown> {
     const blockers = activeBlockers(task, all);
     json.blocked = blockers.length > 0;
     json.blocked_by = blockers;
+    json.held = isHoldActive(task);
   }
   return json;
 }
