@@ -107,8 +107,8 @@ export interface TaskPatch {
   title?: string;
   /** Replace the body wholesale. */
   body?: string;
-  /** Append a note to the body (the answer to the growing status line). */
-  appendBody?: string;
+  /** Archive the previous body before a body replacement. */
+  archiveBody?: boolean;
   repo?: string;
   kind?: string;
   /** Links to add (existing links are preserved). */

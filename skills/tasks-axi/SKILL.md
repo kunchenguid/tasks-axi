@@ -26,7 +26,7 @@ Use tasks-axi whenever a task touches the backlog: filing or dispatching work, m
 
 1. Run `npx -y tasks-axi` with no arguments for a dashboard of the current backlog - in flight work, queued work with blockers, and suggested next commands.
 2. Drill in verb-first: `list`, `show <id>`, `ready`, then mutate with `add`, `start`, `done`, `block`/`unblock`, `hold`/`unhold`, `update`.
-3. The long notes never appear in `list`; run `show <id> --full` to read a task's complete body.
+3. The long notes never appear in `list`; run `show <id> --full` to read a task's complete body before replacing it.
 4. `add` takes a caller-supplied id (the join key), e.g. `tasks-axi add fm-x "title" --kind ship --repo firstmate --start`; or pass `--mint` to generate a slug-xx id from the title.
 5. `done <id> --pr <url>` (or `--report <path>`) closes a task, records the link, and prunes the Done list (archived, never deleted). Then `ready` shows work it unblocked.
 6. `hold <id> --reason "<text>"` pauses dispatch without prose parsing; `ready` excludes active holds by default, and `ready --include-held` shows a separate held group.
@@ -55,5 +55,6 @@ Run `npx -y tasks-axi --help` for global flags, or `npx -y tasks-axi <command> -
   Use `list --state held` or `--fields held,hold_reason,hold_kind,hold_until` when scanning active hold state.
 - Existing prose markers such as `HELD`, `PARKED`, `DEFERRED`, `CAPTAIN-DECISION`, and `do not dispatch` stay prose until intentionally migrated.
   Preserve the original prose as the hold reason, then choose `captain`, `parked`, `future`, `load`, or `external` only when the text supports that bucket.
-- `update <id> --append "<note>"` adds to a task's body; `update <id> --body "<text>"` or `--body-file <path>` replaces it, and `--title "<text>"` replaces the title; `render` normalizes the file; `mv <id> --to <path>` moves a task to another backlog.
+- Note writes are inspect-then-update: run `show <id> --full`, then replace the curated current body with `update <id> --body "<text>"` or `--body-file <path>`.
+  Add `--archive-body` to preserve the superseded body in `note-archive.md`; `--title "<text>"` replaces the title; `render` normalizes the file; `mv <id> --to <path>` moves a task to another backlog.
 - Free-form (no-id) backlog lines are preserved verbatim and are never modified.

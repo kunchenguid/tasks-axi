@@ -649,16 +649,69 @@ describe("crud commands", () => {
   });
 
   describe("update", () => {
-    it("appends a timestamped note without rewriting the line", async () => {
+    it("rejects the removed --append flag as unknown", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          updateCommand(
+            ["cert-cleanup", "--append", "step 2 in progress"],
+            b.ctx,
+          ),
+        ).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: "Unknown flag: --append",
+        });
+        expect(b.read()).not.toContain("\n  step 2 in progress");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("replaces the body wholesale", async () => {
       const b = makeBacklog();
       try {
         const out = await updateCommand(
-          ["cert-cleanup", "--append", "step 2 in progress"],
+          ["cert-cleanup", "--body", "current status only"],
           b.ctx,
         );
-        expect(out).toContain("ok: updated cert-cleanup (note)");
-        expect(out).toContain("id: cert-cleanup");
-        expect(b.read()).toContain("\n  step 2 in progress");
+        expect(out).toContain("ok: updated cert-cleanup (body)");
+        expect(out).toContain("body: current status only");
+        expect(b.read()).toContain("\n  current status only");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("archives the superseded body when replacing with --archive-body", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## Queued\n- [ ] task-q1 - title\n  old line one\n  old line two\n\n## Done\n",
+      );
+      try {
+        const out = await updateCommand(
+          ["task-q1", "--body", "new current body", "--archive-body"],
+          b.ctx,
+        );
+        expect(out).toContain("ok: updated task-q1 (body, archive)");
+        expect(b.read()).toContain("\n  new current body");
+        expect(b.read()).not.toContain("old line one");
+        expect(b.noteArchive()).toContain("## Archived 2026-07-01");
+        expect(b.noteArchive()).toContain("- [ ] task-q1 - title");
+        expect(b.noteArchive()).toContain("old line one");
+        expect(b.noteArchive()).toContain("old line two");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("requires a replacement body with --archive-body", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          updateCommand(["cert-cleanup", "--archive-body"], b.ctx),
+        ).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: "--archive-body requires --body or --body-file",
+        });
       } finally {
         b.cleanup();
       }
@@ -681,7 +734,7 @@ describe("crud commands", () => {
       const b = makeBacklog();
       try {
         const out = await updateCommand(
-          ["cert-cleanup", "--append", "json note", "--json"],
+          ["cert-cleanup", "--body", "json body", "--json"],
           b.ctx,
         );
         const parsed = JSON.parse(out) as {
@@ -692,21 +745,9 @@ describe("crud commands", () => {
         };
         expect(parsed.ok).toBe(true);
         expect(parsed.action).toBe("update");
-        expect(parsed.changed).toContain("note");
+        expect(parsed.changed).toContain("body");
         expect(parsed.task.id).toBe("cert-cleanup");
         expect(out).not.toContain("help[");
-      } finally {
-        b.cleanup();
-      }
-    });
-
-    it("rejects an empty append before updating", async () => {
-      const b = makeBacklog();
-      try {
-        await expect(
-          updateCommand(["cert-cleanup", "--append", "   "], b.ctx),
-        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
-        expect(b.read()).not.toContain("\n     ");
       } finally {
         b.cleanup();
       }
@@ -727,7 +768,7 @@ describe("crud commands", () => {
       const b = makeBacklog();
       try {
         await expect(
-          updateCommand(["bad:id", "--append", "note"], b.ctx),
+          updateCommand(["bad:id", "--body", "note"], b.ctx),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
       } finally {
         b.cleanup();
@@ -738,7 +779,7 @@ describe("crud commands", () => {
       const b = makeBacklog();
       try {
         await expect(
-          updateCommand(["cert-cleanup", "extra", "--append", "note"], b.ctx),
+          updateCommand(["cert-cleanup", "extra", "--body", "note"], b.ctx),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         expect(b.read()).not.toContain("\n  note");
       } finally {

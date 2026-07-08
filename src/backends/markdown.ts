@@ -42,6 +42,8 @@ export interface MarkdownStoreOptions {
   path: string;
   /** Where pruned Done items are archived (default `<dir>/done-archive.md`). */
   archivePath?: string;
+  /** Where superseded task bodies are archived (default `<dir>/note-archive.md`). */
+  noteArchivePath?: string;
   /** Injectable clock returning a YYYY-MM-DD stamp (for tests). */
   now?: () => string;
 }
@@ -254,15 +256,24 @@ function taskToInput(task: Task): TaskInput {
 export class MarkdownStore implements Store {
   private readonly path: string;
   private readonly archivePath: string;
+  private readonly noteArchivePath: string;
   private readonly now: () => string;
 
   constructor(options: MarkdownStoreOptions) {
     this.path = options.path;
     this.archivePath =
       options.archivePath ?? `${dirname(options.path)}/done-archive.md`;
+    this.noteArchivePath =
+      options.noteArchivePath ?? `${dirname(options.path)}/note-archive.md`;
     if (resolve(this.archivePath) === resolve(this.path)) {
       throw new AxiError(
         "Archive path must not be the active backlog path",
+        "VALIDATION_ERROR",
+      );
+    }
+    if (resolve(this.noteArchivePath) === resolve(this.path)) {
+      throw new AxiError(
+        "Note archive path must not be the active backlog path",
         "VALIDATION_ERROR",
       );
     }
@@ -536,14 +547,24 @@ export class MarkdownStore implements Store {
       const found = this.findEntry(doc, id);
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
       const task = found.entry.task;
+      const supersededBody =
+        patch.archiveBody &&
+        patch.body !== undefined &&
+        task.body !== patch.body
+          ? task.body
+          : undefined;
+      const archivedTask =
+        supersededBody !== undefined
+          ? {
+              ...task,
+              body: supersededBody,
+              deps: task.deps.map((dep) => ({ ...dep })),
+              links: task.links.map((link) => ({ ...link })),
+            }
+          : undefined;
 
       if (patch.title !== undefined) task.title = normalizeTitle(patch.title);
       if (patch.body !== undefined) task.body = patch.body || undefined;
-      if (patch.appendBody !== undefined && patch.appendBody !== "") {
-        task.body = task.body
-          ? `${task.body}\n${patch.appendBody}`
-          : patch.appendBody;
-      }
       if (patch.repo !== undefined) {
         task.repo = normalizeTagValue(patch.repo, "repo");
       }
@@ -568,7 +589,22 @@ export class MarkdownStore implements Store {
       task.updated = this.now();
 
       found.entry.dirty = true;
-      this.persist(loaded);
+      let archiveRestorePoint: ArchiveRestorePoint | undefined;
+      if (archivedTask) {
+        this.assertUnchanged(loaded);
+        archiveRestorePoint = this.captureArchiveRestorePoint(
+          this.noteArchivePath,
+        );
+        this.appendNoteArchive(renderTaskLines(archivedTask));
+      }
+      try {
+        this.persist(loaded);
+      } catch (error) {
+        if (archiveRestorePoint) {
+          this.restoreArchive(archiveRestorePoint, this.noteArchivePath);
+        }
+        throw error;
+      }
       return task;
     });
   }
@@ -783,19 +819,24 @@ export class MarkdownStore implements Store {
     });
   }
 
-  private captureArchiveRestorePoint(): ArchiveRestorePoint {
+  private captureArchiveRestorePoint(
+    path: string = this.archivePath,
+  ): ArchiveRestorePoint {
     try {
-      return { existed: true, size: statSync(this.archivePath).size };
+      return { existed: true, size: statSync(path).size };
     } catch (error) {
       if (errno(error) === "ENOENT") return { existed: false, size: 0 };
       throw error;
     }
   }
 
-  private restoreArchive(point: ArchiveRestorePoint): void {
+  private restoreArchive(
+    point: ArchiveRestorePoint,
+    path: string = this.archivePath,
+  ): void {
     if (!point.existed) {
       try {
-        unlinkSync(this.archivePath);
+        unlinkSync(path);
       } catch (error) {
         if (errno(error) !== "ENOENT") throw error;
       }
@@ -803,17 +844,25 @@ export class MarkdownStore implements Store {
     }
 
     try {
-      truncateSync(this.archivePath, point.size);
+      truncateSync(path, point.size);
     } catch (error) {
       if (errno(error) !== "ENOENT") throw error;
     }
   }
 
   private appendArchive(lines: string[]): void {
-    mkdirSync(dirname(this.archivePath), { recursive: true });
+    this.appendArchiveBlock(this.archivePath, lines);
+  }
+
+  private appendNoteArchive(lines: string[]): void {
+    this.appendArchiveBlock(this.noteArchivePath, lines);
+  }
+
+  private appendArchiveBlock(path: string, lines: string[]): void {
+    mkdirSync(dirname(path), { recursive: true });
     const stamp = this.now();
     const block = `\n## Archived ${stamp}\n${lines.join("\n")}\n`;
-    appendFileSync(this.archivePath, block, "utf8");
+    appendFileSync(path, block, "utf8");
   }
 
   async render(): Promise<number> {

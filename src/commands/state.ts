@@ -256,7 +256,7 @@ function doneMetadataPatch(
   if (report !== undefined) addLinks.push({ kind: "report", url: report });
   if (addLinks.length > 0) patch.addLinks = addLinks;
   if (note !== undefined && !bodyHasLine(current?.body, note)) {
-    patch.appendBody = note;
+    patch.body = current?.body ? `${current.body}\n${note}` : note;
   }
   return patch;
 }

@@ -40,6 +40,7 @@ export interface TempBacklog {
   ctx: TasksContext;
   read(): string;
   archive(): string;
+  noteArchive(): string;
   cleanup(): void;
 }
 
@@ -62,6 +63,13 @@ export function makeBacklog(content = FIXTURE, now = "2026-07-01"): TempBacklog 
     archive: () => {
       try {
         return readFileSync(join(dir, "done-archive.md"), "utf8");
+      } catch {
+        return "";
+      }
+    },
+    noteArchive: () => {
+      try {
+        return readFileSync(join(dir, "note-archive.md"), "utf8");
       } catch {
         return "";
       }
