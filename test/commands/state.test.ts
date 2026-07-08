@@ -311,6 +311,43 @@ describe("state commands", () => {
       }
     });
 
+    it("preserves body edits made before an already-done note update", async () => {
+      const b = makeBacklog();
+      try {
+        const originalUpdate = b.store.update.bind(
+          b.store,
+        ) as typeof b.store.update;
+        let injected = false;
+        b.store.update = async (taskId, patch) => {
+          if (!injected) {
+            injected = true;
+            writeFileSync(
+              b.path,
+              b
+                .read()
+                .replace(
+                  /^(- \[x\] lease-core-t4 - .*)$/m,
+                  "$1\n  concurrent audit note",
+                ),
+              "utf8",
+            );
+          }
+          return originalUpdate(taskId, patch);
+        };
+
+        await doneCommand(
+          ["lease-core-t4", "--note", "backfilled review evidence", "--no-prune"],
+          b.ctx,
+        );
+
+        const read = b.read();
+        expect(read).toContain("concurrent audit note");
+        expect(read).toContain("backfilled review evidence");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("does not duplicate an already-done note on retry", async () => {
       const b = makeBacklog();
       try {

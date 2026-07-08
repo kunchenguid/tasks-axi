@@ -161,7 +161,7 @@ export async function doneCommand(
   if (note !== undefined) opts.note = note;
 
   if (current.state === "done") {
-    const patch = doneMetadataPatch(pr, report, note, current);
+    const patch = doneMetadataPatch(pr, report, note);
     const hasPatch = Object.keys(patch).length > 0;
     let task = current;
     if (hasPatch) {
@@ -248,21 +248,14 @@ function doneMetadataPatch(
   pr: string | undefined,
   report: string | undefined,
   note: string | undefined,
-  current?: Task,
 ): TaskPatch {
   const patch: TaskPatch = {};
   const addLinks: TaskLink[] = [];
   if (pr !== undefined) addLinks.push({ kind: "pr", url: pr });
   if (report !== undefined) addLinks.push({ kind: "report", url: report });
   if (addLinks.length > 0) patch.addLinks = addLinks;
-  if (note !== undefined && !bodyHasLine(current?.body, note)) {
-    patch.body = current?.body ? `${current.body}\n${note}` : note;
-  }
+  if (note !== undefined) patch.addBodyLines = [note];
   return patch;
-}
-
-function bodyHasLine(body: string | undefined, line: string): boolean {
-  return body?.split("\n").includes(line) ?? false;
 }
 
 export async function reopenCommand(

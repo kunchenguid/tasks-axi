@@ -334,6 +334,21 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("adds body lines without duplicating existing lines", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## Queued\n- [ ] task-q1 - title\n  old note\n\n## Done\n",
+      );
+      try {
+        await b.store.update("task-q1", {
+          addBodyLines: ["old note", "new note"],
+        });
+        expect(b.read().match(/old note/g)).toHaveLength(1);
+        expect(b.read()).toContain("\n  new note");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("archives the superseded body before replacing it", async () => {
       const b = makeBacklog(
         "# Backlog\n\n## Queued\n- [ ] task-q1 - title\n  old note\n  second old note\n\n## Done\n",

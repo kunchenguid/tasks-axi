@@ -234,6 +234,14 @@ function appendTitleLink(title: string, link: TaskLink): string {
   return normalizeTitle(`${title} ${url}`);
 }
 
+function bodyHasLine(body: string | undefined, line: string): boolean {
+  return body?.split("\n").includes(line) ?? false;
+}
+
+function addBodyLine(body: string | undefined, line: string): string {
+  return body ? `${body}\n${line}` : line;
+}
+
 function taskToInput(task: Task): TaskInput {
   const input: TaskInput = {
     id: task.id,
@@ -565,6 +573,11 @@ export class MarkdownStore implements Store {
 
       if (patch.title !== undefined) task.title = normalizeTitle(patch.title);
       if (patch.body !== undefined) task.body = patch.body || undefined;
+      for (const line of patch.addBodyLines ?? []) {
+        if (line !== "" && !bodyHasLine(task.body, line)) {
+          task.body = addBodyLine(task.body, line);
+        }
+      }
       if (patch.repo !== undefined) {
         task.repo = normalizeTagValue(patch.repo, "repo");
       }

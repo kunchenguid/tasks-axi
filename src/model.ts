@@ -109,6 +109,8 @@ export interface TaskPatch {
   body?: string;
   /** Archive the previous body before a body replacement. */
   archiveBody?: boolean;
+  /** Add body lines when they are not already present. */
+  addBodyLines?: string[];
   repo?: string;
   kind?: string;
   /** Links to add (existing links are preserved). */
