@@ -164,8 +164,11 @@ export async function doneCommand(
     const patch = doneMetadataPatch(pr, report, note);
     const hasPatch = Object.keys(patch).length > 0;
     let task = current;
+    let changed = false;
     if (hasPatch) {
-      task = await store.update(id, patch);
+      const result = await store.update(id, patch);
+      task = result.task;
+      changed = result.changed.length > 0;
     }
     const pruned = await pruneDone(store, keep, noPrune);
     const all = (await store.list({})).items;
@@ -180,7 +183,7 @@ export async function doneCommand(
         pruned,
         task: taskToJson(task, all),
       },
-      ...(hasPatch
+      ...(changed
         ? { detail: renderTaskDetail(task, all, false, showFullTextHint(task)) }
         : {}),
       suggestions: getSuggestions({
@@ -474,7 +477,9 @@ export async function holdCommand(
     ...(until !== undefined ? { until } : {}),
   };
   const already = sameHold(current.hold, hold);
-  const task = already ? current : await store.update(id, { hold });
+  const task = already
+    ? current
+    : (await store.update(id, { hold })).task;
   const all = (await store.list({})).items;
   return renderMutation({
     json,
@@ -518,7 +523,9 @@ export async function unholdCommand(
   if (!current) throw notFound(id, { globals: context?.suggestionGlobals });
 
   const already = current.hold === undefined;
-  const task = already ? current : await store.update(id, { hold: null });
+  const task = already
+    ? current
+    : (await store.update(id, { hold: null })).task;
   const all = (await store.list({})).items;
   return renderMutation({
     json,

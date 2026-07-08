@@ -369,10 +369,11 @@ describe("MarkdownStore", () => {
         "# Backlog\n\n## Queued\n- [ ] task-q1 - title\n  old note\n  second old note\n\n## Done\n",
       );
       try {
-        await b.store.update("task-q1", {
+        const result = await b.store.update("task-q1", {
           body: "current note",
           archiveBody: true,
         });
+        expect(result.changed).toEqual(["body", "archive"]);
         expect(b.read()).toContain("\n  current note");
         expect(b.read()).not.toContain("old note");
         expect(b.noteArchive()).toContain("## Archived 2026-07-01");
@@ -389,10 +390,11 @@ describe("MarkdownStore", () => {
         "# Backlog\n\n## Queued\n- [ ] task-q1 - title\n  current note\n\n## Done\n",
       );
       try {
-        await b.store.update("task-q1", {
+        const result = await b.store.update("task-q1", {
           body: "current note",
           archiveBody: true,
         });
+        expect(result.changed).toEqual([]);
         expect(b.noteArchive()).toBe("");
       } finally {
         b.cleanup();
@@ -456,7 +458,7 @@ describe("MarkdownStore", () => {
     it("sets repo and kind as canonical tags", async () => {
       const b = makeBacklog();
       try {
-        const task = await b.store.update("cert-cleanup", {
+        const { task } = await b.store.update("cert-cleanup", {
           repo: "other",
           kind: "docs",
         });
@@ -471,7 +473,7 @@ describe("MarkdownStore", () => {
     it("folds an added link into the prose and re-derives links", async () => {
       const b = makeBacklog();
       try {
-        const task = await b.store.update("cert-cleanup", {
+        const { task } = await b.store.update("cert-cleanup", {
           addLinks: [{ kind: "pr", url: "https://github.com/o/r/pull/9" }],
         });
         expect(task.links).toContainEqual({
@@ -489,7 +491,7 @@ describe("MarkdownStore", () => {
         "# Backlog\n\n## Queued\n- [ ] task-q1 - title https://github.com/o/r/pull/10\n\n## Done\n",
       );
       try {
-        const task = await b.store.update("task-q1", {
+        const { task } = await b.store.update("task-q1", {
           addLinks: [{ kind: "pr", url: "https://github.com/o/r/pull/1" }],
         });
         expect(task.links).toContainEqual({

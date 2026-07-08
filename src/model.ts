@@ -121,6 +121,22 @@ export interface TaskPatch {
   meta?: Record<string, unknown>;
 }
 
+export type TaskUpdateChange =
+  | "title"
+  | "body"
+  | "archive"
+  | "repo"
+  | "kind"
+  | "priority"
+  | "links"
+  | "hold"
+  | "meta";
+
+export interface TaskUpdateResult {
+  task: Task;
+  changed: TaskUpdateChange[];
+}
+
 /** Options for a state transition. */
 export interface TransitionOpts {
   /** PR url to record (done). */

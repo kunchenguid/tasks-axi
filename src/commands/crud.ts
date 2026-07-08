@@ -30,6 +30,7 @@ import {
   type TaskInput,
   type TaskLink,
   type TaskPatch,
+  type TaskUpdateChange,
 } from "../model.js";
 import type { Store } from "../store.js";
 import { getSuggestions } from "../suggestions.js";
@@ -548,15 +549,20 @@ export async function updateCommand(
   if (!(await store.get(id))) {
     throw notFound(id, { globals: context?.suggestionGlobals });
   }
-  const task = await store.update(id, patch);
+  const result = await store.update(id, patch);
+  const task = result.task;
+  const changed = orderUpdateChanges(result.changed);
+  const already = changed.length === 0;
   const all = (await store.list({})).items;
   return renderMutation({
     json,
-    confirm: `updated ${id} (${changedFields(patch).join(", ")})`,
+    confirm: already ? `updated ${id} already` : `updated ${id} (${changed.join(", ")})`,
+    already,
     jsonPayload: {
       ok: true,
       action: "update",
-      changed: changedFields(patch),
+      ...(already ? { already: true } : {}),
+      changed,
       task: taskToJson(task, all),
     },
     detail: renderTaskDetail(task, all, false, showFullTextHint(task)),
@@ -568,20 +574,19 @@ export async function updateCommand(
   });
 }
 
-/** Friendly names of the fields a patch touched, for the update confirmation. */
-function changedFields(patch: TaskPatch): string[] {
-  const labels: Array<[keyof TaskPatch, string]> = [
-    ["title", "title"],
-    ["body", "body"],
-    ["archiveBody", "archive"],
-    ["repo", "repo"],
-    ["kind", "kind"],
-    ["priority", "priority"],
-    ["addLinks", "links"],
+function orderUpdateChanges(changed: TaskUpdateChange[]): TaskUpdateChange[] {
+  const order: TaskUpdateChange[] = [
+    "title",
+    "body",
+    "archive",
+    "repo",
+    "kind",
+    "priority",
+    "links",
+    "hold",
+    "meta",
   ];
-  return labels
-    .filter(([key]) => patch[key] !== undefined)
-    .map(([, label]) => label);
+  return order.filter((field) => changed.includes(field));
 }
 
 export async function rmCommand(

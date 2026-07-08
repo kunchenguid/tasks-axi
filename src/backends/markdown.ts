@@ -17,6 +17,8 @@ import type {
   TaskLink,
   TaskPatch,
   TaskQuery,
+  TaskUpdateChange,
+  TaskUpdateResult,
   TransitionOpts,
 } from "../model.js";
 import { HOLD_KINDS } from "../model.js";
@@ -568,7 +570,7 @@ export class MarkdownStore implements Store {
     });
   }
 
-  async update(id: string, patch: TaskPatch): Promise<Task> {
+  async update(id: string, patch: TaskPatch): Promise<TaskUpdateResult> {
     return withLock(this.path, () => {
       const loaded = this.loadForUpdate();
       const { doc } = loaded;
@@ -593,22 +595,25 @@ export class MarkdownStore implements Store {
             }
           : undefined;
 
-      let changed = false;
+      const changed: TaskUpdateChange[] = [];
+      const markChanged = (field: TaskUpdateChange) => {
+        if (!changed.includes(field)) changed.push(field);
+      };
       if (patch.title !== undefined) {
         const title = normalizeTitle(patch.title);
         if (task.title !== title) {
           task.title = title;
-          changed = true;
+          markChanged("title");
         }
       }
       if (patch.body !== undefined && task.body !== nextBody) {
         task.body = nextBody;
-        changed = true;
+        markChanged("body");
       }
       for (const line of patch.addBodyLines ?? []) {
         if (line !== "" && !bodyHasLine(task.body, line)) {
           task.body = addBodyLine(task.body, line);
-          changed = true;
+          markChanged("body");
         }
       }
       if (patch.repo !== undefined) {
@@ -619,7 +624,7 @@ export class MarkdownStore implements Store {
           } else {
             task.repo = repo;
           }
-          changed = true;
+          markChanged("repo");
         }
       }
       if (patch.kind !== undefined) {
@@ -630,7 +635,7 @@ export class MarkdownStore implements Store {
           } else {
             task.kind = kind;
           }
-          changed = true;
+          markChanged("kind");
         }
       }
       if (patch.hold !== undefined) {
@@ -641,31 +646,31 @@ export class MarkdownStore implements Store {
           } else {
             delete task.hold;
           }
-          changed = true;
+          markChanged("hold");
         }
       }
       if (patch.priority !== undefined) {
         const priority = normalizePriority(patch.priority);
         if (task.priority !== priority) {
           task.priority = priority;
-          changed = true;
+          markChanged("priority");
         }
       }
       if (patch.meta) {
         const meta = { ...task.meta, ...patch.meta };
         if (!sameMeta(task.meta, meta)) {
           task.meta = meta;
-          changed = true;
+          markChanged("meta");
         }
       }
       for (const link of patch.addLinks ?? []) {
         const title = appendTitleLink(task.title, link);
         if (task.title !== title) {
           task.title = title;
-          changed = true;
+          markChanged("links");
         }
       }
-      if (!changed) return task;
+      if (changed.length === 0) return { task, changed };
 
       task.links = deriveLinks(task.title);
       task.updated = this.now();
@@ -677,6 +682,7 @@ export class MarkdownStore implements Store {
           this.noteArchivePath,
         );
         this.appendNoteArchive(renderTaskLines(archivedTask));
+        markChanged("archive");
       }
       try {
         this.persist(loaded);
@@ -686,7 +692,7 @@ export class MarkdownStore implements Store {
         }
         throw error;
       }
-      return task;
+      return { task, changed };
     });
   }
 

@@ -753,6 +753,31 @@ describe("crud commands", () => {
       }
     });
 
+    it("reports an unchanged body replacement as already done", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## Queued\n- [ ] task-q1 - title\n  current note\n\n## Done\n",
+      );
+      try {
+        const out = await updateCommand(
+          ["task-q1", "--body", "current note", "--archive-body", "--json"],
+          b.ctx,
+        );
+        const parsed = JSON.parse(out) as {
+          ok: boolean;
+          action: string;
+          already?: boolean;
+          changed: string[];
+        };
+        expect(parsed.ok).toBe(true);
+        expect(parsed.action).toBe("update");
+        expect(parsed.already).toBe(true);
+        expect(parsed.changed).toEqual([]);
+        expect(b.noteArchive()).toBe("");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("requires at least one field", async () => {
       const b = makeBacklog();
       try {

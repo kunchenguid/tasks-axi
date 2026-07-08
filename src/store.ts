@@ -4,6 +4,7 @@ import type {
   Task,
   TaskInput,
   TaskPatch,
+  TaskUpdateResult,
   TaskQuery,
   TransitionOpts,
 } from "./model.js";
@@ -54,7 +55,7 @@ export interface Store {
   // CRUD
   create(input: TaskInput): Promise<Task>;
   get(id: string): Promise<Task | null>;
-  update(id: string, patch: TaskPatch): Promise<Task>;
+  update(id: string, patch: TaskPatch): Promise<TaskUpdateResult>;
   remove(id: string): Promise<Task>;
 
   // query
