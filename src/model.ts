@@ -10,8 +10,26 @@
 export const STATES = ["queued", "in_flight", "done"] as const;
 export type State = (typeof STATES)[number];
 
-/** State plus the derived `blocked` projection used in display/filters. */
-export type DerivedState = State | "blocked";
+/** Explicit state plus derived `blocked`/`held` projections used in display/filters. */
+export type DerivedState = State | "blocked" | "held";
+
+export const HOLD_KINDS = [
+  "captain",
+  "external",
+  "load",
+  "parked",
+  "future",
+] as const;
+export type HoldKind = (typeof HOLD_KINDS)[number];
+
+export interface Hold {
+  /** Human-readable reason for pausing dispatch. */
+  reason: string;
+  /** Optional coarse bucket for scanning held work. */
+  kind?: HoldKind;
+  /** YYYY-MM-DD date gate. The hold is inactive on and after this date. */
+  until?: string;
+}
 
 /**
  * Dependency edge types. firstmate uses only `blocked-by` today; `parent` and
@@ -54,6 +72,8 @@ export interface Task {
   links: TaskLink[];
   /** Typed dependency edges (firstmate uses blocked-by today). */
   deps: Dep[];
+  /** Structured dispatch hold. Active holds keep queued work out of ready. */
+  hold?: Hold;
   /** 0-4, optional (borrowed from beads; firstmate orders by list position). */
   priority?: number;
   /** Maps to `(since ...)`. */
@@ -75,6 +95,7 @@ export interface TaskInput {
   body?: string;
   links?: TaskLink[];
   deps?: Dep[];
+  hold?: Hold;
   priority?: number;
   created?: string | null;
   closed?: string;
@@ -92,6 +113,8 @@ export interface TaskPatch {
   kind?: string;
   /** Links to add (existing links are preserved). */
   addLinks?: TaskLink[];
+  /** Set a structured hold, or clear it with null. */
+  hold?: Hold | null;
   priority?: number;
   meta?: Record<string, unknown>;
 }
@@ -108,7 +131,7 @@ export interface TransitionOpts {
   date?: string;
 }
 
-/** A list query. `blocked`/ready derivation is computed in the CLI layer. */
+/** A list query. `blocked`/`ready`/`held` derivation is computed in the CLI layer. */
 export interface TaskQuery {
   state?: State;
   repo?: string;

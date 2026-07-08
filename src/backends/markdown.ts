@@ -10,6 +10,7 @@ import { AxiError } from "../errors.js";
 import { validateDependencyId, validateId } from "../id.js";
 import type {
   Dep,
+  Hold,
   State,
   Task,
   TaskInput,
@@ -18,6 +19,7 @@ import type {
   TaskQuery,
   TransitionOpts,
 } from "../model.js";
+import { HOLD_KINDS } from "../model.js";
 import type {
   Capabilities,
   PruneOptions,
@@ -154,6 +156,34 @@ function normalizePriority(priority: number | undefined): number | undefined {
   return priority;
 }
 
+function normalizeHold(hold: Hold | undefined): Hold | undefined {
+  if (hold === undefined) return undefined;
+  if (/[\r\n()]/.test(hold.reason)) {
+    throw new AxiError(
+      "Task hold reason must be a single line without parentheses",
+      "VALIDATION_ERROR",
+    );
+  }
+  const reason = hold.reason.trim();
+  if (reason === "") {
+    throw new AxiError("Task hold reason must not be empty", "VALIDATION_ERROR");
+  }
+  const normalized: Hold = { reason };
+  if (hold.kind !== undefined) {
+    if (!(HOLD_KINDS as readonly string[]).includes(hold.kind)) {
+      throw new AxiError(
+        `Task hold kind must be one of ${HOLD_KINDS.join(", ")}`,
+        "VALIDATION_ERROR",
+      );
+    }
+    normalized.kind = hold.kind;
+  }
+  if (hold.until !== undefined) {
+    normalized.until = normalizeDate(hold.until, "hold-until date");
+  }
+  return normalized;
+}
+
 function normalizeDate(value: string, field: string): string {
   if (!DATE_RE.test(value)) {
     throw new AxiError(
@@ -213,6 +243,7 @@ function taskToInput(task: Task): TaskInput {
   if (task.kind) input.kind = task.kind;
   if (task.repo) input.repo = task.repo;
   if (task.body) input.body = task.body;
+  if (task.hold) input.hold = { ...task.hold };
   if (task.priority !== undefined) input.priority = task.priority;
   input.created = task.created ?? null;
   if (task.closed) input.closed = task.closed;
@@ -455,6 +486,8 @@ export class MarkdownStore implements Store {
     if (kind) task.kind = kind;
     if (repo) task.repo = repo;
     if (input.body) task.body = input.body;
+    const hold = normalizeHold(input.hold);
+    if (hold) task.hold = hold;
     const priority = normalizePriority(input.priority);
     if (priority !== undefined) task.priority = priority;
     if (input.meta) task.meta = input.meta;
@@ -516,6 +549,14 @@ export class MarkdownStore implements Store {
       }
       if (patch.kind !== undefined) {
         task.kind = normalizeTagValue(patch.kind, "kind");
+      }
+      if (patch.hold !== undefined) {
+        const hold = normalizeHold(patch.hold ?? undefined);
+        if (hold) {
+          task.hold = hold;
+        } else {
+          delete task.hold;
+        }
       }
       const priority = normalizePriority(patch.priority);
       if (priority !== undefined) task.priority = priority;

@@ -4,12 +4,15 @@ import { describe, expect, it } from "vitest";
 import {
   blockCommand,
   doneCommand,
+  holdCommand,
   mvCommand,
   readyCommand,
   reopenCommand,
   startCommand,
   unblockCommand,
+  unholdCommand,
 } from "../../src/commands/state.js";
+import { listCommand } from "../../src/commands/crud.js";
 import { makeBacklog } from "../helpers.js";
 
 describe("state commands", () => {
@@ -23,6 +26,8 @@ describe("state commands", () => {
         () => reopenCommand(["bad:id"], b.ctx),
         () => blockCommand(["bad:id", "--by", "owns-widget-h7"], b.ctx),
         () => unblockCommand(["bad:id", "--by", "owns-widget-h7"], b.ctx),
+        () => holdCommand(["bad:id", "--reason", "wait"], b.ctx),
+        () => unholdCommand(["bad:id"], b.ctx),
         () => mvCommand(["bad:id", "--to", target.path], b.ctx),
       ];
       for (const run of cases) {
@@ -487,6 +492,95 @@ describe("state commands", () => {
       }
     });
 
+    it("excludes held tasks by default", async () => {
+      const b = makeBacklog();
+      try {
+        await holdCommand(
+          [
+            "cert-cleanup",
+            "--reason",
+            "captain decision pending",
+            "--kind",
+            "captain",
+          ],
+          b.ctx,
+        );
+        const out = await readyCommand([], b.ctx);
+        expect(out).toContain("ready[");
+        expect(out).not.toContain("cert-cleanup");
+        expect(b.read()).toContain(
+          "(hold: captain decision pending) (hold-kind: captain)",
+        );
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("treats future hold-until as held and past hold-until as ready", async () => {
+      const b = makeBacklog(
+        [
+          "# Backlog",
+          "",
+          "## Queued",
+          "- [ ] future-q1 - future work (hold: wait for launch) (hold-until: 2999-01-01)",
+          "- [ ] past-q1 - past work (hold: old wait) (hold-until: 2000-01-01)",
+          "",
+          "## Done",
+          "",
+        ].join("\n"),
+      );
+      try {
+        const out = await readyCommand([], b.ctx);
+        expect(out).not.toContain("future-q1");
+        expect(out).toContain("past-q1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("shows active held tasks in a separate group with --include-held", async () => {
+      const b = makeBacklog();
+      try {
+        await holdCommand(
+          [
+            "cert-cleanup",
+            "--reason",
+            "load clears",
+            "--kind",
+            "load",
+            "--until",
+            "2999-01-01",
+          ],
+          b.ctx,
+        );
+        const out = await readyCommand(["--include-held"], b.ctx);
+        expect(out).toContain("ready[");
+        expect(out).toContain("held[");
+        expect(out).toContain("hold_reason");
+        expect(out).toContain("load clears");
+        expect(out).toContain("2999-01-01");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("filters list to active held tasks with --state held", async () => {
+      const b = makeBacklog();
+      try {
+        await holdCommand(["cert-cleanup", "--reason", "park it"], b.ctx);
+        const out = await listCommand(
+          ["--state", "held", "--fields", "held,hold_reason"],
+          b.ctx,
+        );
+        expect(out).toContain("cert-cleanup");
+        expect(out).toContain("held");
+        expect(out).toContain("park it");
+        expect(out).not.toContain("lease-adopt");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("gives a definitive empty state", async () => {
       const b = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
       try {
@@ -530,6 +624,91 @@ describe("state commands", () => {
         await expect(readyCommand(flagArgs, b.ctx)).rejects.toMatchObject({
           code: "VALIDATION_ERROR",
         });
+      } finally {
+        b.cleanup();
+      }
+    });
+  });
+
+  describe("hold", () => {
+    it("records and clears a structured hold idempotently", async () => {
+      const b = makeBacklog();
+      try {
+        const held = await holdCommand(
+          [
+            "cert-cleanup",
+            "--reason",
+            "captain decision pending",
+            "--kind",
+            "captain",
+            "--until",
+            "2999-01-01",
+          ],
+          b.ctx,
+        );
+        expect(held).toContain("ok: hold cert-cleanup -> held");
+        expect(held).toContain("hold_reason: captain decision pending");
+        expect(b.read()).toContain(
+          "(hold: captain decision pending) (hold-kind: captain) (hold-until: 2999-01-01)",
+        );
+
+        const heldAgain = await holdCommand(
+          [
+            "cert-cleanup",
+            "--reason",
+            "captain decision pending",
+            "--kind",
+            "captain",
+            "--until",
+            "2999-01-01",
+          ],
+          b.ctx,
+        );
+        expect(heldAgain).toContain("already: true");
+        expect(heldAgain).toContain("ok: hold cert-cleanup already held");
+
+        const cleared = await unholdCommand(["cert-cleanup"], b.ctx);
+        expect(cleared).toContain("ok: unhold cert-cleanup -> cleared");
+        expect(b.read()).not.toContain("(hold:");
+
+        const clearedAgain = await unholdCommand(["cert-cleanup"], b.ctx);
+        expect(clearedAgain).toContain("already: true");
+        expect(clearedAgain).toContain("ok: unhold cert-cleanup already not held");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("fails closed on unknown ids", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          holdCommand(["missing-q1", "--reason", "wait"], b.ctx),
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
+        await expect(unholdCommand(["missing-q1"], b.ctx)).rejects.toMatchObject(
+          { code: "NOT_FOUND" },
+        );
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects missing or unsafe hold fields before mutating", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(holdCommand(["cert-cleanup"], b.ctx)).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+        });
+        await expect(
+          holdCommand(["cert-cleanup", "--reason", "wait (blocked)"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await expect(
+          holdCommand(
+            ["cert-cleanup", "--reason", "wait", "--until", "07/10/2026"],
+            b.ctx,
+          ),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("(hold:");
       } finally {
         b.cleanup();
       }

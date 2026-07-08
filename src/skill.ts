@@ -3,11 +3,11 @@ import { DESCRIPTION, TOP_HELP } from "./cli.js";
 // Trigger string agents match against to auto-load the skill. Terse and
 // outcome-focused so it fires on "manage the backlog / track tasks" intents.
 export const SKILL_DESCRIPTION =
-  "Manage a task backlog through the tasks-axi CLI — add, list, show, start, " +
-  "and complete tasks; track blocked-by dependencies and a ready queue; prune " +
-  "and normalize a hand-editable backlog.md. Use whenever a task touches " +
+  "Manage a task backlog through the tasks-axi CLI - add, list, show, start, " +
+  "and complete tasks; track blocked-by dependencies, structured holds, and a " +
+  "ready queue; prune and normalize a hand-editable backlog.md. Use whenever a task touches " +
   "backlog or task state: filing or dispatching work, recording a PR or report " +
-  "on completion, finding unblocked work, or trimming the Done list.";
+  "on completion, finding dispatchable or held work, or trimming the Done list.";
 
 export const SKILL_AUTHOR = "Kun Chen (kunchenguid)";
 
@@ -60,17 +60,19 @@ tasks-axi operates on a hand-editable \`backlog.md\` in the current workspace (o
 
 ## When to use
 
-Use tasks-axi whenever a task touches the backlog: filing or dispatching work, moving a task through queued -> in flight -> done, recording a PR url or report path on completion, tracking blocked-by dependencies, finding unblocked (ready) work, or trimming the Done list.
+Use tasks-axi whenever a task touches the backlog: filing or dispatching work, moving a task through queued -> in flight -> done, recording a PR url or report path on completion, tracking blocked-by dependencies, pausing dispatch with structured holds, finding dispatchable ready work or intentionally held work, or trimming the Done list.
 
 ## Workflow
 
 1. Run \`npx -y tasks-axi\` with no arguments for a dashboard of the current backlog - in flight work, queued work with blockers, and suggested next commands.
-2. Drill in verb-first: \`list\`, \`show <id>\`, \`ready\`, then mutate with \`add\`, \`start\`, \`done\`, \`block\`/\`unblock\`, \`update\`.
+2. Drill in verb-first: \`list\`, \`show <id>\`, \`ready\`, then mutate with \`add\`, \`start\`, \`done\`, \`block\`/\`unblock\`, \`hold\`/\`unhold\`, \`update\`.
 3. The long notes never appear in \`list\`; run \`show <id> --full\` to read a task's complete body.
 4. \`add\` takes a caller-supplied id (the join key), e.g. \`tasks-axi add fm-x "title" --kind ship --repo firstmate --start\`; or pass \`--mint\` to generate a slug-xx id from the title.
 5. \`done <id> --pr <url>\` (or \`--report <path>\`) closes a task, records the link, and prunes the Done list (archived, never deleted). Then \`ready\` shows work it unblocked.
-6. Human-readable responses include contextual next-step hints under \`help:\` when there is a useful follow-up - follow them.
-7. \`--json\` mutation responses skip \`help:\` and return the deterministic result object instead.
+6. \`hold <id> --reason "<text>"\` pauses dispatch without prose parsing; \`ready\` excludes active holds by default, and \`ready --include-held\` shows a separate held group.
+   Use \`--until YYYY-MM-DD\` for a date gate that becomes inactive on and after that date.
+7. Human-readable responses include contextual next-step hints under \`help:\` when there is a useful follow-up - follow them.
+8. \`--json\` mutation responses skip \`help:\` and return the deterministic result object instead.
 
 ## Commands
 
@@ -86,9 +88,12 @@ Run \`npx -y tasks-axi --help\` for global flags, or \`npx -y tasks-axi <command
   Use \`--full\` only when you need the complete notes.
 - Every write leads with an \`ok:\` line confirming the write result, including the resulting task state when the command changes one (e.g. \`ok: start <id> -> In flight\`, \`ok: done <id> -> Done (pr <url>)\`, \`ok: render -> normalized <n>\`), then state-aware next-step hints.
   Mutations are idempotent and add \`already: true\` on a no-op; re-running is safe.
-- Pass \`--json\` to any mutation (\`add\`, \`start\`, \`done\`, \`reopen\`, \`update\`, \`rm\`, \`block\`, \`unblock\`, \`mv\`, \`prune\`, \`render\`) for a machine-readable result object (\`{ "ok": true, "action": ..., "task": { ... } }\` or operation-specific result fields) instead of TOON - confirm a write deterministically without a follow-up read.
-- \`block <id> --by <other>\` and \`unblock\` manage the dependency graph; \`ready\` lists only queued work with no unresolved blocker.
+- Pass \`--json\` to any mutation (\`add\`, \`start\`, \`done\`, \`reopen\`, \`update\`, \`rm\`, \`block\`, \`unblock\`, \`hold\`, \`unhold\`, \`mv\`, \`prune\`, \`render\`) for a machine-readable result object (\`{ "ok": true, "action": ..., "task": { ... } }\` or operation-specific result fields) instead of TOON - confirm a write deterministically without a follow-up read.
+- \`block <id> --by <other>\` and \`unblock\` manage the dependency graph; \`hold <id> --reason "<text>" [--until YYYY-MM-DD]\` and \`unhold\` manage structured dispatch pauses; \`ready\` lists only queued work with no unresolved blocker and no active hold.
 - Filter \`list\` with \`--state\`, \`--repo\`, \`--kind\`, \`--blocked\`, \`--limit\`, and add columns with \`--fields a,b,c\`.
+  Use \`list --state held\` or \`--fields held,hold_reason,hold_kind,hold_until\` when scanning active hold state.
+- Existing prose markers such as \`HELD\`, \`PARKED\`, \`DEFERRED\`, \`CAPTAIN-DECISION\`, and \`do not dispatch\` stay prose until intentionally migrated.
+  Preserve the original prose as the hold reason, then choose \`captain\`, \`parked\`, \`future\`, \`load\`, or \`external\` only when the text supports that bucket.
 - \`update <id> --append "<note>"\` adds to a task's body; \`update <id> --body "<text>"\` or \`--body-file <path>\` replaces it, and \`--title "<text>"\` replaces the title; \`render\` normalizes the file; \`mv <id> --to <path>\` moves a task to another backlog.
 - Free-form (no-id) backlog lines are preserved verbatim and are never modified.
 `;

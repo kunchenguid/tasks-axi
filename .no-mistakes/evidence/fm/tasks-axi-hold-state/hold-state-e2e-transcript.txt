@@ -1,0 +1,189 @@
+# tasks-axi structured hold E2E transcript
+
+All commands run against `.no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md` from the worktree using the CLI entrypoint.
+
+$ pnpm exec tsx bin/tasks-axi.ts hold held-q1 --reason "captain decision pending" --kind captain --until 2999-01-01 --file .no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md
+ok: hold held-q1 -> held (captain, until 2999-01-01)
+task:
+  id: held-q1
+  title: paused task
+  state: queued
+  blocked: no
+  blocked_by: none
+  held: yes
+  hold_reason: captain decision pending
+  hold_kind: captain
+  hold_until: 2999-01-01
+  kind: task
+  repo: "-"
+  priority: "-"
+  created: "-"
+  closed: "-"
+  deps: none
+  links: none
+  body: ""
+help[2]:
+  - Run `tasks-axi unhold held-q1 --file=.no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md` to resume dispatch
+  - Run `tasks-axi ready --include-held --file=.no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md` to review paused work
+
+$ pnpm exec tsx bin/tasks-axi.ts hold held-q1 --reason "captain decision pending" --kind captain --until 2999-01-01 --json --file .no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md
+{
+  "ok": true,
+  "action": "hold",
+  "already": true,
+  "task": {
+    "id": "held-q1",
+    "title": "paused task",
+    "state": "queued",
+    "kind": null,
+    "repo": null,
+    "priority": null,
+    "created": null,
+    "closed": null,
+    "deps": [],
+    "hold": {
+      "reason": "captain decision pending",
+      "kind": "captain",
+      "until": "2999-01-01"
+    },
+    "links": [],
+    "body": null,
+    "blocked": false,
+    "blocked_by": [],
+    "held": true
+  }
+}
+
+$ pnpm exec tsx bin/tasks-axi.ts hold future-q1 --reason "start after launch" --kind future --until 2999-01-01 --file .no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md
+ok: hold future-q1 -> held (future, until 2999-01-01)
+task:
+  id: future-q1
+  title: future gated task
+  state: queued
+  blocked: no
+  blocked_by: none
+  held: yes
+  hold_reason: start after launch
+  hold_kind: future
+  hold_until: 2999-01-01
+  kind: task
+  repo: "-"
+  priority: "-"
+  created: "-"
+  closed: "-"
+  deps: none
+  links: none
+  body: ""
+help[2]:
+  - Run `tasks-axi unhold future-q1 --file=.no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md` to resume dispatch
+  - Run `tasks-axi ready --include-held --file=.no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md` to review paused work
+
+$ pnpm exec tsx bin/tasks-axi.ts hold missing-q1 --reason "wait" --file .no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md
+error: "Task \"missing-q1\" not found in this backlog"
+code: NOT_FOUND
+help[1]: Run `tasks-axi list --file=.no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md` to see existing tasks
+exit_code: 1
+
+$ pnpm exec tsx bin/tasks-axi.ts ready --file .no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md
+count: 3
+ready[3]{id,state,kind,repo,title}:
+  ready-q1,queued,task,"-",ready task
+  expired-q1,queued,task,"-",expired hold task
+  prose-held-q1,queued,task,"-",HELD prose marker should stay human prose
+help[1]:
+  - Run `tasks-axi start <id> --file=.no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md` to dispatch one of these
+
+$ pnpm exec tsx bin/tasks-axi.ts ready --include-held --file .no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md
+count: 3
+ready[3]{id,state,kind,repo,title}:
+  ready-q1,queued,task,"-",ready task
+  expired-q1,queued,task,"-",expired hold task
+  prose-held-q1,queued,task,"-",HELD prose marker should stay human prose
+held[2]{id,state,kind,repo,title,hold_reason,hold_kind,hold_until}:
+  held-q1,queued,task,"-",paused task,captain decision pending,captain,2999-01-01
+  future-q1,queued,task,"-",future gated task,start after launch,future,2999-01-01
+help[1]:
+  - Run `tasks-axi start <id> --file=.no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md` to dispatch one of these
+
+$ pnpm exec tsx bin/tasks-axi.ts list --state held --fields held,hold_reason,hold_kind,hold_until --file .no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md
+count: 2
+tasks[2]{id,state,kind,repo,title,held,hold_reason,hold_kind,hold_until}:
+  held-q1,queued,task,"-",paused task,yes,captain decision pending,captain,2999-01-01
+  future-q1,queued,task,"-",future gated task,yes,start after launch,future,2999-01-01
+help[1]:
+  - Run `tasks-axi show <id> --file=.no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md` for full notes on a task
+
+$ pnpm exec tsx bin/tasks-axi.ts unhold held-q1 --file .no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md
+ok: unhold held-q1 -> cleared
+task:
+  id: held-q1
+  title: paused task
+  state: queued
+  blocked: no
+  blocked_by: none
+  held: no
+  hold_reason: "-"
+  hold_kind: "-"
+  hold_until: "-"
+  kind: task
+  repo: "-"
+  priority: "-"
+  created: "-"
+  closed: "-"
+  deps: none
+  links: none
+  body: ""
+help[1]:
+  - Run `tasks-axi ready --file=.no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md` to see dispatchable work
+
+$ pnpm exec tsx bin/tasks-axi.ts unhold held-q1 --json --file .no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md
+{
+  "ok": true,
+  "action": "unhold",
+  "already": true,
+  "task": {
+    "id": "held-q1",
+    "title": "paused task",
+    "state": "queued",
+    "kind": null,
+    "repo": null,
+    "priority": null,
+    "created": null,
+    "closed": null,
+    "deps": [],
+    "hold": null,
+    "links": [],
+    "body": null,
+    "blocked": false,
+    "blocked_by": [],
+    "held": false
+  }
+}
+
+$ pnpm exec tsx bin/tasks-axi.ts ready --file .no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md
+count: 4
+ready[4]{id,state,kind,repo,title}:
+  ready-q1,queued,task,"-",ready task
+  held-q1,queued,task,"-",paused task
+  expired-q1,queued,task,"-",expired hold task
+  prose-held-q1,queued,task,"-",HELD prose marker should stay human prose
+help[1]:
+  - Run `tasks-axi start <id> --file=.no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md` to dispatch one of these
+
+$ sed -n '1,80p' .no-mistakes/evidence/fm/tasks-axi-hold-state/hold-state-e2e.backlog.md
+# Backlog
+
+## In flight
+- [ ] active-blocker - refactor blocker
+
+## Queued
+- [ ] ready-q1 - ready task
+- [ ] held-q1 - paused task
+- [ ] future-q1 - future gated task (hold: start after launch) (hold-kind: future) (hold-until: 2999-01-01)
+- [ ] expired-q1 - expired hold task (hold: launch has passed) (hold-kind: future) (hold-until: 2000-01-01)
+- [ ] blocked-q1 - blocked task blocked-by: active-blocker - waits for refactor
+- [ ] prose-held-q1 - HELD prose marker should stay human prose
+
+## Done
+- [x] done-q1 - finished
+

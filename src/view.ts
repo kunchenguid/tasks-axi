@@ -1,5 +1,5 @@
 import { truncate } from "./body.js";
-import { activeBlockers } from "./derive.js";
+import { activeBlockers, isHoldActive } from "./derive.js";
 import type { Task } from "./model.js";
 import { field, renderDetail, renderList, type FieldDef } from "./toon.js";
 
@@ -28,6 +28,7 @@ export function showFullTextHint(task: Task): string {
 
 export function toRow(task: Task, opts: RowOptions): Record<string, unknown> {
   const blockers = activeBlockers(task, opts.all);
+  const held = isHoldActive(task);
   return {
     id: task.id,
     title: opts.full
@@ -36,6 +37,10 @@ export function toRow(task: Task, opts: RowOptions): Record<string, unknown> {
     state: task.state,
     blocked: blockers.length > 0 ? "yes" : "no",
     blocked_by: blockers.length > 0 ? blockers.join(",") : "none",
+    held: held ? "yes" : "no",
+    hold_reason: task.hold?.reason ?? "-",
+    hold_kind: task.hold?.kind ?? "-",
+    hold_until: task.hold?.until ?? "-",
     kind: task.kind ?? "task",
     repo: task.repo ?? "-",
     priority: task.priority ?? "-",
@@ -71,6 +76,10 @@ export const LIST_EXTRA_FIELDS: Record<string, FieldDef> = {
   created: field("created"),
   closed: field("closed"),
   deps: field("deps"),
+  held: field("held"),
+  hold_kind: field("hold_kind"),
+  hold_reason: field("hold_reason"),
+  hold_until: field("hold_until"),
   links: field("links"),
   priority: field("priority"),
 };
@@ -81,6 +90,10 @@ const DETAIL_SCHEMA: FieldDef[] = [
   field("state"),
   field("blocked"),
   field("blocked_by"),
+  field("held"),
+  field("hold_reason"),
+  field("hold_kind"),
+  field("hold_until"),
   field("kind"),
   field("repo"),
   field("priority"),

@@ -1,6 +1,5 @@
 import {
   parseOptionalNonNegativeIntegerFlag,
-  parseStateFlag,
   requireNonEmptyFlagValue,
   requireNonEmptySingleLineFlagValue,
   requirePositionals,
@@ -13,7 +12,7 @@ import { takeBody } from "../body.js";
 import { deriveLinks, extractTags } from "../backends/markdown-grammar.js";
 import { renderMutation, stateLabel, taskToJson } from "../confirm.js";
 import { requireCtx, type TasksContext } from "../context.js";
-import { blockedIds } from "../derive.js";
+import { blockedIds, heldTasks } from "../derive.js";
 import { AxiError, notFound } from "../errors.js";
 import { parseFields } from "../fields.js";
 import { formatCountLine } from "../format.js";
@@ -24,7 +23,7 @@ import {
   validateDependencyId,
   validateId,
 } from "../id.js";
-import type { Dep, State, TaskInput, TaskLink, TaskPatch } from "../model.js";
+import { STATES, type Dep, type State, type TaskInput, type TaskLink, type TaskPatch } from "../model.js";
 import type { Store } from "../store.js";
 import { getSuggestions } from "../suggestions.js";
 import { renderHelp, renderOutput, renderScalar } from "../toon.js";
@@ -50,7 +49,7 @@ examples:
 
 export const LIST_HELP = `usage: tasks-axi list [flags]
 flags:
-  --state <queued|in_flight|done>, --repo <name>, --kind <name>, --blocked
+  --state <queued|in_flight|done|held>, --repo <name>, --kind <name>, --blocked
   --limit <n>, --fields <a,b,c>  (extra: ${Object.keys(LIST_EXTRA_FIELDS)
     .sort()
     .join(", ")})
@@ -153,6 +152,18 @@ function parseLinks(pr?: string, report?: string): TaskLink[] {
     links.push({ kind: "report", url: checkedReport });
   }
   return links;
+}
+
+type ListState = State | "held";
+
+function parseListStateFlag(raw: string | undefined): ListState | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === "held") return raw;
+  if ((STATES as readonly string[]).includes(raw)) return raw as State;
+  throw new AxiError(
+    "--state must be one of queued, in_flight, done, held",
+    "VALIDATION_ERROR",
+  );
 }
 
 function parsePriority(raw: string | undefined): number | undefined {
@@ -347,7 +358,7 @@ export async function listCommand(
     takeFlag(args, "--fields"),
     LIST_EXTRA_FIELDS,
   );
-  const state = parseStateFlag("--state", takeFlag(args, "--state"));
+  const state = parseListStateFlag(takeFlag(args, "--state"));
   const repo = requireNonEmptySingleLineFlagValue(
     "--repo",
     takeFlag(args, "--repo"),
@@ -368,9 +379,14 @@ export async function listCommand(
   // store. The store's own filtering is exercised by `home` and `ready`.
   const all = (await store.list({})).items;
   const blocked = blockedIds(all);
+  const held = new Set(heldTasks(all).map((t) => t.id));
 
   let matched = all;
-  if (state) matched = matched.filter((t) => t.state === state);
+  if (state === "held") {
+    matched = matched.filter((t) => held.has(t.id));
+  } else if (state) {
+    matched = matched.filter((t) => t.state === state);
+  }
   if (repo) matched = matched.filter((t) => t.repo === repo);
   if (kind) matched = matched.filter((t) => (t.kind ?? "task") === kind);
   if (onlyBlocked) matched = matched.filter((t) => blocked.has(t.id));

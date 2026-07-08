@@ -140,6 +140,20 @@ describe("markdown grammar", () => {
       expect(task.created).toBe("2026-07-01");
     });
 
+    it("extracts structured hold tags from the trailing tag region", () => {
+      const doc = parseBacklog(
+        "# Backlog\n\n## Queued\n- [ ] held-q1 - wait for launch (repo: app) (hold: load clears) (hold-kind: load) (hold-until: 2999-01-01)\n",
+      );
+      const task = tasksOf(doc)[0];
+      expect(task.title).toBe("wait for launch");
+      expect(task.repo).toBe("app");
+      expect(task.hold).toEqual({
+        reason: "load clears",
+        kind: "load",
+        until: "2999-01-01",
+      });
+    });
+
     it("reads indented continuation lines as the body", () => {
       const task = tasksOf(parseBacklog(FIXTURE)).find(
         (t) => t.id === "multi-line-w8",
@@ -217,6 +231,24 @@ describe("markdown grammar", () => {
         "- [ ] x-q1 - title",
         "  line one",
         "  line two",
+      ]);
+    });
+
+    it("renders structured holds as canonical human-readable tags", () => {
+      const task: Task = {
+        id: "held-q1",
+        title: "wait for launch",
+        state: "queued",
+        hold: {
+          reason: "load clears",
+          kind: "load",
+          until: "2999-01-01",
+        },
+        links: [],
+        deps: [],
+      };
+      expect(renderTaskLines(task)).toEqual([
+        "- [ ] held-q1 - wait for launch (hold: load clears) (hold-kind: load) (hold-until: 2999-01-01)",
       ]);
     });
 

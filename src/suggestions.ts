@@ -138,6 +138,17 @@ const table: Entry[] = [
     lines: () => ["Run `tasks-axi ready` to see newly unblocked work"],
   },
   {
+    match: (c) => c.action === "hold",
+    lines: (c) => [
+      `Run \`tasks-axi unhold ${c.id}\` to resume dispatch`,
+      "Run `tasks-axi ready --include-held` to review paused work",
+    ],
+  },
+  {
+    match: (c) => c.action === "unhold",
+    lines: () => ["Run `tasks-axi ready` to see dispatchable work"],
+  },
+  {
     match: (c) => c.action === "update",
     lines: (c) => [`Run \`tasks-axi show ${c.id} --full\` to see the result`],
   },
