@@ -17,6 +17,8 @@ import type {
   TaskLink,
   TaskPatch,
   TaskQuery,
+  TaskUpdateChange,
+  TaskUpdateResult,
   TransitionOpts,
 } from "../model.js";
 import { HOLD_KINDS } from "../model.js";
@@ -42,6 +44,8 @@ export interface MarkdownStoreOptions {
   path: string;
   /** Where pruned Done items are archived (default `<dir>/done-archive.md`). */
   archivePath?: string;
+  /** Where superseded task bodies are archived (default `<dir>/note-archive.md`). */
+  noteArchivePath?: string;
   /** Injectable clock returning a YYYY-MM-DD stamp (for tests). */
   now?: () => string;
 }
@@ -166,7 +170,10 @@ function normalizeHold(hold: Hold | undefined): Hold | undefined {
   }
   const reason = hold.reason.trim();
   if (reason === "") {
-    throw new AxiError("Task hold reason must not be empty", "VALIDATION_ERROR");
+    throw new AxiError(
+      "Task hold reason must not be empty",
+      "VALIDATION_ERROR",
+    );
   }
   const normalized: Hold = { reason };
   if (hold.kind !== undefined) {
@@ -186,10 +193,7 @@ function normalizeHold(hold: Hold | undefined): Hold | undefined {
 
 function normalizeDate(value: string, field: string): string {
   if (!DATE_RE.test(value)) {
-    throw new AxiError(
-      `Task ${field} must be YYYY-MM-DD`,
-      "VALIDATION_ERROR",
-    );
+    throw new AxiError(`Task ${field} must be YYYY-MM-DD`, "VALIDATION_ERROR");
   }
   return value;
 }
@@ -232,6 +236,34 @@ function appendTitleLink(title: string, link: TaskLink): string {
   return normalizeTitle(`${title} ${url}`);
 }
 
+function bodyHasLine(body: string | undefined, line: string): boolean {
+  return body?.split("\n").includes(line) ?? false;
+}
+
+function addBodyLine(body: string | undefined, line: string): string {
+  return body ? `${body}\n${line}` : line;
+}
+
+function sameHold(left: Hold | undefined, right: Hold | undefined): boolean {
+  return (
+    left?.reason === right?.reason &&
+    left?.kind === right?.kind &&
+    left?.until === right?.until
+  );
+}
+
+function sameMeta(
+  left: Record<string, unknown> | undefined,
+  right: Record<string, unknown> | undefined,
+): boolean {
+  const leftKeys = Object.keys(left ?? {});
+  const rightKeys = Object.keys(right ?? {});
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every((key) => Object.is(left?.[key], right?.[key]))
+  );
+}
+
 function taskToInput(task: Task): TaskInput {
   const input: TaskInput = {
     id: task.id,
@@ -254,15 +286,24 @@ function taskToInput(task: Task): TaskInput {
 export class MarkdownStore implements Store {
   private readonly path: string;
   private readonly archivePath: string;
+  private readonly noteArchivePath: string;
   private readonly now: () => string;
 
   constructor(options: MarkdownStoreOptions) {
     this.path = options.path;
     this.archivePath =
       options.archivePath ?? `${dirname(options.path)}/done-archive.md`;
+    this.noteArchivePath =
+      options.noteArchivePath ?? `${dirname(options.path)}/note-archive.md`;
     if (resolve(this.archivePath) === resolve(this.path)) {
       throw new AxiError(
         "Archive path must not be the active backlog path",
+        "VALIDATION_ERROR",
+      );
+    }
+    if (resolve(this.noteArchivePath) === resolve(this.path)) {
+      throw new AxiError(
+        "Note archive path must not be the active backlog path",
         "VALIDATION_ERROR",
       );
     }
@@ -339,9 +380,7 @@ export class MarkdownStore implements Store {
       .filter(
         (task) =>
           task.state !== "done" &&
-          task.deps.some(
-            (dep) => dep.type === "blocked-by" && dep.id === id,
-          ),
+          task.deps.some((dep) => dep.type === "blocked-by" && dep.id === id),
       )
       .map((task) => task.id);
   }
@@ -514,62 +553,143 @@ export class MarkdownStore implements Store {
       const { doc } = loaded;
       this.ensureSections(doc);
       if (this.findEntry(doc, input.id)) {
-        throw new AxiError(
-          `Task "${input.id}" already exists`,
-          "CONFLICT",
-        );
+        throw new AxiError(`Task "${input.id}" already exists`, "CONFLICT");
       }
       const task = this.taskFromInput(input);
       this.requireExistingDeps(doc, task.deps);
       const entry: TaskEntry = { kind: "task", task, raw: [], dirty: true };
       // New in_flight work goes to the top; queued work appends to the bottom.
-      this.insert(this.section(doc, task.state), entry, task.state === "in_flight");
+      this.insert(
+        this.section(doc, task.state),
+        entry,
+        task.state === "in_flight",
+      );
       this.persist(loaded);
       return task;
     });
   }
 
-  async update(id: string, patch: TaskPatch): Promise<Task> {
+  async update(id: string, patch: TaskPatch): Promise<TaskUpdateResult> {
     return withLock(this.path, () => {
       const loaded = this.loadForUpdate();
       const { doc } = loaded;
       const found = this.findEntry(doc, id);
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
       const task = found.entry.task;
+      const nextBody =
+        patch.body !== undefined ? patch.body || undefined : task.body;
+      const supersededBody =
+        patch.archiveBody && patch.body !== undefined && task.body !== nextBody
+          ? task.body
+          : undefined;
+      const archivedTask =
+        supersededBody !== undefined
+          ? {
+              ...task,
+              body: supersededBody,
+              deps: task.deps.map((dep) => ({ ...dep })),
+              links: task.links.map((link) => ({ ...link })),
+            }
+          : undefined;
 
-      if (patch.title !== undefined) task.title = normalizeTitle(patch.title);
-      if (patch.body !== undefined) task.body = patch.body || undefined;
-      if (patch.appendBody !== undefined && patch.appendBody !== "") {
-        task.body = task.body
-          ? `${task.body}\n${patch.appendBody}`
-          : patch.appendBody;
+      const changed: TaskUpdateChange[] = [];
+      const markChanged = (field: TaskUpdateChange) => {
+        if (!changed.includes(field)) changed.push(field);
+      };
+      if (patch.title !== undefined) {
+        const title = normalizeTitle(patch.title);
+        if (task.title !== title) {
+          task.title = title;
+          markChanged("title");
+        }
+      }
+      if (patch.body !== undefined && task.body !== nextBody) {
+        task.body = nextBody;
+        markChanged("body");
+      }
+      for (const line of patch.addBodyLines ?? []) {
+        if (line !== "" && !bodyHasLine(task.body, line)) {
+          task.body = addBodyLine(task.body, line);
+          markChanged("body");
+        }
       }
       if (patch.repo !== undefined) {
-        task.repo = normalizeTagValue(patch.repo, "repo");
+        const repo = normalizeTagValue(patch.repo, "repo");
+        if (task.repo !== repo) {
+          if (repo === undefined) {
+            delete task.repo;
+          } else {
+            task.repo = repo;
+          }
+          markChanged("repo");
+        }
       }
       if (patch.kind !== undefined) {
-        task.kind = normalizeTagValue(patch.kind, "kind");
+        const kind = normalizeTagValue(patch.kind, "kind");
+        if (task.kind !== kind) {
+          if (kind === undefined) {
+            delete task.kind;
+          } else {
+            task.kind = kind;
+          }
+          markChanged("kind");
+        }
       }
       if (patch.hold !== undefined) {
         const hold = normalizeHold(patch.hold ?? undefined);
-        if (hold) {
-          task.hold = hold;
-        } else {
-          delete task.hold;
+        if (!sameHold(task.hold, hold)) {
+          if (hold) {
+            task.hold = hold;
+          } else {
+            delete task.hold;
+          }
+          markChanged("hold");
         }
       }
-      const priority = normalizePriority(patch.priority);
-      if (priority !== undefined) task.priority = priority;
-      if (patch.meta) task.meta = { ...task.meta, ...patch.meta };
-      for (const link of patch.addLinks ?? []) {
-        task.title = appendTitleLink(task.title, link);
+      if (patch.priority !== undefined) {
+        const priority = normalizePriority(patch.priority);
+        if (task.priority !== priority) {
+          task.priority = priority;
+          markChanged("priority");
+        }
       }
+      if (patch.meta) {
+        const meta = { ...task.meta, ...patch.meta };
+        if (!sameMeta(task.meta, meta)) {
+          task.meta = meta;
+          markChanged("meta");
+        }
+      }
+      for (const link of patch.addLinks ?? []) {
+        const title = appendTitleLink(task.title, link);
+        if (task.title !== title) {
+          task.title = title;
+          markChanged("links");
+        }
+      }
+      if (changed.length === 0) return { task, changed };
+
       task.links = deriveLinks(task.title);
       task.updated = this.now();
-
       found.entry.dirty = true;
-      this.persist(loaded);
-      return task;
+      let archiveRestorePoint: ArchiveRestorePoint | undefined;
+      if (archivedTask) {
+        this.assertUnchanged(loaded);
+        archiveRestorePoint = this.captureArchiveRestorePoint(
+          this.noteArchivePath,
+        );
+        this.appendNoteArchive(renderTaskLines(archivedTask));
+        markChanged("archive");
+      }
+      try {
+        this.persist(loaded);
+      } catch (error) {
+        if (archiveRestorePoint) {
+          this.restoreArchive(archiveRestorePoint, this.noteArchivePath);
+        }
+        throw error;
+      }
+      return { task, changed };
     });
   }
 
@@ -783,19 +903,24 @@ export class MarkdownStore implements Store {
     });
   }
 
-  private captureArchiveRestorePoint(): ArchiveRestorePoint {
+  private captureArchiveRestorePoint(
+    path: string = this.archivePath,
+  ): ArchiveRestorePoint {
     try {
-      return { existed: true, size: statSync(this.archivePath).size };
+      return { existed: true, size: statSync(path).size };
     } catch (error) {
       if (errno(error) === "ENOENT") return { existed: false, size: 0 };
       throw error;
     }
   }
 
-  private restoreArchive(point: ArchiveRestorePoint): void {
+  private restoreArchive(
+    point: ArchiveRestorePoint,
+    path: string = this.archivePath,
+  ): void {
     if (!point.existed) {
       try {
-        unlinkSync(this.archivePath);
+        unlinkSync(path);
       } catch (error) {
         if (errno(error) !== "ENOENT") throw error;
       }
@@ -803,17 +928,25 @@ export class MarkdownStore implements Store {
     }
 
     try {
-      truncateSync(this.archivePath, point.size);
+      truncateSync(path, point.size);
     } catch (error) {
       if (errno(error) !== "ENOENT") throw error;
     }
   }
 
   private appendArchive(lines: string[]): void {
-    mkdirSync(dirname(this.archivePath), { recursive: true });
+    this.appendArchiveBlock(this.archivePath, lines);
+  }
+
+  private appendNoteArchive(lines: string[]): void {
+    this.appendArchiveBlock(this.noteArchivePath, lines);
+  }
+
+  private appendArchiveBlock(path: string, lines: string[]): void {
+    mkdirSync(dirname(path), { recursive: true });
     const stamp = this.now();
     const block = `\n## Archived ${stamp}\n${lines.join("\n")}\n`;
-    appendFileSync(this.archivePath, block, "utf8");
+    appendFileSync(path, block, "utf8");
   }
 
   async render(): Promise<number> {

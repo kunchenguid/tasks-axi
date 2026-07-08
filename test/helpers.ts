@@ -40,11 +40,15 @@ export interface TempBacklog {
   ctx: TasksContext;
   read(): string;
   archive(): string;
+  noteArchive(): string;
   cleanup(): void;
 }
 
 /** Create a temp backlog file + a real markdown-backed context with a fixed clock. */
-export function makeBacklog(content = FIXTURE, now = "2026-07-01"): TempBacklog {
+export function makeBacklog(
+  content = FIXTURE,
+  now = "2026-07-01",
+): TempBacklog {
   const dir = mkdtempSync(join(tmpdir(), "tasks-axi-"));
   const path = join(dir, "backlog.md");
   writeFileSync(path, content, "utf8");
@@ -62,6 +66,13 @@ export function makeBacklog(content = FIXTURE, now = "2026-07-01"): TempBacklog 
     archive: () => {
       try {
         return readFileSync(join(dir, "done-archive.md"), "utf8");
+      } catch {
+        return "";
+      }
+    },
+    noteArchive: () => {
+      try {
+        return readFileSync(join(dir, "note-archive.md"), "utf8");
       } catch {
         return "";
       }

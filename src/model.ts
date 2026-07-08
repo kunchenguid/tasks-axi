@@ -66,7 +66,7 @@ export interface Task {
   kind?: string;
   /** "firstmate", "no-mistakes", "hibit-monorepo" */
   repo?: string;
-  /** The long, accumulating notes (truncated in list/show). */
+  /** The task body, used for full notes and truncated in list/show. */
   body?: string;
   /** Typed links: PR url, data/<id>/report.md path, or generic doc url. */
   links: TaskLink[];
@@ -105,10 +105,12 @@ export interface TaskInput {
 /** A patch for `update`. Undefined fields are left unchanged. */
 export interface TaskPatch {
   title?: string;
-  /** Replace the body wholesale. */
+  /** Replace the body wholesale with the curated current notes. */
   body?: string;
-  /** Append a note to the body (the answer to the growing status line). */
-  appendBody?: string;
+  /** Archive the previous body before a changed body replacement. */
+  archiveBody?: boolean;
+  /** Add body lines when they are not already present. */
+  addBodyLines?: string[];
   repo?: string;
   kind?: string;
   /** Links to add (existing links are preserved). */
@@ -117,6 +119,24 @@ export interface TaskPatch {
   hold?: Hold | null;
   priority?: number;
   meta?: Record<string, unknown>;
+}
+
+export type TaskUpdateChange =
+  | "title"
+  | "body"
+  | "archive"
+  | "repo"
+  | "kind"
+  | "priority"
+  | "links"
+  | "hold"
+  | "meta";
+
+export interface TaskUpdateResult {
+  /** The updated task, or the existing task when the patch was a no-op. */
+  task: Task;
+  /** Fields that actually changed; empty when the patch was idempotent. */
+  changed: TaskUpdateChange[];
 }
 
 /** Options for a state transition. */

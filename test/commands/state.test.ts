@@ -311,6 +311,48 @@ describe("state commands", () => {
       }
     });
 
+    it("preserves body edits made before an already-done note update", async () => {
+      const b = makeBacklog();
+      try {
+        const originalUpdate = b.store.update.bind(
+          b.store,
+        ) as typeof b.store.update;
+        let injected = false;
+        b.store.update = async (taskId, patch) => {
+          if (!injected) {
+            injected = true;
+            writeFileSync(
+              b.path,
+              b
+                .read()
+                .replace(
+                  /^(- \[x\] lease-core-t4 - .*)$/m,
+                  "$1\n  concurrent audit note",
+                ),
+              "utf8",
+            );
+          }
+          return originalUpdate(taskId, patch);
+        };
+
+        await doneCommand(
+          [
+            "lease-core-t4",
+            "--note",
+            "backfilled review evidence",
+            "--no-prune",
+          ],
+          b.ctx,
+        );
+
+        const read = b.read();
+        expect(read).toContain("concurrent audit note");
+        expect(read).toContain("backfilled review evidence");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("does not duplicate an already-done note on retry", async () => {
       const b = makeBacklog();
       try {
@@ -323,6 +365,23 @@ describe("state commands", () => {
           b.ctx,
         );
         expect(b.read().match(/retry-safe note/g)).toHaveLength(1);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("does not rewrite when an already-done note already exists", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## Done\n- [x] done-q1 - manually spaced title   (done 2026-07-01)\n  retry-safe note\n\n",
+      );
+      try {
+        const before = b.read();
+        const out = await doneCommand(
+          ["done-q1", "--note", "retry-safe note", "--no-prune"],
+          b.ctx,
+        );
+        expect(out).toContain("already: true");
+        expect(b.read()).toBe(before);
       } finally {
         b.cleanup();
       }
@@ -673,7 +732,9 @@ describe("state commands", () => {
 
         const clearedAgain = await unholdCommand(["cert-cleanup"], b.ctx);
         expect(clearedAgain).toContain("already: true");
-        expect(clearedAgain).toContain("ok: unhold cert-cleanup already not held");
+        expect(clearedAgain).toContain(
+          "ok: unhold cert-cleanup already not held",
+        );
       } finally {
         b.cleanup();
       }
@@ -685,9 +746,9 @@ describe("state commands", () => {
         await expect(
           holdCommand(["missing-q1", "--reason", "wait"], b.ctx),
         ).rejects.toMatchObject({ code: "NOT_FOUND" });
-        await expect(unholdCommand(["missing-q1"], b.ctx)).rejects.toMatchObject(
-          { code: "NOT_FOUND" },
-        );
+        await expect(
+          unholdCommand(["missing-q1"], b.ctx),
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
       } finally {
         b.cleanup();
       }
@@ -696,7 +757,9 @@ describe("state commands", () => {
     it("rejects missing or unsafe hold fields before mutating", async () => {
       const b = makeBacklog();
       try {
-        await expect(holdCommand(["cert-cleanup"], b.ctx)).rejects.toMatchObject({
+        await expect(
+          holdCommand(["cert-cleanup"], b.ctx),
+        ).rejects.toMatchObject({
           code: "VALIDATION_ERROR",
         });
         await expect(

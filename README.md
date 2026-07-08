@@ -10,7 +10,7 @@
 Task and backlog manager for agents — designed with [AXI](https://github.com/kunchenguid/axi) (Agent eXperience Interface).
 
 tasks-axi makes a tiny structured change to a human-readable backlog at near-zero output-token cost.
-It edits a hand-editable `backlog.md` in place with a byte-exact round-trip, so the markdown stays the source of truth while the long, accumulating notes never bloat a `list`.
+It edits a hand-editable `backlog.md` in place with a byte-exact round-trip, so the markdown stays the source of truth while long task bodies never bloat a `list`.
 It borrows the dependency-graph and ready-query model from [beads](https://github.com/gastownhall/beads), adds structured dispatch holds, and keeps the house style from its `*-axi` siblings - token-efficient TOON output, contextual next-step suggestions, idempotent mutations, and structured errors.
 
 ## Why
@@ -18,7 +18,8 @@ It borrows the dependency-graph and ready-query model from [beads](https://githu
 Every backlog mutation today regenerates markdown through the model, which is expensive output tokens and risks dropped, duplicated, or reordered items.
 tasks-axi reduces that to the length of one short command plus a compact confirmation read back as cheap input.
 The long status line that the model used to rewrite on every status change is now a `body`.
-`update --append` adds to that body, while either `update --body` or `update --body-file` replaces it outright and `update --title` replaces the title.
+Note writes are inspect-then-update: read the current body with `show <id> --full`, then replace it deliberately with `update --body` or `update --body-file`.
+Pass `--archive-body` with a body replacement when the superseded body should be moved to cold history in `note-archive.md`.
 
 ## Quick Start
 
@@ -101,10 +102,10 @@ tasks-axi unhold firstmate-lease-adopt
 tasks-axi ready
 tasks-axi ready --include-held
 
-# edit the body and title: --append adds to the body, --body or --body-file replaces it, --title replaces the title
-tasks-axi update nm-release-validation --append "step 3 in progress on lavish #87"
+# edit the body and title: inspect current notes, then replace the body or title deliberately
+tasks-axi show nm-release-validation --full
 tasks-axi update nm-release-validation --body "rewritten notes"
-tasks-axi update nm-release-validation --body-file notes.md
+tasks-axi update nm-release-validation --body-file notes.md --archive-body
 tasks-axi update nm-release-validation --title "clearer title"
 
 # read the full notes on demand (truncated by default)
@@ -118,6 +119,8 @@ tasks-axi mv hibit-cert-cleanup --to ../homemux/data/backlog.md
 
 Output is [TOON](https://toonformat.dev)-encoded and token-efficient.
 The long task body is truncated by default — the whole point is that `list` stays cheap; use `--full` only when you need the complete notes.
+`update --body` and `update --body-file` replace the body wholesale, so agents should inspect the current body first and write back the curated current state rather than appending a journal entry.
+`--archive-body` preserves the replaced body in `note-archive.md` using the same dated markdown archive block style as done pruning.
 Every write leads with a terse `ok:` line confirming the write result, including the resulting task state when the command changes one (e.g. `ok: start lavish-share -> In flight`, `ok: done grok-harness-g7 -> Done (pr <url>)`, `ok: render -> normalized 3`), followed by state-aware next-step hints that never suggest an action the command just performed.
 Mutations are idempotent and report what changed (`already: true` on a no-op), so re-running one is safe.
 Running `done` again on an already Done task can still backfill a new `--pr`, `--report`, or `--note` without changing the original close date.
@@ -177,6 +180,7 @@ done_keep = 10
 ```
 
 `archive` is optional; when omitted, pruned tasks are appended to `done-archive.md` next to the active backlog.
+Body replacements with `--archive-body` append superseded bodies to `note-archive.md` next to the active backlog.
 
 ## Backends
 

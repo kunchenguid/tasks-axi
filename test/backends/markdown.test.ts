@@ -11,6 +11,7 @@ import {
 
 type MarkdownInternals = {
   appendArchive(lines: string[]): void;
+  appendNoteArchive(lines: string[]): void;
   persist(loaded: unknown): void;
 };
 
@@ -266,13 +267,13 @@ describe("MarkdownStore", () => {
       }
     });
 
-    it("appending a note leaves all original lines intact", async () => {
+    it("adding a body leaves all original lines intact", async () => {
       const b = makeBacklog();
       try {
         const before = b.read().split(/\r?\n/);
-        await b.store.update("cert-cleanup", { appendBody: "a note" });
+        await b.store.update("cert-cleanup", { body: "a note" });
         const after = b.read();
-        // no original line is removed; the note is simply added as a continuation
+        // no original line is removed; the body is added as a continuation
         for (const line of before) expect(after).toContain(line);
         expect(after).toMatch(/\r?\n[ ]{2}a note/);
       } finally {
@@ -284,9 +285,8 @@ describe("MarkdownStore", () => {
       const b = makeBacklog();
       try {
         const before = b.read();
-        const { parseBacklog, renderBacklog } = await import(
-          "../../src/backends/markdown-grammar.js"
-        );
+        const { parseBacklog, renderBacklog } =
+          await import("../../src/backends/markdown-grammar.js");
         expect(renderBacklog(parseBacklog(before))).toBe(before);
       } finally {
         b.cleanup();
@@ -318,13 +318,137 @@ describe("MarkdownStore", () => {
   });
 
   describe("update", () => {
-    it("appends to the body as a continuation line", async () => {
-      const b = makeBacklog();
+    it("replaces the body as continuation lines", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## Queued\n- [ ] task-q1 - title\n  old note\n\n## Done\n",
+      );
       try {
-        await b.store.update("cert-cleanup", {
-          appendBody: "started 2026-07-01",
+        await b.store.update("task-q1", {
+          body: "started 2026-07-01\ncurrent only",
         });
-        expect(b.read()).toContain("\n  started 2026-07-01");
+        expect(b.read()).toContain("\n  started 2026-07-01\n  current only");
+        expect(b.read()).not.toContain("old note");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("adds body lines without duplicating existing lines", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## Queued\n- [ ] task-q1 - title\n  old note\n\n## Done\n",
+      );
+      try {
+        await b.store.update("task-q1", {
+          addBodyLines: ["old note", "new note"],
+        });
+        expect(b.read().match(/old note/g)).toHaveLength(1);
+        expect(b.read()).toContain("\n  new note");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("does not rewrite when added body lines already exist", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## Done\n- [x] task-q1 - manually spaced title   (done 2026-07-01)\n  old note\n\n",
+      );
+      try {
+        const before = b.read();
+        await b.store.update("task-q1", {
+          addBodyLines: ["old note"],
+        });
+        expect(b.read()).toBe(before);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("archives the superseded body before replacing it", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## Queued\n- [ ] task-q1 - title\n  old note\n  second old note\n\n## Done\n",
+      );
+      try {
+        const result = await b.store.update("task-q1", {
+          body: "current note",
+          archiveBody: true,
+        });
+        expect(result.changed).toEqual(["body", "archive"]);
+        expect(b.read()).toContain("\n  current note");
+        expect(b.read()).not.toContain("old note");
+        expect(b.noteArchive()).toContain("## Archived 2026-07-01");
+        expect(b.noteArchive()).toContain("- [ ] task-q1 - title");
+        expect(b.noteArchive()).toContain("old note");
+        expect(b.noteArchive()).toContain("second old note");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("does not archive an unchanged body replacement", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## Queued\n- [ ] task-q1 - title\n  current note\n\n## Done\n",
+      );
+      try {
+        const result = await b.store.update("task-q1", {
+          body: "current note",
+          archiveBody: true,
+        });
+        expect(result.changed).toEqual([]);
+        expect(b.noteArchive()).toBe("");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("does not archive the same body twice after replacement", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## Queued\n- [ ] task-q1 - title\n  old note\n\n## Done\n",
+      );
+      try {
+        await b.store.update("task-q1", {
+          body: "current note",
+          archiveBody: true,
+        });
+        const archive = b.noteArchive();
+        await b.store.update("task-q1", {
+          body: "current note",
+          archiveBody: true,
+        });
+        expect(b.noteArchive()).toBe(archive);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("restores the note archive when the active backlog write fails", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## Queued\n- [ ] task-q1 - title\n  old note\n\n## Done\n",
+      );
+      try {
+        const internals = b.store as unknown as MarkdownInternals;
+        const originalAppendNoteArchive = internals.appendNoteArchive.bind(
+          b.store,
+        );
+        internals.appendNoteArchive = (lines: string[]) => {
+          originalAppendNoteArchive(lines);
+          writeFileSync(
+            b.path,
+            `${b.read()}\nmanual edit after note archive append\n`,
+            "utf8",
+          );
+        };
+
+        await expect(
+          b.store.update("task-q1", {
+            body: "current note",
+            archiveBody: true,
+          }),
+        ).rejects.toMatchObject({
+          code: "CONFLICT",
+          message: expect.stringContaining("changed on disk"),
+        });
+        expect(b.noteArchive()).toBe("");
+        expect(b.read()).toContain("old note");
       } finally {
         b.cleanup();
       }
@@ -333,7 +457,7 @@ describe("MarkdownStore", () => {
     it("sets repo and kind as canonical tags", async () => {
       const b = makeBacklog();
       try {
-        const task = await b.store.update("cert-cleanup", {
+        const { task } = await b.store.update("cert-cleanup", {
           repo: "other",
           kind: "docs",
         });
@@ -348,7 +472,7 @@ describe("MarkdownStore", () => {
     it("folds an added link into the prose and re-derives links", async () => {
       const b = makeBacklog();
       try {
-        const task = await b.store.update("cert-cleanup", {
+        const { task } = await b.store.update("cert-cleanup", {
           addLinks: [{ kind: "pr", url: "https://github.com/o/r/pull/9" }],
         });
         expect(task.links).toContainEqual({
@@ -366,7 +490,7 @@ describe("MarkdownStore", () => {
         "# Backlog\n\n## Queued\n- [ ] task-q1 - title https://github.com/o/r/pull/10\n\n## Done\n",
       );
       try {
-        const task = await b.store.update("task-q1", {
+        const { task } = await b.store.update("task-q1", {
           addLinks: [{ kind: "pr", url: "https://github.com/o/r/pull/1" }],
         });
         expect(task.links).toContainEqual({
@@ -403,9 +527,7 @@ describe("MarkdownStore", () => {
       try {
         await expect(
           b.store.update("cert-cleanup", {
-            addLinks: [
-              { kind: "pr", url: "https://github.com/o/r/issues/9" },
-            ],
+            addLinks: [{ kind: "pr", url: "https://github.com/o/r/issues/9" }],
           }),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         await expect(
@@ -916,7 +1038,11 @@ describe("MarkdownStore", () => {
       try {
         const caps = b.store.capabilities();
         expect(caps.backend).toBe("markdown");
-        expect(caps).toMatchObject({ deps: true, prune: true, customStates: true });
+        expect(caps).toMatchObject({
+          deps: true,
+          prune: true,
+          customStates: true,
+        });
       } finally {
         b.cleanup();
       }

@@ -23,7 +23,15 @@ import {
   validateDependencyId,
   validateId,
 } from "../id.js";
-import { STATES, type Dep, type State, type TaskInput, type TaskLink, type TaskPatch } from "../model.js";
+import {
+  STATES,
+  type Dep,
+  type State,
+  type TaskInput,
+  type TaskLink,
+  type TaskPatch,
+  type TaskUpdateChange,
+} from "../model.js";
 import type { Store } from "../store.js";
 import { getSuggestions } from "../suggestions.js";
 import { renderHelp, renderOutput, renderScalar } from "../toon.js";
@@ -67,11 +75,13 @@ examples:
 export const UPDATE_HELP = `usage: tasks-axi update <id> [flags]
 aliases: edit
 flags:
-  --title <text>, --body <text> or --body-file <path>, --append "<note>"
+  --title <text>, --body <text> or --body-file <path>
+  --archive-body   with --body/--body-file, archive the previous body
   --repo <name>, --kind <name>, --priority <0-4>, --pr <url>, --report <path>
   --json   print the resulting task as a JSON object
 examples:
-  tasks-axi update nm-release-validation --append "step 3 in progress on lavish #87"
+  tasks-axi show nm-release-validation --full
+  tasks-axi update nm-release-validation --body-file notes.md --archive-body
   tasks-axi update fm-x --repo firstmate --kind ship`;
 
 export const RM_HELP = `usage: tasks-axi rm <id>
@@ -480,7 +490,7 @@ export async function updateCommand(
   const json = takeBoolFlag(args, "--json");
   const title = takeFlag(args, "--title");
   const body = takeBody(args);
-  const append = takeFlag(args, "--append");
+  const archiveBody = takeBoolFlag(args, "--archive-body");
   const repo = requireNonEmptySingleLineFlagValue(
     "--repo",
     takeFlag(args, "--repo"),
@@ -510,9 +520,16 @@ export async function updateCommand(
   }
   if (body !== undefined) {
     patch.body = requireNonEmptyFlagValue("--body", body);
+    if (archiveBody) patch.archiveBody = true;
   }
-  if (append !== undefined) {
-    patch.appendBody = requireNonEmptyFlagValue("--append", append);
+  if (archiveBody && body === undefined) {
+    throw new AxiError(
+      "--archive-body requires --body or --body-file",
+      "VALIDATION_ERROR",
+      [
+        "Inspect the current task first, then pass a replacement body with --body or --body-file",
+      ],
+    );
   }
   if (repo !== undefined) {
     patch.repo = repo;
@@ -526,22 +543,29 @@ export async function updateCommand(
 
   if (Object.keys(patch).length === 0) {
     throw new AxiError("Nothing to update", "VALIDATION_ERROR", [
-      'Pass a field, e.g. --append "<note>", --title, --body, --repo, --kind',
+      "Pass a field, e.g. --title, --body, --body-file, --repo, or --kind",
     ]);
   }
 
   if (!(await store.get(id))) {
     throw notFound(id, { globals: context?.suggestionGlobals });
   }
-  const task = await store.update(id, patch);
+  const result = await store.update(id, patch);
+  const task = result.task;
+  const changed = orderUpdateChanges(result.changed);
+  const already = changed.length === 0;
   const all = (await store.list({})).items;
   return renderMutation({
     json,
-    confirm: `updated ${id} (${changedFields(patch).join(", ")})`,
+    confirm: already
+      ? `updated ${id} already`
+      : `updated ${id} (${changed.join(", ")})`,
+    already,
     jsonPayload: {
       ok: true,
       action: "update",
-      changed: changedFields(patch),
+      ...(already ? { already: true } : {}),
+      changed,
       task: taskToJson(task, all),
     },
     detail: renderTaskDetail(task, all, false, showFullTextHint(task)),
@@ -553,20 +577,19 @@ export async function updateCommand(
   });
 }
 
-/** Friendly names of the fields a patch touched, for the update confirmation. */
-function changedFields(patch: TaskPatch): string[] {
-  const labels: Array<[keyof TaskPatch, string]> = [
-    ["title", "title"],
-    ["body", "body"],
-    ["appendBody", "note"],
-    ["repo", "repo"],
-    ["kind", "kind"],
-    ["priority", "priority"],
-    ["addLinks", "links"],
+function orderUpdateChanges(changed: TaskUpdateChange[]): TaskUpdateChange[] {
+  const order: TaskUpdateChange[] = [
+    "title",
+    "body",
+    "archive",
+    "repo",
+    "kind",
+    "priority",
+    "links",
+    "hold",
+    "meta",
   ];
-  return labels
-    .filter(([key]) => patch[key] !== undefined)
-    .map(([, label]) => label);
+  return order.filter((field) => changed.includes(field));
 }
 
 export async function rmCommand(

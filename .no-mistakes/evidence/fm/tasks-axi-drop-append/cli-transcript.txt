@@ -1,0 +1,97 @@
+$ pnpm exec tsx bin/tasks-axi.ts show inspect-update-q1 --full --file .no-mistakes/evidence/fm/tasks-axi-drop-append/e2e/backlog.md
+task:
+  id: inspect-update-q1
+  title: Inspect and replace notes
+  state: queued
+  blocked: no
+  blocked_by: none
+  held: no
+  hold_reason: "-"
+  hold_kind: "-"
+  hold_until: "-"
+  kind: task
+  repo: "-"
+  priority: "-"
+  created: "-"
+  closed: "-"
+  deps: none
+  links: none
+  body: "old line one\nold line two"
+exit=0
+
+$ pnpm exec tsx bin/tasks-axi.ts update inspect-update-q1 --append step 2 should not append --file .no-mistakes/evidence/fm/tasks-axi-drop-append/e2e/backlog.md
+error: "Unknown flag: --append"
+code: VALIDATION_ERROR
+help[1]: Run the command with --help to see supported flags
+exit=2
+
+$ pnpm exec tsx bin/tasks-axi.ts update inspect-update-q1 --body new current body --archive-body --file .no-mistakes/evidence/fm/tasks-axi-drop-append/e2e/backlog.md
+ok: updated inspect-update-q1 (body, archive)
+task:
+  id: inspect-update-q1
+  title: Inspect and replace notes
+  state: queued
+  blocked: no
+  blocked_by: none
+  held: no
+  hold_reason: "-"
+  hold_kind: "-"
+  hold_until: "-"
+  kind: task
+  repo: "-"
+  priority: "-"
+  created: "-"
+  closed: "-"
+  deps: none
+  links: none
+  body: new current body
+help[1]:
+  - Run `tasks-axi show inspect-update-q1 --full --file=.no-mistakes/evidence/fm/tasks-axi-drop-append/e2e/backlog.md` to see the result
+exit=0
+
+$ pnpm exec tsx bin/tasks-axi.ts update inspect-update-q1 --body new current body --archive-body --json --file .no-mistakes/evidence/fm/tasks-axi-drop-append/e2e/backlog.md
+{
+  "ok": true,
+  "action": "update",
+  "already": true,
+  "changed": [],
+  "task": {
+    "id": "inspect-update-q1",
+    "title": "Inspect and replace notes",
+    "state": "queued",
+    "kind": null,
+    "repo": null,
+    "priority": null,
+    "created": null,
+    "closed": null,
+    "deps": [],
+    "hold": null,
+    "links": [],
+    "body": "new current body",
+    "blocked": false,
+    "blocked_by": [],
+    "held": false
+  }
+}
+exit=0
+
+$ sed -n 1,120p .no-mistakes/evidence/fm/tasks-axi-drop-append/e2e/backlog.md
+# Backlog
+
+## In flight
+
+## Queued
+- [ ] inspect-update-q1 - Inspect and replace notes
+  new current body
+
+## Done
+exit=0
+
+$ sed -n 1,120p .no-mistakes/evidence/fm/tasks-axi-drop-append/e2e/note-archive.md
+
+## Archived 2026-07-08
+- [ ] inspect-update-q1 - Inspect and replace notes
+  old line one
+  old line two
+exit=0
+

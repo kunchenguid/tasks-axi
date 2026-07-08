@@ -161,11 +161,14 @@ export async function doneCommand(
   if (note !== undefined) opts.note = note;
 
   if (current.state === "done") {
-    const patch = doneMetadataPatch(pr, report, note, current);
+    const patch = doneMetadataPatch(pr, report, note);
     const hasPatch = Object.keys(patch).length > 0;
     let task = current;
+    let changed = false;
     if (hasPatch) {
-      task = await store.update(id, patch);
+      const result = await store.update(id, patch);
+      task = result.task;
+      changed = result.changed.length > 0;
     }
     const pruned = await pruneDone(store, keep, noPrune);
     const all = (await store.list({})).items;
@@ -180,7 +183,7 @@ export async function doneCommand(
         pruned,
         task: taskToJson(task, all),
       },
-      ...(hasPatch
+      ...(changed
         ? { detail: renderTaskDetail(task, all, false, showFullTextHint(task)) }
         : {}),
       suggestions: getSuggestions({
@@ -248,21 +251,14 @@ function doneMetadataPatch(
   pr: string | undefined,
   report: string | undefined,
   note: string | undefined,
-  current?: Task,
 ): TaskPatch {
   const patch: TaskPatch = {};
   const addLinks: TaskLink[] = [];
   if (pr !== undefined) addLinks.push({ kind: "pr", url: pr });
   if (report !== undefined) addLinks.push({ kind: "report", url: report });
   if (addLinks.length > 0) patch.addLinks = addLinks;
-  if (note !== undefined && !bodyHasLine(current?.body, note)) {
-    patch.appendBody = note;
-  }
+  if (note !== undefined) patch.addBodyLines = [note];
   return patch;
-}
-
-function bodyHasLine(body: string | undefined, line: string): boolean {
-  return body?.split("\n").includes(line) ?? false;
 }
 
 export async function reopenCommand(
@@ -481,7 +477,7 @@ export async function holdCommand(
     ...(until !== undefined ? { until } : {}),
   };
   const already = sameHold(current.hold, hold);
-  const task = already ? current : await store.update(id, { hold });
+  const task = already ? current : (await store.update(id, { hold })).task;
   const all = (await store.list({})).items;
   return renderMutation({
     json,
@@ -518,18 +514,27 @@ export async function unholdCommand(
   const { store } = requireCtx(context);
   const args = [...rawArgs];
   const json = takeBoolFlag(args, "--json");
-  const positionals = requirePositionals(args, 1, 1, UNHOLD_HELP.split("\n")[0]);
+  const positionals = requirePositionals(
+    args,
+    1,
+    1,
+    UNHOLD_HELP.split("\n")[0],
+  );
   const id = requireId(positionals[0], "id");
 
   const current = await store.get(id);
   if (!current) throw notFound(id, { globals: context?.suggestionGlobals });
 
   const already = current.hold === undefined;
-  const task = already ? current : await store.update(id, { hold: null });
+  const task = already
+    ? current
+    : (await store.update(id, { hold: null })).task;
   const all = (await store.list({})).items;
   return renderMutation({
     json,
-    confirm: already ? `unhold ${id} already not held` : `unhold ${id} -> cleared`,
+    confirm: already
+      ? `unhold ${id} already not held`
+      : `unhold ${id} -> cleared`,
     already,
     jsonPayload: {
       ok: true,
