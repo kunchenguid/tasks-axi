@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/kunchenguid/tasks-axi/compare/tasks-axi-v0.1.2...tasks-axi-v0.2.0) (2026-07-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* **commands:** tasks-axi update no longer accepts --append. Agents must inspect the current body and replace it with --body or --body-file, optionally passing --archive-body to preserve the superseded body in note-archive.md.
+
+### Features
+
+* add structured task holds ([#8](https://github.com/kunchenguid/tasks-axi/issues/8)) ([0f283ed](https://github.com/kunchenguid/tasks-axi/commit/0f283ed3d988a7ecd9cd12d325ac4b5f4f68007b))
+* **commands:** replace append notes with body replacement archival ([#10](https://github.com/kunchenguid/tasks-axi/issues/10)) ([a7993d2](https://github.com/kunchenguid/tasks-axi/commit/a7993d2a8e8b56f1f66d125fd057de1587b62c80))
+
 ## [0.1.2](https://github.com/kunchenguid/tasks-axi/compare/tasks-axi-v0.1.1...tasks-axi-v0.1.2) (2026-06-29)
 
 
