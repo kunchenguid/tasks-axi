@@ -336,7 +336,12 @@ describe("state commands", () => {
         };
 
         await doneCommand(
-          ["lease-core-t4", "--note", "backfilled review evidence", "--no-prune"],
+          [
+            "lease-core-t4",
+            "--note",
+            "backfilled review evidence",
+            "--no-prune",
+          ],
           b.ctx,
         );
 
@@ -727,7 +732,9 @@ describe("state commands", () => {
 
         const clearedAgain = await unholdCommand(["cert-cleanup"], b.ctx);
         expect(clearedAgain).toContain("already: true");
-        expect(clearedAgain).toContain("ok: unhold cert-cleanup already not held");
+        expect(clearedAgain).toContain(
+          "ok: unhold cert-cleanup already not held",
+        );
       } finally {
         b.cleanup();
       }
@@ -739,9 +746,9 @@ describe("state commands", () => {
         await expect(
           holdCommand(["missing-q1", "--reason", "wait"], b.ctx),
         ).rejects.toMatchObject({ code: "NOT_FOUND" });
-        await expect(unholdCommand(["missing-q1"], b.ctx)).rejects.toMatchObject(
-          { code: "NOT_FOUND" },
-        );
+        await expect(
+          unholdCommand(["missing-q1"], b.ctx),
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
       } finally {
         b.cleanup();
       }
@@ -750,7 +757,9 @@ describe("state commands", () => {
     it("rejects missing or unsafe hold fields before mutating", async () => {
       const b = makeBacklog();
       try {
-        await expect(holdCommand(["cert-cleanup"], b.ctx)).rejects.toMatchObject({
+        await expect(
+          holdCommand(["cert-cleanup"], b.ctx),
+        ).rejects.toMatchObject({
           code: "VALIDATION_ERROR",
         });
         await expect(

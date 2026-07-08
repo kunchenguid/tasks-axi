@@ -557,7 +557,9 @@ export async function updateCommand(
   const all = (await store.list({})).items;
   return renderMutation({
     json,
-    confirm: already ? `updated ${id} already` : `updated ${id} (${changed.join(", ")})`,
+    confirm: already
+      ? `updated ${id} already`
+      : `updated ${id} (${changed.join(", ")})`,
     already,
     jsonPayload: {
       ok: true,

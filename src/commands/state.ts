@@ -477,9 +477,7 @@ export async function holdCommand(
     ...(until !== undefined ? { until } : {}),
   };
   const already = sameHold(current.hold, hold);
-  const task = already
-    ? current
-    : (await store.update(id, { hold })).task;
+  const task = already ? current : (await store.update(id, { hold })).task;
   const all = (await store.list({})).items;
   return renderMutation({
     json,
@@ -516,7 +514,12 @@ export async function unholdCommand(
   const { store } = requireCtx(context);
   const args = [...rawArgs];
   const json = takeBoolFlag(args, "--json");
-  const positionals = requirePositionals(args, 1, 1, UNHOLD_HELP.split("\n")[0]);
+  const positionals = requirePositionals(
+    args,
+    1,
+    1,
+    UNHOLD_HELP.split("\n")[0],
+  );
   const id = requireId(positionals[0], "id");
 
   const current = await store.get(id);
@@ -529,7 +532,9 @@ export async function unholdCommand(
   const all = (await store.list({})).items;
   return renderMutation({
     json,
-    confirm: already ? `unhold ${id} already not held` : `unhold ${id} -> cleared`,
+    confirm: already
+      ? `unhold ${id} already not held`
+      : `unhold ${id} -> cleared`,
     already,
     jsonPayload: {
       ok: true,

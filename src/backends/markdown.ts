@@ -170,7 +170,10 @@ function normalizeHold(hold: Hold | undefined): Hold | undefined {
   }
   const reason = hold.reason.trim();
   if (reason === "") {
-    throw new AxiError("Task hold reason must not be empty", "VALIDATION_ERROR");
+    throw new AxiError(
+      "Task hold reason must not be empty",
+      "VALIDATION_ERROR",
+    );
   }
   const normalized: Hold = { reason };
   if (hold.kind !== undefined) {
@@ -190,10 +193,7 @@ function normalizeHold(hold: Hold | undefined): Hold | undefined {
 
 function normalizeDate(value: string, field: string): string {
   if (!DATE_RE.test(value)) {
-    throw new AxiError(
-      `Task ${field} must be YYYY-MM-DD`,
-      "VALIDATION_ERROR",
-    );
+    throw new AxiError(`Task ${field} must be YYYY-MM-DD`, "VALIDATION_ERROR");
   }
   return value;
 }
@@ -380,9 +380,7 @@ export class MarkdownStore implements Store {
       .filter(
         (task) =>
           task.state !== "done" &&
-          task.deps.some(
-            (dep) => dep.type === "blocked-by" && dep.id === id,
-          ),
+          task.deps.some((dep) => dep.type === "blocked-by" && dep.id === id),
       )
       .map((task) => task.id);
   }
@@ -555,16 +553,17 @@ export class MarkdownStore implements Store {
       const { doc } = loaded;
       this.ensureSections(doc);
       if (this.findEntry(doc, input.id)) {
-        throw new AxiError(
-          `Task "${input.id}" already exists`,
-          "CONFLICT",
-        );
+        throw new AxiError(`Task "${input.id}" already exists`, "CONFLICT");
       }
       const task = this.taskFromInput(input);
       this.requireExistingDeps(doc, task.deps);
       const entry: TaskEntry = { kind: "task", task, raw: [], dirty: true };
       // New in_flight work goes to the top; queued work appends to the bottom.
-      this.insert(this.section(doc, task.state), entry, task.state === "in_flight");
+      this.insert(
+        this.section(doc, task.state),
+        entry,
+        task.state === "in_flight",
+      );
       this.persist(loaded);
       return task;
     });
@@ -580,9 +579,7 @@ export class MarkdownStore implements Store {
       const nextBody =
         patch.body !== undefined ? patch.body || undefined : task.body;
       const supersededBody =
-        patch.archiveBody &&
-        patch.body !== undefined &&
-        task.body !== nextBody
+        patch.archiveBody && patch.body !== undefined && task.body !== nextBody
           ? task.body
           : undefined;
       const archivedTask =

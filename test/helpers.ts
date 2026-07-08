@@ -45,7 +45,10 @@ export interface TempBacklog {
 }
 
 /** Create a temp backlog file + a real markdown-backed context with a fixed clock. */
-export function makeBacklog(content = FIXTURE, now = "2026-07-01"): TempBacklog {
+export function makeBacklog(
+  content = FIXTURE,
+  now = "2026-07-01",
+): TempBacklog {
   const dir = mkdtempSync(join(tmpdir(), "tasks-axi-"));
   const path = join(dir, "backlog.md");
   writeFileSync(path, content, "utf8");

@@ -285,9 +285,8 @@ describe("MarkdownStore", () => {
       const b = makeBacklog();
       try {
         const before = b.read();
-        const { parseBacklog, renderBacklog } = await import(
-          "../../src/backends/markdown-grammar.js"
-        );
+        const { parseBacklog, renderBacklog } =
+          await import("../../src/backends/markdown-grammar.js");
         expect(renderBacklog(parseBacklog(before))).toBe(before);
       } finally {
         b.cleanup();
@@ -528,9 +527,7 @@ describe("MarkdownStore", () => {
       try {
         await expect(
           b.store.update("cert-cleanup", {
-            addLinks: [
-              { kind: "pr", url: "https://github.com/o/r/issues/9" },
-            ],
+            addLinks: [{ kind: "pr", url: "https://github.com/o/r/issues/9" }],
           }),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         await expect(
@@ -1041,7 +1038,11 @@ describe("MarkdownStore", () => {
       try {
         const caps = b.store.capabilities();
         expect(caps.backend).toBe("markdown");
-        expect(caps).toMatchObject({ deps: true, prune: true, customStates: true });
+        expect(caps).toMatchObject({
+          deps: true,
+          prune: true,
+          customStates: true,
+        });
       } finally {
         b.cleanup();
       }
