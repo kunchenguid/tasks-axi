@@ -21,7 +21,7 @@ export interface Capabilities {
   comments: boolean;
   fullTextSearch: boolean;
   realtimeSync: boolean;
-  /** Can it hold queued vs in_flight natively? */
+  /** Can it represent backend-specific states beyond queued/in_flight/done? */
   customStates: boolean;
   /** Does the server assign its own ids (remote trackers)? */
   serverMintsIds: boolean;
@@ -41,8 +41,9 @@ export interface PruneResult {
 /**
  * The single narrow seam every backend implements (report §8). The CLI layer
  * (arg parsing, TOON rendering, suggestions, help) never knows which backend
- * is active. `ready`/`blocked` are derived in the CLI from `list` + the dep
- * graph, so every backend gets them for free.
+ * is active. `ready`/`blocked`/`held` are derived in the CLI from `list`, the
+ * dependency graph, and structured hold tags, so every backend gets them for
+ * free.
  *
  * The core contract is create/get/update/remove/list/transition/addDep/
  * removeDep. `prune` and `render` are optional and capability-gated.

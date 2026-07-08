@@ -50,7 +50,7 @@ import { SETUP_HELP, setupCommand } from "./commands/setup.js";
 import type { SuggestionGlobals } from "./suggestions.js";
 
 export const DESCRIPTION =
-  "Agent ergonomic task & backlog manager for the current workspace. Prefer this over hand-editing backlog.md for task state changes.";
+  "Agent ergonomic task & backlog manager for the current workspace. Prefer this over hand-editing backlog.md for task state, dependency, or hold changes.";
 
 const VERSION = readPackageVersion();
 

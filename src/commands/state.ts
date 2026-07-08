@@ -70,7 +70,7 @@ flags:
 export const HOLD_HELP = `usage: tasks-axi hold <id> --reason "<text>" [flags]
 Record a structured dispatch hold (idempotent).
 flags:
-  --reason "<text>"   required human-readable reason
+  --reason "<text>"   required single-line reason; no parentheses
   --until YYYY-MM-DD  date gate; inactive on and after that date
   --kind captain|external|load|parked|future
   --json   print the resulting task as a JSON object
@@ -84,7 +84,7 @@ flags:
   --json   print the resulting task as a JSON object`;
 
 export const READY_HELP = `usage: tasks-axi ready [--repo <name>] [--include-held]
-List unblocked queued work dispatchable right now.
+List unblocked, unheld queued work dispatchable right now.
 Held work is excluded by default; --include-held shows it in a separate held group.`;
 
 export const MV_HELP = `usage: tasks-axi mv <id> --to <path-or-dir>

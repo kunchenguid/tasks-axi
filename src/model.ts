@@ -10,7 +10,7 @@
 export const STATES = ["queued", "in_flight", "done"] as const;
 export type State = (typeof STATES)[number];
 
-/** State plus the derived `blocked` projection used in display/filters. */
+/** Explicit state plus derived `blocked`/`held` projections used in display/filters. */
 export type DerivedState = State | "blocked" | "held";
 
 export const HOLD_KINDS = [
@@ -131,7 +131,7 @@ export interface TransitionOpts {
   date?: string;
 }
 
-/** A list query. `blocked`/ready derivation is computed in the CLI layer. */
+/** A list query. `blocked`/`ready`/`held` derivation is computed in the CLI layer. */
 export interface TaskQuery {
   state?: State;
   repo?: string;

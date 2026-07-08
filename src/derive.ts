@@ -18,9 +18,9 @@ export function currentLocalDate(): string {
 }
 
 /**
- * Derived `blocked` / `ready` projections, computed in the CLI from the full
- * task list + the dependency graph (report §8: `ready` is not a Store method,
- * so every backend gets it for free).
+ * Derived `blocked` / `ready` / `held` projections, computed in the CLI from
+ * the full task list, dependency graph, and structured hold tags (report §8:
+ * these are not Store methods, so every backend gets them for free).
  *
  * A task is `blocked` iff it is not done and has a `blocked-by` edge pointing
  * at a task that exists and is not done. Command mutations reject new dangling
@@ -64,7 +64,7 @@ export function heldTasks(
   return tasks.filter((task) => isHoldActive(task, options));
 }
 
-/** Unblocked queued work - the literal implementation of "dispatch what was unblocked". */
+/** Unblocked, unheld queued work - unless includeHeld asks for active holds too. */
 export function readyTasks(tasks: Task[], options: ReadyOptions = {}): Task[] {
   const blocked = blockedIds(tasks);
   return tasks.filter(

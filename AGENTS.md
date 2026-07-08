@@ -41,7 +41,11 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 - **`done` on an already-Done task** stays idempotent but backfills supplied `--pr`, `--report`, and non-duplicate `--note` metadata without replacing the original closed date.
 - **Dependency mutations validate targets.** `add --blocked-by` and `block --by` reject missing blockers and self-blocks. Parsed dangling blockers are still treated as resolved for legacy hand-edited files.
 - **Blocking tasks are protected.** `rm` and `mv` reject a task that still blocks active dependents; unblock or complete the dependents first.
-- **Structured holds gate readiness.** `hold <id> --reason "<text>" [--until YYYY-MM-DD] [--kind captain|external|load|parked|future]` writes canonical hold tags; `unhold <id>` clears them. Active holds keep queued tasks out of `ready`, while `ready --include-held` emits a separate `held` group. `hold-until` is inactive on and after that date. `list --state held` filters to active held tasks, and hold columns are available via `--fields held,hold_reason,hold_kind,hold_until`.
+- **Structured holds gate readiness.** `hold <id> --reason "<text>" [--until YYYY-MM-DD] [--kind captain|external|load|parked|future]` writes canonical hold tags; `unhold <id>` clears them.
+  Hold reasons are single-line tag values without parentheses because parentheses delimit managed tags.
+  Active holds keep queued tasks out of `ready`, while `ready --include-held` emits a separate `held` group.
+  `hold-until` is inactive on and after that date.
+  `list --state held` filters to active held tasks, and hold columns are available via `--fields held,hold_reason,hold_kind,hold_until`.
 - **Hold migration mapping.** Future migration code should map prose markers to structured holds without bulk-rewriting by hand: `HELD` / `do not dispatch` / `CAPTAIN-DECISION` -> `kind: captain` unless the text points elsewhere; `PARKED` -> `kind: parked`; `DEFERRED` -> `kind: future`; load-clearing language such as `hold until <load clears>` -> `kind: load`; external dependency wording -> `kind: external`. Preserve the original prose as the hold reason unless a safer human-readable reason is explicitly supplied.
 - Idempotent mutations exit 0 with `already: true`; errors are `AxiError` with SDK exit codes (VALIDATION_ERROR→2, else 1).
 - **Write ops are confirmation-forward.** Every mutation (`add`/`start`/`done`/`reopen`/`update`/`rm`/`block`/`unblock`/`hold`/`unhold`/`mv`/`prune`/`render`) leads with a terse `ok:` line (built in `confirm.ts`) confirming the write result.

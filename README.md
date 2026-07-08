@@ -11,7 +11,7 @@ Task and backlog manager for agents — designed with [AXI](https://github.com/k
 
 tasks-axi makes a tiny structured change to a human-readable backlog at near-zero output-token cost.
 It edits a hand-editable `backlog.md` in place with a byte-exact round-trip, so the markdown stays the source of truth while the long, accumulating notes never bloat a `list`.
-It borrows the dependency-graph and ready-query model from [beads](https://github.com/gastownhall/beads) and the house style from its `*-axi` siblings — token-efficient TOON output, contextual next-step suggestions, idempotent mutations, and structured errors.
+It borrows the dependency-graph and ready-query model from [beads](https://github.com/gastownhall/beads), adds structured dispatch holds, and keeps the house style from its `*-axi` siblings - token-efficient TOON output, contextual next-step suggestions, idempotent mutations, and structured errors.
 
 ## Why
 
@@ -31,7 +31,7 @@ npx skills add kunchenguid/tasks-axi --skill tasks-axi -g
 That is the entire setup — no npm install needed.
 The skill teaches your agent to run tasks-axi through `npx -y tasks-axi`, so the CLI comes along on demand (Node 20+ required).
 
-Just ask for anything that touches the backlog — filing or dispatching work, completing a task, finding unblocked work — and the agent loads the skill on its own when it recognizes the task.
+Just ask for anything that touches the backlog - filing or dispatching work, completing a task, finding dispatchable or held work - and the agent loads the skill on its own when it recognizes the task.
 
 `-g` installs the skill for all projects; drop it to install for the current project only.
 
@@ -94,7 +94,7 @@ tasks-axi start firstmate-lease-adopt
 tasks-axi done sm-idle-handoff-q8 --pr https://github.com/owner/repo/pull/42
 tasks-axi reopen some-task
 
-# dependencies and the ready queue
+# dependencies, holds, and the ready queue
 tasks-axi block firstmate-lease-adopt --by treehouse-lease-t4
 tasks-axi hold firstmate-lease-adopt --reason "captain decision pending" --kind captain
 tasks-axi unhold firstmate-lease-adopt
@@ -122,9 +122,10 @@ Every write leads with a terse `ok:` line confirming the write result, including
 Mutations are idempotent and report what changed (`already: true` on a no-op), so re-running one is safe.
 Running `done` again on an already Done task can still backfill a new `--pr`, `--report`, or `--note` without changing the original close date.
 `hold <id> --reason "<text>"` records an intentional pause without turning it into prose, and `unhold <id>` clears it.
+The reason must be single-line text without parentheses because parentheses are reserved for canonical markdown tags.
 Active holds are excluded from `ready`; a hold with `--until YYYY-MM-DD` becomes inactive on and after that date, so the task can surface as ready again if nothing else blocks it.
 Use `ready --include-held` to show dispatchable ready work and a separate `held` group with the hold reason, kind, and until date.
-Use `list --state held` or `list --fields held,hold_reason,hold_kind,hold_until` when you need to scan hold state directly.
+Use `list --state held` or `list --fields held,hold_reason,hold_kind,hold_until` when you need to scan active hold state directly.
 Pass `--json` to any mutation for a machine-readable result object (`{ "ok": true, "action": …, "task": { … } }` or operation-specific result fields) instead of TOON, so an agent can confirm a write deterministically without a follow-up read.
 
 Run `tasks-axi --help` for the command list, or `tasks-axi <command> --help` for per-command usage.
@@ -155,6 +156,9 @@ It gently formalizes the inline tags a backlog already uses as the canonical fie
 Bare dependency edges render immediately after the title, while reason-bearing dependency edges render after the parenthetical tags so the reason stays attached to the edge on the next parse.
 Dependency reasons are preserved metadata only; readiness still keys off the blocker id.
 Hold reasons are preserved metadata too, but active holds are a readiness gate until cleared or until their date gate expires.
+Existing prose markers like `HELD`, `PARKED`, `DEFERRED`, `CAPTAIN-DECISION`, and `do not dispatch` stay prose until you intentionally migrate them.
+Map them to structured holds by preserving the original prose as the reason and choosing `captain`, `parked`, `future`, `load`, or `external` only when the text supports that bucket.
+Do not bulk-rewrite live backlogs just to chase these tags; migrate only when touching the task or when a hold migration specifically targets them.
 `add --blocked-by` and `block --by` require the referenced task to exist, and `rm` / `mv` refuse to remove a task that still blocks active work.
 
 ## Configuration
