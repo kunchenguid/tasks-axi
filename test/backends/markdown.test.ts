@@ -1086,6 +1086,172 @@ describe("MarkdownStore", () => {
     });
   });
 
+  describe("moveManyTo", () => {
+    const linkedSet = [
+      "# Backlog",
+      "",
+      "## In flight",
+      "",
+      "## Queued",
+      "- [ ] pair-a - the blocker (repo: alpha)",
+      "  Blocker paragraph one.",
+      "",
+      "  Blocker paragraph two after a blank.",
+      "  ## Intent",
+      "",
+      "  Indented heading kept as body.",
+      "- [ ] pair-b - the dependent (repo: alpha) blocked-by: pair-a - waits on the blocker",
+      "  Dependent body.",
+      "## Done",
+      "",
+    ].join("\n");
+
+    it("moves a linked set into an empty destination byte-exact", async () => {
+      const source = makeBacklog(linkedSet);
+      const target = makeBacklog(
+        "# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n",
+      );
+      try {
+        const moved = await source.store.moveManyTo(
+          ["pair-a", "pair-b"],
+          target.store,
+        );
+        expect(moved.map((t) => t.id)).toEqual(["pair-a", "pair-b"]);
+
+        // Every moved line lands in the destination exactly as authored,
+        // including the internal blank, the indented pseudo-heading, and the
+        // dependency reason text.
+        const dst = target.read();
+        expect(dst).toBe(
+          [
+            "# Backlog",
+            "",
+            "## In flight",
+            "",
+            "## Queued",
+            "- [ ] pair-a - the blocker (repo: alpha)",
+            "  Blocker paragraph one.",
+            "",
+            "  Blocker paragraph two after a blank.",
+            "  ## Intent",
+            "",
+            "  Indented heading kept as body.",
+            "- [ ] pair-b - the dependent (repo: alpha) blocked-by: pair-a - waits on the blocker",
+            "  Dependent body.",
+            "",
+            "## Done",
+            "",
+          ].join("\n"),
+        );
+
+        const src = source.read();
+        expect(src).not.toContain("pair-a");
+        expect(src).not.toContain("pair-b");
+        expect(src).not.toContain("Blocker paragraph two after a blank.");
+      } finally {
+        source.cleanup();
+        target.cleanup();
+      }
+    });
+
+    it("preserves the intra-set reason on the moved dependent", async () => {
+      const source = makeBacklog(linkedSet);
+      const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      try {
+        const moved = await source.store.moveManyTo(
+          ["pair-a", "pair-b"],
+          target.store,
+        );
+        const dependent = moved.find((t) => t.id === "pair-b");
+        expect(dependent?.deps).toEqual([
+          {
+            type: "blocked-by",
+            id: "pair-a",
+            reason: "waits on the blocker",
+          },
+        ]);
+      } finally {
+        source.cleanup();
+        target.cleanup();
+      }
+    });
+
+    it("refuses when a moved item's blocker stays behind", async () => {
+      const source = makeBacklog(linkedSet);
+      const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      const before = source.read();
+      try {
+        await expect(
+          source.store.moveManyTo(["pair-b"], target.store),
+        ).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: expect.stringContaining('its blocker "pair-a"'),
+        });
+        // Nothing is written to either file on a refusal.
+        expect(source.read()).toBe(before);
+        expect(target.read()).not.toContain("pair-b");
+      } finally {
+        source.cleanup();
+        target.cleanup();
+      }
+    });
+
+    it("refuses when an active dependent is left behind", async () => {
+      const source = makeBacklog(linkedSet);
+      const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      const before = source.read();
+      try {
+        await expect(
+          source.store.moveManyTo(["pair-a"], target.store),
+        ).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: expect.stringContaining(
+            "still blocking active tasks: pair-b",
+          ),
+        });
+        expect(source.read()).toBe(before);
+        expect(target.read()).not.toContain("pair-a");
+      } finally {
+        source.cleanup();
+        target.cleanup();
+      }
+    });
+
+    it("aborts the set when one member id is missing (no partial move)", async () => {
+      const source = makeBacklog(linkedSet);
+      const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      const before = source.read();
+      try {
+        await expect(
+          source.store.moveManyTo(["pair-a", "pair-b", "ghost-z9"], target.store),
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
+        expect(source.read()).toBe(before);
+        expect(target.read()).not.toContain("pair-a");
+      } finally {
+        source.cleanup();
+        target.cleanup();
+      }
+    });
+
+    it("round-trips a whole linked set back to its origin byte-exact", async () => {
+      const source = makeBacklog(linkedSet);
+      const target = makeBacklog(
+        "# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n",
+      );
+      try {
+        await source.store.moveManyTo(["pair-a", "pair-b"], target.store);
+        // Move the set straight back; the returning file matches the original.
+        await target.store.moveManyTo(["pair-a", "pair-b"], source.store);
+        expect(source.read()).toBe(linkedSet);
+        expect(target.read()).not.toContain("pair-a");
+        expect(target.read()).not.toContain("pair-b");
+      } finally {
+        source.cleanup();
+        target.cleanup();
+      }
+    });
+  });
+
   describe("prune", () => {
     it("rejects an archive path that resolves to the live backlog", () => {
       const b = makeBacklog();

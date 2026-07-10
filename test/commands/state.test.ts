@@ -992,15 +992,187 @@ describe("state commands", () => {
       }
     });
 
-    it("rejects extra positional arguments before moving", async () => {
+    it("aborts the whole set when a member id does not exist", async () => {
+      const b = makeBacklog();
+      const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      const before = b.read();
+      try {
+        await expect(
+          mvCommand(["cert-cleanup", "nope-x9", "--to", target.path], b.ctx),
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
+        // Atomic: the existing member never moves when a sibling is missing.
+        expect(b.read()).toBe(before);
+        expect(readFileSync(target.path, "utf8")).not.toContain("cert-cleanup");
+      } finally {
+        b.cleanup();
+        target.cleanup();
+      }
+    });
+
+    it("requires at least one id", async () => {
       const b = makeBacklog();
       const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
       try {
         await expect(
-          mvCommand(["cert-cleanup", "extra", "--to", target.path], b.ctx),
+          mvCommand(["--to", target.path], b.ctx),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
-        expect(b.read()).toContain("cert-cleanup");
-        expect(readFileSync(target.path, "utf8")).not.toContain("cert-cleanup");
+      } finally {
+        b.cleanup();
+        target.cleanup();
+      }
+    });
+
+    it("moves a connected blocker/dependent pair atomically, reason byte-exact", async () => {
+      const src = [
+        "# Backlog",
+        "",
+        "## In flight",
+        "",
+        "## Queued",
+        "- [ ] blocker-b1 - the login refactor (repo: alpha)",
+        "  First paragraph of blocker.",
+        "",
+        "  Second paragraph after a blank.",
+        "- [ ] dependent-d2 - depends on the refactor (repo: alpha) blocked-by: blocker-b1 - waits on the login refactor",
+        "  Dependent body line.",
+        "",
+        "## Done",
+        "",
+      ].join("\n");
+      const b = makeBacklog(src);
+      const target = makeBacklog(
+        "# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n",
+      );
+      try {
+        const out = await mvCommand(
+          ["blocker-b1", "dependent-d2", "--to", target.path],
+          b.ctx,
+        );
+        expect(out).toContain(
+          `ok: mv blocker-b1 dependent-d2 -> ${target.path}`,
+        );
+
+        const dst = readFileSync(target.path, "utf8");
+        // The reason string survives byte-exact, still rendered after the tags.
+        expect(dst).toContain(
+          "- [ ] dependent-d2 - depends on the refactor (repo: alpha) blocked-by: blocker-b1 - waits on the login refactor",
+        );
+        // The blocker's multi-paragraph body (PR #11 semantics) moves intact.
+        expect(dst).toContain("  First paragraph of blocker.");
+        expect(dst).toContain("  Second paragraph after a blank.");
+
+        // Nothing is left stranded in the source.
+        expect(b.read()).not.toContain("blocker-b1");
+        expect(b.read()).not.toContain("dependent-d2");
+        expect(b.read()).not.toContain("Second paragraph after a blank.");
+      } finally {
+        b.cleanup();
+        target.cleanup();
+      }
+    });
+
+    it("emits the moved ids under --json for a multi-id move", async () => {
+      const src = [
+        "# Backlog",
+        "",
+        "## In flight",
+        "",
+        "## Queued",
+        "- [ ] m1 - one (repo: a)",
+        "- [ ] m2 - two (repo: a) blocked-by: m1 - needs one",
+        "",
+        "## Done",
+        "",
+      ].join("\n");
+      const b = makeBacklog(src);
+      const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      try {
+        const out = await mvCommand(
+          ["m1", "m2", "--to", target.path, "--json"],
+          b.ctx,
+        );
+        const parsed = JSON.parse(out) as {
+          ok: boolean;
+          action: string;
+          ids: string[];
+          to: string;
+        };
+        expect(parsed).toMatchObject({
+          ok: true,
+          action: "mv",
+          ids: ["m1", "m2"],
+          to: target.path,
+        });
+      } finally {
+        b.cleanup();
+        target.cleanup();
+      }
+    });
+
+    it("refuses a set that leaves its blocker behind, naming the link", async () => {
+      const src = [
+        "# Backlog",
+        "",
+        "## In flight",
+        "",
+        "## Queued",
+        "- [ ] chain-a - root (repo: alpha)",
+        "- [ ] chain-b - middle (repo: alpha) blocked-by: chain-a - needs root",
+        "- [ ] chain-c - leaf (repo: alpha) blocked-by: chain-b - needs middle",
+        "",
+        "## Done",
+        "",
+      ].join("\n");
+      const b = makeBacklog(src);
+      const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      const before = b.read();
+      try {
+        await expect(
+          mvCommand(["chain-b", "chain-c", "--to", target.path], b.ctx),
+        ).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: expect.stringContaining('its blocker "chain-a"'),
+        });
+        // Atomic refusal: nothing moved.
+        expect(b.read()).toBe(before);
+        expect(readFileSync(target.path, "utf8")).not.toContain("chain-b");
+      } finally {
+        b.cleanup();
+        target.cleanup();
+      }
+    });
+
+    it("moves a full three-item chain together", async () => {
+      const src = [
+        "# Backlog",
+        "",
+        "## In flight",
+        "",
+        "## Queued",
+        "- [ ] chain-a - root (repo: alpha)",
+        "- [ ] chain-b - middle (repo: alpha) blocked-by: chain-a - needs root",
+        "- [ ] chain-c - leaf (repo: alpha) blocked-by: chain-b - needs middle",
+        "",
+        "## Done",
+        "",
+      ].join("\n");
+      const b = makeBacklog(src);
+      const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      try {
+        await mvCommand(
+          ["chain-a", "chain-b", "chain-c", "--to", target.path],
+          b.ctx,
+        );
+        const dst = readFileSync(target.path, "utf8");
+        expect(dst).toContain(
+          "- [ ] chain-b - middle (repo: alpha) blocked-by: chain-a - needs root",
+        );
+        expect(dst).toContain(
+          "- [ ] chain-c - leaf (repo: alpha) blocked-by: chain-b - needs middle",
+        );
+        expect(b.read()).not.toContain("chain-a");
+        expect(b.read()).not.toContain("chain-b");
+        expect(b.read()).not.toContain("chain-c");
       } finally {
         b.cleanup();
         target.cleanup();
