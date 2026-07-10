@@ -53,9 +53,9 @@ describe("markdown grammar", () => {
       expect(renderBacklog(doc)).toBe(src);
       expect(ids).toContain("cert-cleanup");
       expect(ids).toContain("lease-core-t4");
-      expect(
-        tasks.find((t) => t.id === "multi-line-w8")?.body,
-      ).not.toContain("\r");
+      expect(tasks.find((t) => t.id === "multi-line-w8")?.body).not.toContain(
+        "\r",
+      );
     });
 
     it("round-trips an empty file", () => {
@@ -219,15 +219,17 @@ describe("markdown grammar", () => {
       expect(renderBacklog(doc)).toBe(src);
 
       markAllDirty(doc);
-      expect(renderBacklog(doc)).toBe([
-        "## Queued",
-        "- [ ] whitespace-body - preserves paragraphs (repo: alpha)",
-        "  First paragraph.",
-        "",
-        "  Second paragraph.",
-        "## Done",
-        "",
-      ].join("\n"));
+      expect(renderBacklog(doc)).toBe(
+        [
+          "## Queued",
+          "- [ ] whitespace-body - preserves paragraphs (repo: alpha)",
+          "  First paragraph.",
+          "",
+          "  Second paragraph.",
+          "## Done",
+          "",
+        ].join("\n"),
+      );
     });
 
     it("treats indented pseudo-headings as body, not section boundaries", () => {
@@ -253,7 +255,9 @@ describe("markdown grammar", () => {
       ]);
       expect(task.body).toContain("## Intent");
       expect(task.body).toContain("## Acceptance");
-      expect(task.body).toContain("Deliver the full spec, not the title alone.");
+      expect(task.body).toContain(
+        "Deliver the full spec, not the title alone.",
+      );
       expect(renderBacklog(doc)).toBe(src);
     });
 

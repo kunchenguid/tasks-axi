@@ -674,7 +674,10 @@ describe("MarkdownStore", () => {
           read.indexOf("## In flight"),
           read.indexOf("## Queued"),
         );
-        const queued = read.slice(read.indexOf("## Queued"), read.indexOf("## Done"));
+        const queued = read.slice(
+          read.indexOf("## Queued"),
+          read.indexOf("## Done"),
+        );
         expect(flight).toContain("multi-para");
         expect(flight).toContain("  First paragraph line.");
         expect(flight).toContain("  Second paragraph after a blank.");
@@ -1037,7 +1040,9 @@ describe("MarkdownStore", () => {
         expect(src).toContain("  after body");
 
         const dst = target.read();
-        expect(dst).toContain("- [ ] multi-para - multi-paragraph body (repo: alpha)");
+        expect(dst).toContain(
+          "- [ ] multi-para - multi-paragraph body (repo: alpha)",
+        );
         expect(dst).toContain("  First paragraph line.");
         expect(dst).toContain("  Second paragraph after a blank.");
         expect(dst).toContain("  ## Intent");

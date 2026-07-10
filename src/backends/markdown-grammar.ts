@@ -116,9 +116,7 @@ const TAIL_HOLD = /\s*\(hold:\s*([^()]+)\)\s*$/;
 const TAIL_HOLD_KIND = new RegExp(
   `\\s*\\(hold-kind:\\s*(${HOLD_KINDS.join("|")})\\)\\s*$`,
 );
-const TAIL_HOLD_UNTIL = new RegExp(
-  `\\s*\\(hold-until:\\s*(${DATE})\\)\\s*$`,
-);
+const TAIL_HOLD_UNTIL = new RegExp(`\\s*\\(hold-until:\\s*(${DATE})\\)\\s*$`);
 
 const PR_LINK = /https?:\/\/\S+?\/pull\/\d+/g;
 const REPORT_LINK = /\bdata\/\S+?\/report\.md\b/g;
