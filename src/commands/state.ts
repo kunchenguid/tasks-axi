@@ -92,7 +92,8 @@ export const MV_HELP = `usage: tasks-axi mv <id> [<id>...] --to <path-or-dir>
 Move one or more tasks to another backlog file in a single atomic transaction.
 Pass a whole connected set (a blocker and its dependents) to move it together;
 their blocked-by links and reason strings are preserved byte-exact.
-Refuses if a moved item's blocker or dependent would be stranded in the other
+Duplicate ids are ignored after their first occurrence.
+Refuses if a moved item's dependency or active dependent would be stranded in the other
 file - include the whole set, or move the missing endpoint there first.
 flags:
   --json   print the result as a JSON object

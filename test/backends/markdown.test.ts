@@ -1233,6 +1233,37 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("rolls back every created destination task when source removal fails", async () => {
+      const source = makeBacklog(linkedSet);
+      const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      try {
+        const targetInternals = target.store as unknown as MarkdownInternals;
+        const originalPersist = targetInternals.persist.bind(target.store);
+        targetInternals.persist = (loaded: unknown) => {
+          originalPersist(loaded);
+          writeFileSync(
+            source.path,
+            `${source.read()}\nmanual edit after destination write\n`,
+            "utf8",
+          );
+        };
+
+        await expect(
+          source.store.moveManyTo(["pair-a", "pair-b"], target.store),
+        ).rejects.toMatchObject({
+          code: "CONFLICT",
+          message: expect.stringContaining("changed on disk"),
+        });
+        expect(source.read()).toContain("pair-a");
+        expect(source.read()).toContain("pair-b");
+        expect(target.read()).not.toContain("pair-a");
+        expect(target.read()).not.toContain("pair-b");
+      } finally {
+        source.cleanup();
+        target.cleanup();
+      }
+    });
+
     it("round-trips a whole linked set back to its origin byte-exact", async () => {
       const source = makeBacklog(linkedSet);
       const target = makeBacklog(

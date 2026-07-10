@@ -115,6 +115,8 @@ tasks-axi show homemux-h7 --full
 tasks-axi prune --keep 10        # archives the surplus, never deletes
 tasks-axi render                 # normalize the markdown in place
 tasks-axi mv hibit-cert-cleanup --to ../homemux/data/backlog.md
+# move a linked blocker/dependent set together
+tasks-axi mv blocker-b1 dependent-d2 --to ../homemux/data/backlog.md
 ```
 
 Output is [TOON](https://toonformat.dev)-encoded and token-efficient.
@@ -130,6 +132,7 @@ Active holds are excluded from `ready`; a hold with `--until YYYY-MM-DD` becomes
 Use `ready --include-held` to show dispatchable ready work and a separate `held` group with the hold reason, kind, and until date.
 Use `list --state held` or `list --fields held,hold_reason,hold_kind,hold_until` when you need to scan active hold state directly.
 Pass `--json` to any mutation for a machine-readable result object (`{ "ok": true, "action": …, "task": { … } }` or operation-specific result fields) instead of TOON, so an agent can confirm a write deterministically without a follow-up read.
+For `mv`, a single task returns `id`, while a multi-task move returns first-occurrence-ordered, deduplicated `ids`, plus `from` and `to`.
 
 Run `tasks-axi --help` for the command list, or `tasks-axi <command> --help` for per-command usage.
 
@@ -141,6 +144,10 @@ Targeted task mutations re-render only the affected task; every other line, incl
 An item's body includes every following indented or blank line, so multi-paragraph notes and indented Markdown content move intact with the task.
 Trailing separator blanks remain with the item's raw source for byte-exact preservation without becoming part of its structured body.
 Maintenance commands are explicit exceptions: `render` normalizes every recognized task, `prune` trims the chosen section into the archive, and `mv` writes both source and destination backlogs.
+`mv <id> [<id>...] --to <path-or-dir>` moves one or more tasks as one atomic cross-file transaction.
+To move a dependency-connected set, include every linked blocker and active dependent in the same command, unless the other endpoint already exists in the destination backlog.
+The command refuses a move that would strand a dependency across the two files, while preserving intra-set `blocked-by` links and their reason strings.
+Moved tasks are re-rendered canonically, so their multi-paragraph bodies remain intact but a trailing blank separator before the next item or section is dropped.
 
 The read-modify-write window is guarded by an advisory lockfile, an atomic write (temp file + rename), and a fresh re-read on every invocation, so a hand-edit and a CLI-edit cannot clobber each other.
 Task state is carried by the section header, not by the bullet style: `## In flight`, `## Queued`, and `## Done` decide whether a recognized item is in flight, queued, or done.
@@ -164,7 +171,8 @@ Hold reasons are preserved metadata too, but active holds are a readiness gate u
 Existing prose markers like `HELD`, `PARKED`, `DEFERRED`, `CAPTAIN-DECISION`, and `do not dispatch` stay prose until you intentionally migrate them.
 Map them to structured holds by preserving the original prose as the reason and choosing `captain`, `parked`, `future`, `load`, or `external` only when the text supports that bucket.
 Do not bulk-rewrite live backlogs just to chase these tags; migrate only when touching the task or when a hold migration specifically targets them.
-`add --blocked-by` and `block --by` require the referenced task to exist, and `rm` / `mv` refuse to remove a task that still blocks active work.
+`add --blocked-by` and `block --by` require the referenced task to exist, and `rm` refuses to remove a task that still blocks active work.
+Single-task `mv` has the same protection; use multi-task `mv` to move its active dependents with it.
 
 ## Configuration
 
