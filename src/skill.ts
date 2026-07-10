@@ -95,7 +95,7 @@ Run \`npx -y tasks-axi --help\` for global flags, or \`npx -y tasks-axi <command
 - Existing prose markers such as \`HELD\`, \`PARKED\`, \`DEFERRED\`, \`CAPTAIN-DECISION\`, and \`do not dispatch\` stay prose until intentionally migrated.
   Preserve the original prose as the hold reason, then choose \`captain\`, \`parked\`, \`future\`, \`load\`, or \`external\` only when the text supports that bucket.
 - Note writes are inspect-then-update: run \`show <id> --full\`, then replace the curated current body with \`update <id> --body "<text>"\` or \`--body-file <path>\`.
-  Add \`--archive-body\` to preserve the superseded body in \`note-archive.md\`; \`--title "<text>"\` replaces the title; \`render\` normalizes the file; \`mv <id> --to <path>\` moves a task to another backlog.
+  Add \`--archive-body\` to preserve the superseded body in \`note-archive.md\`; \`--title "<text>"\` replaces the title; \`render\` normalizes the file; \`mv <id> [<id>...] --to <path>\` moves one or more tasks to another backlog in one atomic transaction - pass a whole connected set (a blocker and its dependents) to move it together and preserve its \`blocked-by\` links and reason strings; moves that would strand an endpoint are refused.
 - Free-form (no-id) backlog lines are preserved verbatim and are never modified.
 `;
 }

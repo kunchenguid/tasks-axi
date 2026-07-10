@@ -3,6 +3,7 @@ import { existsSync, statSync } from "node:fs";
 import { MarkdownStore } from "../backends/markdown.js";
 import {
   parseNonNegativeIntegerFlag,
+  requireNoUnknownFlags,
   requireNonEmptyFlagValue,
   requireNonEmptySingleLineFlagValue,
   requirePositionals,
@@ -87,13 +88,18 @@ export const READY_HELP = `usage: tasks-axi ready [--repo <name>] [--include-hel
 List unblocked, unheld queued work dispatchable right now.
 Held work is excluded by default; --include-held shows it in a separate held group.`;
 
-export const MV_HELP = `usage: tasks-axi mv <id> --to <path-or-dir>
-Move a task to another backlog file (generalizes a hand-rolled line move).
-Fails while active tasks still block on this id.
+export const MV_HELP = `usage: tasks-axi mv <id> [<id>...] --to <path-or-dir>
+Move one or more tasks to another backlog file in a single atomic transaction.
+Pass a whole connected set (a blocker and its dependents) to move it together;
+their blocked-by links and reason strings are preserved byte-exact.
+Duplicate ids are ignored after their first occurrence.
+Refuses if a moved item's dependency or active dependent would be stranded in the other
+file - include the whole set, or move the missing endpoint there first.
 flags:
   --json   print the result as a JSON object
 examples:
-  tasks-axi mv hibit-cert-cleanup --to ../homemux/data/backlog.md`;
+  tasks-axi mv hibit-cert-cleanup --to ../homemux/data/backlog.md
+  tasks-axi mv blocker-b1 dependent-d2 --to ../homemux/data/backlog.md`;
 
 export async function startCommand(
   rawArgs: string[],
@@ -649,11 +655,14 @@ export async function mvCommand(
       "Name the destination backlog, e.g. `--to ../other/data/backlog.md`",
     ]);
   }
-  const positionals = requirePositionals(args, 1, 1, MV_HELP.split("\n")[0]);
-  const id = requireId(positionals[0], "id");
-
-  const task = await store.get(id);
-  if (!task) throw notFound(id, { globals: context?.suggestionGlobals });
+  requireNoUnknownFlags(args);
+  const positionals = args.filter((arg) => !arg.startsWith("-"));
+  if (positionals.length === 0) {
+    throw new AxiError("Expected at least one task id", "VALIDATION_ERROR", [
+      MV_HELP.split("\n")[0],
+    ]);
+  }
+  const ids = [...new Set(positionals.map((p) => requireId(p, "id")))];
 
   const targetPath = resolveBacklogTarget(to);
   if (resolve(targetPath) === resolve(config.path)) {
@@ -662,34 +671,52 @@ export async function mvCommand(
       "VALIDATION_ERROR",
     );
   }
+
+  const tasks: Task[] = [];
+  for (const id of ids) {
+    const task = await store.get(id);
+    if (!task) throw notFound(id, { globals: context?.suggestionGlobals });
+    tasks.push(task);
+  }
+
   const target = new MarkdownStore({ path: targetPath });
-  if (await target.get(id)) {
-    throw new AxiError(
-      `Task "${id}" already exists in the destination backlog`,
-      "CONFLICT",
-    );
+  for (const id of ids) {
+    if (await target.get(id)) {
+      throw new AxiError(
+        `Task "${id}" already exists in the destination backlog`,
+        "CONFLICT",
+      );
+    }
   }
 
   if (store instanceof MarkdownStore) {
-    await store.moveTo(id, target);
+    await store.moveManyTo(ids, target);
+  } else if (ids.length === 1) {
+    await target.create(taskToInput(tasks[0]));
+    await store.remove(ids[0]);
   } else {
-    await target.create(taskToInput(task));
-    await store.remove(id);
+    throw new AxiError(
+      "Moving multiple tasks at once requires the markdown backend",
+      "UNSUPPORTED",
+    );
   }
 
+  const single = ids.length === 1;
   return renderMutation({
     json,
-    confirm: `mv ${id} -> ${targetPath}`,
+    confirm: single
+      ? `mv ${ids[0]} -> ${targetPath}`
+      : `mv ${ids.join(" ")} -> ${targetPath}`,
     jsonPayload: {
       ok: true,
       action: "mv",
-      id,
+      ...(single ? { id: ids[0] } : { ids }),
       from: config.path,
       to: targetPath,
     },
     suggestions: getSuggestions({
       action: "mv",
-      id,
+      id: ids[0],
       globals: context?.suggestionGlobals,
     }),
   });

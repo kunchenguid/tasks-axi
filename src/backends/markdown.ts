@@ -31,6 +31,7 @@ import type {
 import { atomicWrite, readFileSafe, withLock, withLocks } from "./lock.js";
 import {
   type BacklogDoc,
+  type Entry,
   type Section,
   type TaskEntry,
   deriveLinks,
@@ -708,36 +709,66 @@ export class MarkdownStore implements Store {
   }
 
   async moveTo(id: string, target: MarkdownStore): Promise<Task> {
+    const [moved] = await this.moveManyTo([id], target);
+    return moved;
+  }
+
+  /**
+   * Move a connected set of tasks to another backlog in one transaction: either
+   * every task lands in the destination and leaves the source, or none do (no
+   * intermediate state that loses a link is ever written to disk). Each moved
+   * task is re-rendered canonically — identical to the single-id path — so
+   * multi-paragraph bodies and `blocked-by: <id> - <reason>` edges survive
+   * byte-exact. An intra-set dependency edge is preserved because both of its
+   * endpoints travel together; `requireNoSplitDeps` refuses any move that would
+   * strand a link across the two files.
+   */
+  async moveManyTo(ids: string[], target: MarkdownStore): Promise<Task[]> {
+    const uniqueIds = [...new Set(ids)];
     return withLocks([this.path, target.path], () => {
       const loaded = this.loadForUpdate();
       const { doc } = loaded;
-      const found = this.findEntry(doc, id);
-      if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
-      this.requireNoActiveDependents(doc, id);
+
+      // Resolve every source entry up front so a missing id fails before any
+      // write and never leaves a half-applied move behind.
+      const founds = uniqueIds.map((id) => {
+        const found = this.findEntry(doc, id);
+        if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
+        return found;
+      });
 
       const targetLoaded = target.loadForUpdate();
       const { doc: targetDoc } = targetLoaded;
       target.ensureSections(targetDoc);
-      if (target.findEntry(targetDoc, id)) {
-        throw new AxiError(
-          `Task "${id}" already exists in the destination backlog`,
-          "CONFLICT",
-        );
+      for (const id of uniqueIds) {
+        if (target.findEntry(targetDoc, id)) {
+          throw new AxiError(
+            `Task "${id}" already exists in the destination backlog`,
+            "CONFLICT",
+          );
+        }
       }
 
-      const task = target.taskFromInput(taskToInput(found.entry.task));
-      target.requireExistingDeps(targetDoc, task.deps);
-      target.insert(
-        target.section(targetDoc, task.state),
-        {
-          kind: "task",
-          task,
-          raw: [],
-          dirty: true,
-        },
-        task.state === "in_flight",
-      );
-      found.section.entries.splice(found.index, 1);
+      this.requireNoSplitDeps(doc, targetDoc, uniqueIds);
+
+      const moved: Task[] = [];
+      for (const found of founds) {
+        const task = target.taskFromInput(taskToInput(found.entry.task));
+        target.insert(
+          target.section(targetDoc, task.state),
+          { kind: "task", task, raw: [], dirty: true },
+          task.state === "in_flight",
+        );
+        moved.push(task);
+      }
+
+      // Remove the moved entries from the source by identity: splicing by index
+      // would shift once two moved items share a section.
+      const removeSet = new Set<Entry>(founds.map((f) => f.entry));
+      for (const section of doc.sections) {
+        section.entries = section.entries.filter((e) => !removeSet.has(e));
+      }
+
       target.assertUnchanged(targetLoaded);
       this.assertUnchanged(loaded);
       target.persist(targetLoaded);
@@ -745,14 +776,79 @@ export class MarkdownStore implements Store {
         this.persist(loaded);
       } catch (error) {
         try {
-          target.removeCreatedTask(id);
+          for (const id of uniqueIds) target.removeCreatedTask(id);
         } catch (rollbackError) {
-          throw this.partialMoveError(id, error, rollbackError);
+          throw this.partialMoveError(
+            uniqueIds.join(", "),
+            error,
+            rollbackError,
+          );
         }
         throw error;
       }
-      return task;
+      return moved;
     });
+  }
+
+  /**
+   * Refuse any move that would split a dependency edge across the two files. A
+   * moved item may not (a) leave an active dependent behind that is blocked-by
+   * it, nor (b) point at a blocker/parent that stays in the source and is
+   * absent from the destination. An edge wholly inside the moved set is fine
+   * because both endpoints travel together. Generalizes the single-id
+   * `requireNoActiveDependents` + destination `requireExistingDeps` guards so a
+   * connected set can move as one, while a stray endpoint is still named.
+   */
+  private requireNoSplitDeps(
+    doc: BacklogDoc,
+    targetDoc: BacklogDoc,
+    ids: string[],
+  ): void {
+    const movedSet = new Set(ids);
+
+    // (a) An active dependent left in the source would point across files at a
+    //     now-absent blocker. This is the single-id "still blocking" guard,
+    //     with in-set dependents excluded because they move too.
+    for (const id of ids) {
+      const stranded = this.allTasks(doc)
+        .filter(
+          (task) =>
+            !movedSet.has(task.id) &&
+            task.state !== "done" &&
+            task.deps.some((dep) => dep.type === "blocked-by" && dep.id === id),
+        )
+        .map((task) => task.id);
+      if (stranded.length > 0) {
+        throw new AxiError(
+          `Task "${id}" is still blocking active tasks: ${stranded.join(", ")}`,
+          "VALIDATION_ERROR",
+          [
+            `Move them together, or unblock them first, e.g. \`tasks-axi unblock ${stranded[0]} --by ${id}\``,
+          ],
+        );
+      }
+    }
+
+    // (b) A moved item's blocker must travel with it or already exist in the
+    //     destination; otherwise its `blocked-by` edge would dangle across
+    //     files. `findEntry` only reads the doc it is handed, so it is safe to
+    //     probe the target doc from the source store here.
+    for (const id of ids) {
+      const found = this.findEntry(doc, id);
+      if (!found) continue;
+      for (const dep of found.entry.task.deps) {
+        if (movedSet.has(dep.id)) continue;
+        if (this.findEntry(targetDoc, dep.id)) continue;
+        const label = dep.type === "blocked-by" ? "blocker" : "dependency";
+        throw new AxiError(
+          `Cannot move "${id}": its ${label} "${dep.id}" would be stranded (not in the moved set and absent from the destination)`,
+          "VALIDATION_ERROR",
+          [
+            `Add "${dep.id}" to the same \`mv\`, or move it to the destination first`,
+          ],
+        );
+      }
+    }
   }
 
   // -------------------------------------------------------------------------
