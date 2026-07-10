@@ -1223,7 +1223,10 @@ describe("MarkdownStore", () => {
       const before = source.read();
       try {
         await expect(
-          source.store.moveManyTo(["pair-a", "pair-b", "ghost-z9"], target.store),
+          source.store.moveManyTo(
+            ["pair-a", "pair-b", "ghost-z9"],
+            target.store,
+          ),
         ).rejects.toMatchObject({ code: "NOT_FOUND" });
         expect(source.read()).toBe(before);
         expect(target.read()).not.toContain("pair-a");
