@@ -429,7 +429,7 @@ function parseEntries(lines: string[], state: State | undefined): Entry[] {
       // A trailing blank before the next item/section belongs to this block.
       while (i + 1 < lines.length) {
         const next = semanticLine(lines[i + 1]);
-        if (next.length === 0) {
+        if (next.trim().length === 0) {
           i++;
           raw.push(lines[i]);
           bodyLines.push("");

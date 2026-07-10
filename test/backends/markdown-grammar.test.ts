@@ -201,6 +201,35 @@ describe("markdown grammar", () => {
       expect(renderBacklog(doc)).toBe(src);
     });
 
+    it("treats whitespace-only lines as blank body separators", () => {
+      const src = [
+        "## Queued",
+        "- [ ] whitespace-body - preserves paragraphs (repo: alpha)",
+        "  First paragraph.",
+        " \t ",
+        "  Second paragraph.",
+        "   ",
+        "## Done",
+        "",
+      ].join("\n");
+      const doc = parseBacklog(src);
+      const task = tasksOf(doc)[0];
+
+      expect(task.body).toBe("First paragraph.\n\nSecond paragraph.");
+      expect(renderBacklog(doc)).toBe(src);
+
+      markAllDirty(doc);
+      expect(renderBacklog(doc)).toBe([
+        "## Queued",
+        "- [ ] whitespace-body - preserves paragraphs (repo: alpha)",
+        "  First paragraph.",
+        "",
+        "  Second paragraph.",
+        "## Done",
+        "",
+      ].join("\n"));
+    });
+
     it("treats indented pseudo-headings as body, not section boundaries", () => {
       const src = [
         "## Queued",
