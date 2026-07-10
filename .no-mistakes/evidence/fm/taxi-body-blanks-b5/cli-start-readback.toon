@@ -1,0 +1,18 @@
+task:
+  id: start-body-q1
+  title: starts from queued
+  state: in_flight
+  blocked: no
+  blocked_by: none
+  held: no
+  hold_reason: "-"
+  hold_kind: "-"
+  hold_until: "-"
+  kind: task
+  repo: evidence
+  priority: "-"
+  created: 2026-07-09
+  closed: "-"
+  deps: none
+  links: none
+  body: "First start paragraph.\n\nSecond start paragraph after a blank.\n## Intent\n\nPreserve this entire body on start."

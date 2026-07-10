@@ -629,6 +629,24 @@ describe("MarkdownStore", () => {
   });
 
   describe("transition", () => {
+    const multiParaQueued = [
+      "# Backlog",
+      "",
+      "## In flight",
+      "",
+      "## Queued",
+      "- [ ] multi-para - multi-paragraph body (repo: alpha)",
+      "  First paragraph line.",
+      "",
+      "  Second paragraph after a blank.",
+      "  ## Intent",
+      "",
+      "  final line",
+      "",
+      "## Done",
+      "",
+    ].join("\n");
+
     it("moves queued -> in_flight and stamps since", async () => {
       const b = makeBacklog();
       try {
@@ -638,6 +656,81 @@ describe("MarkdownStore", () => {
         // In-flight renders in firstmate's `- [ ]` checkbox form (same bullet as
         // Queued); the In flight section header is what marks the state.
         expect(read).toMatch(/## In flight[\s\S]*- \[ \] cert-cleanup/);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("carries a multi-paragraph body through start (queued -> in_flight)", async () => {
+      const b = makeBacklog(multiParaQueued);
+      try {
+        const task = await b.store.transition("multi-para", "in_flight");
+        expect(task.body).toContain("Second paragraph after a blank.");
+        expect(task.body).toContain("## Intent");
+        expect(task.body).toContain("final line");
+
+        const read = b.read();
+        const flight = read.slice(
+          read.indexOf("## In flight"),
+          read.indexOf("## Queued"),
+        );
+        const queued = read.slice(
+          read.indexOf("## Queued"),
+          read.indexOf("## Done"),
+        );
+        expect(flight).toContain("multi-para");
+        expect(flight).toContain("  First paragraph line.");
+        expect(flight).toContain("  Second paragraph after a blank.");
+        expect(flight).toContain("  ## Intent");
+        expect(flight).toContain("  final line");
+        expect(queued).not.toContain("multi-para");
+        expect(queued).not.toContain("Second paragraph after a blank.");
+        expect(queued).not.toContain("final line");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("carries a multi-paragraph body through done (in_flight -> done)", async () => {
+      // Seed as in-flight with the multi-paragraph body already in that section.
+      const seeded = [
+        "# Backlog",
+        "",
+        "## In flight",
+        "- [ ] multi-para - multi-paragraph body (repo: alpha)",
+        "  First paragraph line.",
+        "",
+        "  Second paragraph after a blank.",
+        "  ## Intent",
+        "",
+        "  final line",
+        "",
+        "## Queued",
+        "",
+        "## Done",
+        "",
+      ].join("\n");
+      const b = makeBacklog(seeded);
+      try {
+        const task = await b.store.transition("multi-para", "done", {
+          note: "closed note",
+        });
+        expect(task.body).toContain("Second paragraph after a blank.");
+        expect(task.body).toContain("closed note");
+
+        const read = b.read();
+        const done = read.slice(read.indexOf("## Done"));
+        const flight = read.slice(
+          read.indexOf("## In flight"),
+          read.indexOf("## Queued"),
+        );
+        expect(done).toContain("multi-para");
+        expect(done).toContain("  Second paragraph after a blank.");
+        expect(done).toContain("  ## Intent");
+        expect(done).toContain("  final line");
+        expect(done).toContain("  closed note");
+        expect(flight).not.toContain("multi-para");
+        expect(flight).not.toContain("Second paragraph after a blank.");
       } finally {
         b.cleanup();
       }
@@ -901,6 +994,66 @@ describe("MarkdownStore", () => {
   });
 
   describe("moveTo", () => {
+    const multiParaBacklog = [
+      "# Backlog",
+      "",
+      "## In flight",
+      "",
+      "## Queued",
+      "- [ ] before-multi - stays put (repo: alpha)",
+      "  before body",
+      "- [ ] multi-para - multi-paragraph body (repo: alpha)",
+      "  First paragraph line.",
+      "",
+      "  Second paragraph after a blank.",
+      "  ## Intent",
+      "",
+      "  Indented heading then blank then more.",
+      "  final line",
+      "- [ ] after-multi - subsequent item (repo: alpha)",
+      "  after body",
+      "",
+      "## Done",
+      "",
+    ].join("\n");
+
+    it("moves a multi-paragraph body with internal blanks as one block", async () => {
+      const source = makeBacklog(multiParaBacklog);
+      const target = makeBacklog(
+        "# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n",
+      );
+      try {
+        const task = await source.store.moveTo("multi-para", target.store);
+        expect(task.body).toContain("Second paragraph after a blank.");
+        expect(task.body).toContain("## Intent");
+        expect(task.body).toContain("final line");
+
+        const src = source.read();
+        expect(src).not.toContain("multi-para");
+        expect(src).not.toContain("First paragraph line.");
+        expect(src).not.toContain("Second paragraph after a blank.");
+        expect(src).not.toContain("Indented heading then blank then more.");
+        expect(src).not.toContain("final line");
+        expect(src).toContain("before-multi");
+        expect(src).toContain("  before body");
+        expect(src).toContain("after-multi");
+        expect(src).toContain("  after body");
+
+        const dst = target.read();
+        expect(dst).toContain(
+          "- [ ] multi-para - multi-paragraph body (repo: alpha)",
+        );
+        expect(dst).toContain("  First paragraph line.");
+        expect(dst).toContain("  Second paragraph after a blank.");
+        expect(dst).toContain("  ## Intent");
+        expect(dst).toContain("  Indented heading then blank then more.");
+        expect(dst).toContain("  final line");
+      } finally {
+        source.cleanup();
+        target.cleanup();
+      }
+    });
+
     it("rolls back the destination when source removal fails", async () => {
       const source = makeBacklog(
         "# Backlog\n\n## Queued\n- [ ] move-q1 - move me\n\n## Done\n",

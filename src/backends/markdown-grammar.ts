@@ -116,9 +116,7 @@ const TAIL_HOLD = /\s*\(hold:\s*([^()]+)\)\s*$/;
 const TAIL_HOLD_KIND = new RegExp(
   `\\s*\\(hold-kind:\\s*(${HOLD_KINDS.join("|")})\\)\\s*$`,
 );
-const TAIL_HOLD_UNTIL = new RegExp(
-  `\\s*\\(hold-until:\\s*(${DATE})\\)\\s*$`,
-);
+const TAIL_HOLD_UNTIL = new RegExp(`\\s*\\(hold-until:\\s*(${DATE})\\)\\s*$`);
 
 const PR_LINK = /https?:\/\/\S+?\/pull\/\d+/g;
 const REPORT_LINK = /\bdata\/\S+?\/report\.md\b/g;
@@ -342,7 +340,9 @@ export function renderTaskLines(task: Task): string[] {
   const lines = [first];
   if (task.body && task.body.length > 0) {
     for (const bodyLine of task.body.split("\n")) {
-      lines.push(`  ${bodyLine}`);
+      // Blank body paragraphs stay blank (not two spaces). Indented content
+      // keeps the 2-space continuation prefix used throughout the grammar.
+      lines.push(bodyLine === "" ? "" : `  ${bodyLine}`);
     }
   }
   return lines;
@@ -362,6 +362,18 @@ function sectionState(headerLine: string): State | undefined {
   return undefined;
 }
 
+/**
+ * Structured body drops trailing blank lines (section/item separators that
+ * still belong to the item block in `raw` for byte-exact emit and removal).
+ * Internal blank lines between paragraphs are kept.
+ */
+function structuredBody(bodyLines: string[]): string | undefined {
+  let end = bodyLines.length;
+  while (end > 0 && bodyLines[end - 1] === "") end--;
+  if (end === 0) return undefined;
+  return bodyLines.slice(0, end).join("\n");
+}
+
 function buildTask(
   id: string,
   rest: string,
@@ -378,7 +390,8 @@ function buildTask(
   };
   if (tags.kind) task.kind = tags.kind;
   if (tags.repo) task.repo = tags.repo;
-  if (bodyLines.length > 0) task.body = bodyLines.join("\n");
+  const body = structuredBody(bodyLines);
+  if (body !== undefined) task.body = body;
   if (tags.created) task.created = tags.created;
   if (tags.closed) task.closed = tags.closed;
   if (tags.priority !== undefined) task.priority = tags.priority;
@@ -405,15 +418,28 @@ function parseEntries(lines: string[], state: State | undefined): Entry[] {
       flushRaw();
       const raw = [line];
       const bodyLines: string[] = [];
-      // Consume indented continuation lines as the task body.
-      while (
-        i + 1 < lines.length &&
-        semanticLine(lines[i + 1]).length > 0 &&
-        semanticLine(lines[i + 1]).startsWith("  ")
-      ) {
-        i++;
-        raw.push(lines[i]);
-        bodyLines.push(semanticLine(lines[i]).slice(2));
+      // Item block = header plus every following indented OR blank line, up to
+      // the next item header or free-form column-0 content. Blank separators
+      // between body paragraphs stay inside the block (and move with it).
+      // Membership is by position, not content: indented lines that look like
+      // markdown headings (e.g. `  ## Intent`) are body, never section
+      // boundaries (column-0 `## ` is already split out before parseEntries).
+      // A trailing blank before the next item/section belongs to this block.
+      while (i + 1 < lines.length) {
+        const next = semanticLine(lines[i + 1]);
+        if (next.trim().length === 0) {
+          i++;
+          raw.push(lines[i]);
+          bodyLines.push("");
+          continue;
+        }
+        if (next.startsWith("  ")) {
+          i++;
+          raw.push(lines[i]);
+          bodyLines.push(next.slice(2));
+          continue;
+        }
+        break;
       }
       entries.push({
         kind: "task",

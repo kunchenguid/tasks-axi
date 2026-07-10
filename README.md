@@ -138,6 +138,8 @@ Run `tasks-axi --help` for the command list, or `tasks-axi <command> --help` for
 `backlog.md` stays the hand-editable source of truth.
 tasks-axi parses it leniently into a model, mutates the targeted item, and re-renders **in place** with a byte-exact round-trip on a file nobody has changed — `render(parse(src)) === src`.
 Targeted task mutations re-render only the affected task; every other line, including free-form (no-id) notes, is preserved verbatim.
+An item's body includes every following indented or blank line, so multi-paragraph notes and indented Markdown content move intact with the task.
+Trailing separator blanks remain with the item's raw source for byte-exact preservation without becoming part of its structured body.
 Maintenance commands are explicit exceptions: `render` normalizes every recognized task, `prune` trims the chosen section into the archive, and `mv` writes both source and destination backlogs.
 
 The read-modify-write window is guarded by an advisory lockfile, an atomic write (temp file + rename), and a fresh re-read on every invocation, so a hand-edit and a CLI-edit cannot clobber each other.
