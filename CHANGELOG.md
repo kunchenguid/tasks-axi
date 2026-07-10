@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/kunchenguid/tasks-axi/compare/tasks-axi-v0.2.0...tasks-axi-v0.2.1) (2026-07-10)
+
+
+### Bug Fixes
+
+* **markdown:** preserve blank lines in task bodies ([#11](https://github.com/kunchenguid/tasks-axi/issues/11)) ([0229c56](https://github.com/kunchenguid/tasks-axi/commit/0229c5611b7ab23b8ff54cf08c7ca337b508f840))
+
 ## [0.2.0](https://github.com/kunchenguid/tasks-axi/compare/tasks-axi-v0.1.2...tasks-axi-v0.2.0) (2026-07-08)
 
 
