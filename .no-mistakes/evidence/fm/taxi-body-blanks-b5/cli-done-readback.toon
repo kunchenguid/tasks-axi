@@ -1,0 +1,18 @@
+task:
+  id: done-body-q1
+  title: finishes from in-flight
+  state: done
+  blocked: no
+  blocked_by: none
+  held: no
+  hold_reason: "-"
+  hold_kind: "-"
+  hold_until: "-"
+  kind: task
+  repo: evidence
+  priority: "-"
+  created: "-"
+  closed: 2026-07-09
+  deps: none
+  links: none
+  body: "First done paragraph.\n\nSecond done paragraph after a blank.\n## Intent\n\nPreserve this entire body on done."
