@@ -162,6 +162,127 @@ describe("markdown grammar", () => {
       expect(task.body).toContain("Second continuation line");
     });
 
+    it("keeps internal blank lines inside a multi-paragraph body", () => {
+      const src = [
+        "# Backlog",
+        "",
+        "## Queued",
+        "- [ ] multi-para - multi-paragraph body (repo: alpha)",
+        "  First paragraph line.",
+        "",
+        "  Second paragraph after a blank.",
+        "  ## Intent",
+        "",
+        "  Indented heading then blank then more.",
+        "  final line",
+        "- [ ] after-multi - subsequent item (repo: alpha)",
+        "  after body",
+        "",
+        "## Done",
+        "",
+      ].join("\n");
+      const doc = parseBacklog(src);
+      const multi = tasksOf(doc).find((t) => t.id === "multi-para")!;
+      const after = tasksOf(doc).find((t) => t.id === "after-multi")!;
+
+      expect(multi.body).toBe(
+        [
+          "First paragraph line.",
+          "",
+          "Second paragraph after a blank.",
+          "## Intent",
+          "",
+          "Indented heading then blank then more.",
+          "final line",
+        ].join("\n"),
+      );
+      expect(after.body).toBe("after body");
+      // Untouched round-trip stays byte-exact, including internal blanks.
+      expect(renderBacklog(doc)).toBe(src);
+    });
+
+    it("treats indented pseudo-headings as body, not section boundaries", () => {
+      const src = [
+        "## Queued",
+        "- [ ] intent-trap - harness default work (repo: firstmate)",
+        "  Context for the secondmate.",
+        "  ## Intent",
+        "  Deliver the full spec, not the title alone.",
+        "  ## Acceptance",
+        "  - body survives parse",
+        "- [ ] next-item - after the trap (repo: firstmate)",
+        "",
+        "## Done",
+        "",
+      ].join("\n");
+      const doc = parseBacklog(src);
+      const task = tasksOf(doc).find((t) => t.id === "intent-trap")!;
+
+      expect(doc.sections.map((s) => s.headerLine)).toEqual([
+        "## Queued",
+        "## Done",
+      ]);
+      expect(task.body).toContain("## Intent");
+      expect(task.body).toContain("## Acceptance");
+      expect(task.body).toContain("Deliver the full spec, not the title alone.");
+      expect(renderBacklog(doc)).toBe(src);
+    });
+
+    it("keeps a trailing blank in the item block raw while structured body strips it", () => {
+      const src = [
+        "## Queued",
+        "- [ ] section-tail - body ends at section (repo: alpha)",
+        "  last queued body",
+        "  ## Intent",
+        "  still body until column-0 section",
+        "",
+        "## Done",
+        "- [x] old-task - shipped (merged 2026-07-01)",
+        "",
+      ].join("\n");
+      const doc = parseBacklog(src);
+      const section = doc.sections.find((s) => s.state === "queued")!;
+      const entry = section.entries.find(
+        (e) => e.kind === "task" && e.task.id === "section-tail",
+      );
+      expect(entry?.kind).toBe("task");
+      if (entry?.kind !== "task") throw new Error("expected task entry");
+
+      // Block membership (raw) includes the trailing blank before ## Done.
+      expect(entry.raw.at(-1)).toBe("");
+      expect(entry.raw).toContain("  ## Intent");
+      // Structured body keeps internal content; trailing separator is not body text.
+      expect(entry.task.body).toBe(
+        [
+          "last queued body",
+          "## Intent",
+          "still body until column-0 section",
+        ].join("\n"),
+      );
+      expect(renderBacklog(doc)).toBe(src);
+    });
+
+    it("leaves single-line items without a body unchanged", () => {
+      const src =
+        "## Queued\n- [ ] plain-q1 - just a title (repo: alpha)\n\n## Done\n";
+      const doc = parseBacklog(src);
+      const task = tasksOf(doc)[0];
+      expect(task.id).toBe("plain-q1");
+      expect(task.body).toBeUndefined();
+      // Trailing blank before ## Done stays in the item block raw, not as body.
+      const entry = doc.sections[0].entries.find(
+        (e) => e.kind === "task" && e.task.id === "plain-q1",
+      );
+      expect(entry?.kind).toBe("task");
+      if (entry?.kind === "task") {
+        expect(entry.raw).toEqual([
+          "- [ ] plain-q1 - just a title (repo: alpha)",
+          "",
+        ]);
+      }
+      expect(renderBacklog(doc)).toBe(src);
+    });
+
     it("derives typed links from prose", () => {
       const links = deriveLinks(
         "shipped https://github.com/o/r/pull/42 see data/x/report.md",
@@ -232,6 +353,46 @@ describe("markdown grammar", () => {
         "  line one",
         "  line two",
       ]);
+    });
+
+    it("renders blank body paragraphs as blank lines, not two spaces", () => {
+      const task: Task = {
+        id: "x-q1",
+        title: "title",
+        state: "queued",
+        body: "line one\n\nline two\n## Intent\n\nfinal",
+        links: [],
+        deps: [],
+      };
+      expect(renderTaskLines(task)).toEqual([
+        "- [ ] x-q1 - title",
+        "  line one",
+        "",
+        "  line two",
+        "  ## Intent",
+        "",
+        "  final",
+      ]);
+    });
+
+    it("dirty re-render preserves multi-paragraph bodies including internal blanks", () => {
+      // No trailing blank after the last body line: dirty re-render rebuilds from
+      // structured body (trailing section separators live only in raw).
+      const src = [
+        "## Queued",
+        "- [ ] multi-para - multi-paragraph body (repo: alpha)",
+        "  First paragraph line.",
+        "",
+        "  Second paragraph after a blank.",
+        "  ## Intent",
+        "",
+        "  final line",
+        "## Done",
+        "",
+      ].join("\n");
+      const doc = parseBacklog(src);
+      markAllDirty(doc);
+      expect(renderBacklog(doc)).toBe(src);
     });
 
     it("renders structured holds as canonical human-readable tags", () => {
