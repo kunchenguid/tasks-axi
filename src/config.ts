@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { readFileSafe } from "./backends/lock.js";
 import { AxiError } from "./errors.js";
 
@@ -9,8 +9,15 @@ import { AxiError } from "./errors.js";
  *
  * Override order:
  *   --backend / --file flag > TASKS_AXI_* env > project .tasks.toml >
- *   ~/.tasks-axi/config.toml > defaults (markdown, first existing
- *   backlog.md/data/backlog.md, otherwise backlog.md).
+ *   ~/.tasks-axi/config.toml > first existing backlog.md/data/backlog.md
+ *   found walking up from cwd.
+ *
+ * `.tasks.toml` is discovered git-style: we walk up from cwd to the nearest
+ * ancestor holding one, so verbs run from a subdirectory resolve against the
+ * project's real ledger instead of the current directory. When nothing
+ * anchors a ledger (no config, no override, no conventional backlog anywhere
+ * up the tree) resolution fails loudly rather than silently creating a stray
+ * backlog.md in cwd.
  *
  * P1 ships only the markdown backend; the Store seam keeps sqlite/remote
  * additions invisible to the CLI layer.
@@ -161,19 +168,91 @@ function loadToml(path: string): TomlConfig {
   return src ? parseConfigToml(src) : {};
 }
 
-function resolveMarkdownPath(
-  explicit: string | undefined,
-  tomlPath: string | undefined,
-  cwd: string,
-): string {
-  const chosen = explicit ?? tomlPath;
-  if (chosen) return isAbsolute(chosen) ? chosen : resolve(cwd, chosen);
+/**
+ * Walk up from `startDir` to the filesystem root, returning the first ancestor
+ * directory (inclusive) that contains a file named `name`, or undefined.
+ */
+function findUp(startDir: string, name: string): string | undefined {
+  let dir = resolve(startDir);
+  for (;;) {
+    if (existsSync(join(dir, name))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
+}
 
+/** The first conventional backlog candidate present directly in `dir`. */
+function backlogAt(dir: string): string | undefined {
   for (const candidate of PATH_CANDIDATES) {
-    const full = resolve(cwd, candidate);
+    const full = join(dir, candidate);
     if (existsSync(full)) return full;
   }
-  return resolve(cwd, PATH_CANDIDATES[0]);
+  return undefined;
+}
+
+/** Walk up from `startDir` to the first existing conventional backlog file. */
+function findBacklogUp(startDir: string): string | undefined {
+  let dir = resolve(startDir);
+  for (;;) {
+    const found = backlogAt(dir);
+    if (found) return found;
+    const parent = dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
+}
+
+interface PathSources {
+  explicitPath: string | undefined;
+  projectPath: string | undefined;
+  projectRoot: string | undefined;
+  homePath: string | undefined;
+  cwd: string;
+}
+
+/**
+ * Resolve the markdown ledger path, throwing when nothing anchors a ledger.
+ *
+ * Order: explicit --file/env > project `.tasks.toml` markdown.path (relative to
+ * the discovered project root) > home config markdown.path > an existing
+ * backlog beside a discovered `.tasks.toml` or anywhere up from cwd. With no
+ * anchor at all we refuse rather than silently forking a new backlog in cwd.
+ */
+function resolveMarkdownPath(sources: PathSources): string {
+  const { explicitPath, projectPath, projectRoot, homePath, cwd } = sources;
+
+  if (explicitPath !== undefined) {
+    return isAbsolute(explicitPath) ? explicitPath : resolve(cwd, explicitPath);
+  }
+  if (projectPath !== undefined) {
+    return isAbsolute(projectPath)
+      ? projectPath
+      : resolve(projectRoot ?? cwd, projectPath);
+  }
+  if (homePath !== undefined) {
+    return isAbsolute(homePath) ? homePath : resolve(cwd, homePath);
+  }
+
+  // A discovered `.tasks.toml` without an explicit path anchors the ledger at
+  // the project root: reuse a backlog already sitting there, else default to
+  // creating one there (safe — the config declares this is the project).
+  if (projectRoot !== undefined) {
+    return backlogAt(projectRoot) ?? join(projectRoot, PATH_CANDIDATES[0]);
+  }
+
+  // No config: adopt a conventional backlog found anywhere up from cwd.
+  const existing = findBacklogUp(cwd);
+  if (existing !== undefined) return existing;
+
+  throw new AxiError(
+    "No tasks-axi ledger found here or in any parent directory",
+    "NOT_FOUND",
+    [
+      "Run tasks-axi from your project root, or add a `.tasks.toml` there",
+      "Point at a ledger explicitly with `--file <path>` or `TASKS_AXI_FILE`",
+    ],
+  );
 }
 
 function validatePathValue(
@@ -206,7 +285,13 @@ export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
   const home = overrides.home ?? homedir();
 
   const homeToml = loadToml(join(home, ".tasks-axi", "config.toml"));
-  const projectToml = loadToml(resolve(cwd, ".tasks.toml"));
+  // Git-style discovery: the nearest `.tasks.toml` walking up from cwd anchors
+  // the project, so verbs run from a subdirectory hit its real ledger.
+  const projectRoot = findUp(cwd, ".tasks.toml");
+  const projectToml =
+    projectRoot !== undefined
+      ? loadToml(join(projectRoot, ".tasks.toml"))
+      : {};
 
   const explicitPath =
     overrides.file !== undefined
@@ -214,12 +299,14 @@ export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
       : env.TASKS_AXI_FILE !== undefined
         ? validatePathValue(env.TASKS_AXI_FILE, "TASKS_AXI_FILE")
         : undefined;
-  const tomlPath =
+  const projectPath =
     explicitPath !== undefined
       ? undefined
-      : projectToml.markdown?.path !== undefined
-        ? validatePathValue(projectToml.markdown.path, "markdown.path")
-        : validatePathValue(homeToml.markdown?.path, "markdown.path");
+      : validatePathValue(projectToml.markdown?.path, "markdown.path");
+  const homePath =
+    explicitPath !== undefined || projectPath !== undefined
+      ? undefined
+      : validatePathValue(homeToml.markdown?.path, "markdown.path");
 
   const backend =
     overrides.backend ??
@@ -228,12 +315,26 @@ export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
     homeToml.backend ??
     "markdown";
 
-  const path = resolveMarkdownPath(explicitPath, tomlPath, cwd);
+  const path = resolveMarkdownPath({
+    explicitPath,
+    projectPath,
+    projectRoot,
+    homePath,
+    cwd,
+  });
 
+  // Relative archive paths anchor where their config lives: the project root
+  // for a discovered `.tasks.toml`, else cwd for the home default.
+  const projectArchive = validatePathValue(
+    projectToml.markdown?.archive,
+    "markdown.archive",
+  );
   const archive =
-    projectToml.markdown?.archive !== undefined
-      ? validatePathValue(projectToml.markdown.archive, "markdown.archive")
+    projectArchive !== undefined
+      ? projectArchive
       : validatePathValue(homeToml.markdown?.archive, "markdown.archive");
+  const archiveBase =
+    projectArchive !== undefined ? (projectRoot ?? cwd) : cwd;
   const doneKeep = validateDoneKeep(
     projectToml.markdown?.done_keep ??
       homeToml.markdown?.done_keep ??
@@ -242,7 +343,9 @@ export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
 
   const config: ResolvedConfig = { backend, path, doneKeep };
   if (archive) {
-    config.archivePath = isAbsolute(archive) ? archive : resolve(cwd, archive);
+    config.archivePath = isAbsolute(archive)
+      ? archive
+      : resolve(archiveBase, archive);
   }
   return config;
 }

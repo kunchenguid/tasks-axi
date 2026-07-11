@@ -176,8 +176,10 @@ Single-task `mv` has the same protection; use multi-task `mv` to move its active
 
 ## Configuration
 
-Backend and path are resolved in this order: `--backend` / `--file` flags passed after the command, then `TASKS_AXI_BACKEND` / `TASKS_AXI_FILE` env, then a project `.tasks.toml`, then `~/.tasks-axi/config.toml`, then the defaults.
-Without an explicit path, tasks-axi uses `backlog.md` when present, then `data/backlog.md` when present, and otherwise targets `backlog.md` for future writes.
+Backend and path are resolved in this order: `--backend` / `--file` flags passed after the command, then `TASKS_AXI_BACKEND` / `TASKS_AXI_FILE` env, then a project `.tasks.toml`, then `~/.tasks-axi/config.toml`, then a conventional backlog found up the tree.
+The project `.tasks.toml` is discovered git-style: tasks-axi walks up from the current directory to the nearest ancestor that holds one, so verbs run from a subdirectory resolve against the project's real ledger (relative paths in that config anchor at the directory holding it, not the current directory).
+Without an explicit path or config, tasks-axi adopts a `backlog.md` (then `data/backlog.md`) found in the current directory or any parent.
+If nothing anchors a ledger — no config, no `--file`/env override, and no conventional backlog anywhere up the tree — tasks-axi fails loudly rather than silently creating a stray `backlog.md` in the current directory. Point it at a ledger with `--file`/`TASKS_AXI_FILE`, or add a `.tasks.toml` at your project root.
 
 ```toml
 # .tasks.toml in the project root
