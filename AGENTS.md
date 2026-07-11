@@ -9,6 +9,7 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 
 - `src/cli.ts` — `runAxiCli` wiring: `DESCRIPTION`, `TOP_HELP`, the verb→handler map (with aliases create/view/edit/delete/close), the optional `task` noun prefix, and the global `--backend` / `--file` flags (stripped before handlers, parsed for `resolveContext`).
 - `src/context.ts` — `resolveTasksContext` builds the backend `Store` + `ResolvedConfig`; every command receives this `TasksContext`.
+- `src/config.ts` — backend/path resolution. `.tasks.toml` is discovered git-style (walk up from cwd to the nearest ancestor holding one, so verbs run from a subdirectory hit the project's real ledger; relative config paths anchor at the directory holding the config, not cwd). With no anchor at all — no config, no `--file`/`TASKS_AXI_FILE`, no conventional `backlog.md`/`data/backlog.md` anywhere up the tree — resolution fails loudly (`NOT_FOUND`) instead of silently creating a stray `backlog.md` in cwd.
 - `src/store.ts` — the `Store` interface and `Capabilities`. Core contract: `create/get/update/remove/list/transition/addDep/removeDep`. `prune`/`render` are optional and capability-gated.
 - `src/model.ts` — the `Task` data model (report §5).
 - `src/derive.ts` — `blocked` / `ready` / active `held` are derived in the CLI from `list` + the dep graph + hold date gates, never Store methods, so every backend gets them for free.

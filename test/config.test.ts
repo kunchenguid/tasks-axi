@@ -1,4 +1,11 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -83,7 +90,15 @@ describe("parseConfigToml", () => {
 });
 
 describe("resolveConfig", () => {
-  it("defaults to the markdown backend and backlog.md", () => {
+  it("fails loudly and creates nothing when no ledger is found up the tree", () => {
+    expect(() => resolveConfig({ cwd: dir, home, env: {} })).toThrow(
+      /No tasks-axi ledger found/,
+    );
+    expect(readdirSync(dir)).toEqual([]);
+  });
+
+  it("adopts an existing backlog.md in cwd without a config file", () => {
+    writeFileSync(join(dir, "backlog.md"), "# Backlog\n");
     const cfg = resolveConfig({ cwd: dir, home, env: {} });
     expect(cfg.backend).toBe("markdown");
     expect(cfg.path).toBe(join(dir, "backlog.md"));
@@ -96,6 +111,39 @@ describe("resolveConfig", () => {
     writeFileSync(join(data, "backlog.md"), "# Backlog\n");
     const cfg = resolveConfig({ cwd: dir, home, env: {} });
     expect(cfg.path).toBe(join(data, "backlog.md"));
+  });
+
+  it("discovers a parent .tasks.toml when run from a subdirectory", () => {
+    writeFileSync(
+      join(dir, ".tasks.toml"),
+      'backend = "markdown"\n[markdown]\npath = "data/backlog.md"\narchive = "data/done-archive.md"\n',
+    );
+    const sub = join(dir, "deep", "nested");
+    mkdirSync(sub, { recursive: true });
+
+    const cfg = resolveConfig({ cwd: sub, home, env: {} });
+    // The relative path anchors at the project root, not the subdirectory.
+    expect(cfg.path).toBe(join(dir, "data", "backlog.md"));
+    expect(cfg.archivePath).toBe(join(dir, "data", "done-archive.md"));
+    // No stray ledger is planted in the subdirectory we were invoked from.
+    expect(existsSync(join(sub, "backlog.md"))).toBe(false);
+  });
+
+  it("adopts a parent backlog.md from a subdirectory without a config file", () => {
+    writeFileSync(join(dir, "backlog.md"), "# Backlog\n");
+    const sub = join(dir, "deep");
+    mkdirSync(sub, { recursive: true });
+    const cfg = resolveConfig({ cwd: sub, home, env: {} });
+    expect(cfg.path).toBe(join(dir, "backlog.md"));
+  });
+
+  it("anchors a pathless .tasks.toml ledger at the project root from a subdir", () => {
+    writeFileSync(join(dir, ".tasks.toml"), "[markdown]\ndone_keep = 5\n");
+    const sub = join(dir, "deep");
+    mkdirSync(sub, { recursive: true });
+    const cfg = resolveConfig({ cwd: sub, home, env: {} });
+    expect(cfg.path).toBe(join(dir, "backlog.md"));
+    expect(cfg.doneKeep).toBe(5);
   });
 
   it("honors the override order: flag > env > project toml", () => {
