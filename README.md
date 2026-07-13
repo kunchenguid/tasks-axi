@@ -165,7 +165,8 @@ Relation files contain a stable `relation_id`, `{home_id, task_id}` work referen
 Completion event files use schema version 1 and bind an event id, obligation id, relation id, generation, source home, work id, typed outcome, safe deliverables, bounded public-safe outcome, and a `successor` field that is null unless the outcome supersedes the relation.
 A posted receipt file records `state=posted`, request id, platform, attempt and chunk counts, posted time, and optional retention time.
 Its attempt count must exactly match the currently recorded delivery attempt, including late receipts that reconcile that same attempt from `unknown` or `partial`.
-An error file records a safe delivery state, validated error code, occurrence time, optional retry time, and optional chunk counts.
+An error file records the current attempt count, a safe delivery state, validated error code, occurrence time, optional retry time, and optional chunk counts.
+Its attempt count must exactly match the currently recorded delivery attempt, and stale or future-attempt errors fail without mutation.
 Expected-final types permit only their matching safe deliverables: `pr_url`, `report_path`, `commit_sha`, or `error_code`.
 Run `tasks-axi public-followup --help` for the exact file-backed command surface and state names.
 

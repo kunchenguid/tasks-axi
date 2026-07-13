@@ -102,6 +102,20 @@ function receipt(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function deliveryError(overrides: Record<string, unknown> = {}) {
+  return {
+    schema_version: 1,
+    state: "unknown",
+    attempt_count: 1,
+    error_code: "transport-ambiguous",
+    occurred_at: "2026-07-14T13:01:00Z",
+    next_attempt_at: null,
+    total_chunks: 1,
+    posted_chunks: 0,
+    ...overrides,
+  };
+}
+
 function jsonFile(b: TempBacklog, name: string, value: unknown): string {
   const path = join(b.dir, name);
   writeFileSync(path, JSON.stringify(value), "utf8");
@@ -292,6 +306,37 @@ describe("public-followup commands", () => {
       b.cleanup();
     }
   });
+
+  it.each([
+    { policy: "any-required", expectedState: "ready" },
+    { policy: "all-required", expectedState: "pending-work" },
+  ])(
+    "derives divergent readiness for $policy",
+    async ({ policy, expectedState }) => {
+      const b = makeBacklog(EMPTY);
+      try {
+        await add(
+          b,
+          "public-final-ab",
+          request(),
+          expected({ completion_policy: policy }),
+        );
+        await bind(
+          b,
+          relation("rel-code", "work-code-q1", 1, { required: false }),
+        );
+        await bind(
+          b,
+          relation("rel-docs", "work-docs-q1", 1, { required: false }),
+        );
+
+        const landed = await acceptEvent(b);
+        expect(landed.task.public_followup.delivery.state).toBe(expectedState);
+      } finally {
+        b.cleanup();
+      }
+    },
+  );
 
   it("rejects credential-bearing PR URLs before accepting work", async () => {
     const b = makeBacklog(EMPTY);
@@ -664,6 +709,7 @@ describe("public-followup commands", () => {
           jsonFile(b, `${state}-error.json`, {
             schema_version: 1,
             state,
+            attempt_count: 1,
             error_code: errorCode,
             occurred_at: "2026-07-14T13:01:00Z",
             next_attempt_at: null,
@@ -797,15 +843,7 @@ describe("public-followup commands", () => {
     try {
       await makeReady(b);
       await begin(b);
-      const error = {
-        schema_version: 1,
-        state: "unknown",
-        error_code: "transport-ambiguous",
-        occurred_at: "2026-07-14T13:01:00Z",
-        next_attempt_at: null,
-        total_chunks: 1,
-        posted_chunks: 0,
-      };
+      const error = deliveryError();
       const result = JSON.parse(
         await run(b, "record-error", [
           "public-final-ab",
@@ -817,6 +855,7 @@ describe("public-followup commands", () => {
       expect(result.task.public_followup.delivery).toMatchObject({
         state: "unknown",
         last_error_code: "transport-ambiguous",
+        last_error: { attempt_count: 1 },
       });
       await expect(
         run(b, "record-error", [
@@ -833,6 +872,70 @@ describe("public-followup commands", () => {
       b.cleanup();
     }
   });
+
+  it.each([
+    { timing: "stale", attemptCount: 1 },
+    { timing: "future", attemptCount: 3 },
+  ])(
+    "rejects a $timing delivery error without mutation",
+    async ({ timing, attemptCount }) => {
+      const b = makeBacklog(EMPTY);
+      try {
+        await makeReady(b);
+        await begin(b);
+        await run(b, "record-error", [
+          "public-final-ab",
+          "--error-file",
+          jsonFile(
+            b,
+            "first-attempt-error.json",
+            deliveryError({
+              state: "retry-due",
+              error_code: "transport-retry",
+              next_attempt_at: "2026-07-14T13:05:00Z",
+              total_chunks: null,
+              posted_chunks: null,
+            }),
+          ),
+          "--json",
+        ]);
+        await begin(b);
+        const before = await b.store.get("public-final-ab");
+        const sourceBefore = b.read();
+
+        await expect(
+          run(b, "record-error", [
+            "public-final-ab",
+            "--error-file",
+            jsonFile(
+              b,
+              `${timing}-attempt-error.json`,
+              deliveryError({ attempt_count: attemptCount }),
+            ),
+            "--json",
+          ]),
+        ).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: expect.stringContaining("current recorded attempt"),
+        });
+
+        expect(b.read()).toBe(sourceBefore);
+        expect(await b.store.get("public-final-ab")).toEqual(before);
+        expect(before).toMatchObject({
+          state: "queued",
+          public_followup: {
+            delivery: {
+              state: "delivery-posting",
+              attempt_count: 2,
+              last_error: null,
+            },
+          },
+        });
+      } finally {
+        b.cleanup();
+      }
+    },
+  );
 
   it("fails closed on malformed, missing, or stale reserved metadata", async () => {
     const malformed = makeBacklog(EMPTY);

@@ -990,6 +990,12 @@ async function recordError(
       "VALIDATION_ERROR",
     );
   }
+  if (error.attempt_count !== task.public_followup.delivery.attempt_count) {
+    throw new AxiError(
+      "Delivery error does not match the current recorded attempt",
+      "VALIDATION_ERROR",
+    );
+  }
   if (
     task.public_followup.delivery.state === error.state &&
     canonicalEqual(task.public_followup.delivery.last_error, error)

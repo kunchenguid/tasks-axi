@@ -145,6 +145,7 @@ export type DeliveryErrorState = (typeof DELIVERY_ERROR_STATES)[number];
 export interface DeliveryError {
   schema_version: 1;
   state: DeliveryErrorState;
+  attempt_count: number;
   error_code: string;
   occurred_at: string;
   next_attempt_at: string | null;
@@ -694,7 +695,7 @@ export function parseDeliveryError(
   const input = record(value, path);
   exactKeys(
     input,
-    ["state", "error_code", "occurred_at"],
+    ["state", "attempt_count", "error_code", "occurred_at"],
     ["schema_version", "next_attempt_at", "total_chunks", "posted_chunks"],
     path,
   );
@@ -733,6 +734,7 @@ export function parseDeliveryError(
   return {
     schema_version: 1,
     state,
+    attempt_count: integer(input.attempt_count, `${path}.attempt_count`),
     error_code: errorCode,
     occurred_at: validateRfc3339(input.occurred_at, `${path}.occurred_at`),
     next_attempt_at:
@@ -1010,6 +1012,8 @@ export function normalizePublicFollowup(
     }
   } else if (
     normalizedDelivery.state !== normalizedDelivery.last_error.state ||
+    normalizedDelivery.attempt_count !==
+      normalizedDelivery.last_error.attempt_count ||
     normalizedDelivery.last_error_code !==
       normalizedDelivery.last_error.error_code ||
     normalizedDelivery.next_attempt_at !==
@@ -1460,24 +1464,16 @@ export function isPublicFollowupReady(value: PublicFollowup): boolean {
   if (active.length === 0) return false;
   const fulfilling = active.filter((relation) => relation.role === "fulfills");
   if (fulfilling.length === 0) return false;
-  if (value.expected_final.completion_policy === "any-required") {
-    const required = active.filter((relation) => relation.required);
-    if (
-      required.some(
-        (relation) => !relationLanded(relation, value.expected_final),
-      )
-    ) {
-      return false;
-    }
-    return fulfilling.some((relation) =>
-      relationLanded(relation, value.expected_final),
-    );
-  }
   const required = active.filter((relation) => relation.required);
   if (
     required.some((relation) => !relationLanded(relation, value.expected_final))
   ) {
     return false;
+  }
+  if (value.expected_final.completion_policy === "all-required") {
+    return fulfilling.every((relation) =>
+      relationLanded(relation, value.expected_final),
+    );
   }
   return fulfilling.some((relation) =>
     relationLanded(relation, value.expected_final),
