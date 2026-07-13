@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/kunchenguid/tasks-axi/compare/tasks-axi-v0.2.2...tasks-axi-v0.2.3) (2026-07-13)
+
+
+### Features
+
+* add durable public follow-up obligations ([#16](https://github.com/kunchenguid/tasks-axi/issues/16)) ([d7845d3](https://github.com/kunchenguid/tasks-axi/commit/d7845d3b3dc1cbf084909e127c1a65f3abac2fce))
+
 ## [0.2.2](https://github.com/kunchenguid/tasks-axi/compare/tasks-axi-v0.2.1...tasks-axi-v0.2.2) (2026-07-10)
 
 
