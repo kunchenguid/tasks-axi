@@ -258,6 +258,64 @@ describe("public-followup commands", () => {
     }
   });
 
+  it("keeps every required relation as an any-required readiness gate", async () => {
+    const b = makeBacklog(EMPTY);
+    try {
+      await add(
+        b,
+        "public-final-ab",
+        request(),
+        expected({ completion_policy: "any-required" }),
+      );
+      await bind(
+        b,
+        relation("rel-code", "work-code-q1", 1, { required: false }),
+      );
+      await bind(
+        b,
+        relation("rel-docs", "work-docs-q1", 1, {
+          role: "contributes",
+          required: true,
+        }),
+      );
+
+      const fulfilled = await acceptEvent(b);
+      expect(fulfilled.task.public_followup.delivery.state).toBe(
+        "pending-work",
+      );
+      const completed = await acceptEvent(
+        b,
+        event("evt-docs-landed", "rel-docs", "work-docs-q1"),
+      );
+      expect(completed.task.public_followup.delivery.state).toBe("ready");
+    } finally {
+      b.cleanup();
+    }
+  });
+
+  it("rejects credential-bearing PR URLs before accepting work", async () => {
+    const b = makeBacklog(EMPTY);
+    try {
+      await add(b);
+      await bind(b);
+      await expect(
+        acceptEvent(
+          b,
+          event("evt-unsafe-url", "rel-code", "work-code-q1", 1, {
+            deliverables: {
+              pr_url: "https://token:secret@github.com/o/r/pull/519",
+            },
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      expect(
+        (await b.store.get("public-final-ab"))?.public_followup?.work_relations,
+      ).toMatchObject([{ state: "bound", accepted_events: [] }]);
+    } finally {
+      b.cleanup();
+    }
+  });
+
   it("keeps a failed required relation actionable unless failure is expected", async () => {
     const b = makeBacklog(EMPTY);
     try {

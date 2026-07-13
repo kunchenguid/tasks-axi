@@ -1357,7 +1357,15 @@ function deliverablesAreSafeForExpected(
     return false;
   }
   for (const [name, value] of Object.entries(deliverables)) {
-    if (name === "pr_url" && !PR_URL_RE.test(value)) return false;
+    if (name === "pr_url") {
+      if (!PR_URL_RE.test(value)) return false;
+      try {
+        const url = new URL(value);
+        if (url.username !== "" || url.password !== "") return false;
+      } catch {
+        return false;
+      }
+    }
     if (name === "report_path" && !REPORT_PATH_RE.test(value)) return false;
     if (name === "commit_sha" && !COMMIT_SHA_RE.test(value)) return false;
     if (name === "error_code" && !SAFE_CODE_RE.test(value)) return false;
@@ -1447,9 +1455,15 @@ export function isPublicFollowupReady(value: PublicFollowup): boolean {
   const fulfilling = active.filter((relation) => relation.role === "fulfills");
   if (fulfilling.length === 0) return false;
   if (value.expected_final.completion_policy === "any-required") {
-    const required = fulfilling.filter((relation) => relation.required);
-    const candidates = required.length > 0 ? required : fulfilling;
-    return candidates.some((relation) =>
+    const required = active.filter((relation) => relation.required);
+    if (
+      required.some(
+        (relation) => !relationLanded(relation, value.expected_final),
+      )
+    ) {
+      return false;
+    }
+    return fulfilling.some((relation) =>
       relationLanded(relation, value.expected_final),
     );
   }
