@@ -211,6 +211,7 @@ const PROJECT_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$/;
 const PR_URL_RE = /^https:\/\/[^?#\s]+\/pull\/\d+$/;
 const REPORT_PATH_RE = /^data\/[A-Za-z0-9][A-Za-z0-9._-]*\/report\.md$/;
 const COMMIT_SHA_RE = /^[a-f0-9]{7,64}$/;
+const MAX_ENCODED_METADATA_LENGTH = 1_000_000;
 const EXPECTED_DELIVERABLES: Record<ExpectedFinalType, readonly string[]> = {
   "pr-merged": ["pr_url"],
   "report-ready": ["report_path"],
@@ -1128,13 +1129,18 @@ export function canonicalPublicFollowupJson(value: PublicFollowup): string {
 }
 
 export function encodePublicFollowup(value: PublicFollowup): string {
-  return Buffer.from(canonicalPublicFollowupJson(value), "utf8").toString(
-    "base64url",
-  );
+  const encoded = Buffer.from(
+    canonicalPublicFollowupJson(value),
+    "utf8",
+  ).toString("base64url");
+  if (encoded.length > MAX_ENCODED_METADATA_LENGTH) {
+    validation("public_followup metadata is too large");
+  }
+  return encoded;
 }
 
 export function decodePublicFollowup(encoded: string): PublicFollowup {
-  if (encoded.length > 1_000_000) {
+  if (encoded.length > MAX_ENCODED_METADATA_LENGTH) {
     validation("public_followup metadata is too large");
   }
   if (!/^[A-Za-z0-9_-]+$/.test(encoded)) {

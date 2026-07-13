@@ -870,6 +870,41 @@ describe("public-followup commands", () => {
     }
   });
 
+  it("rejects oversized metadata before persistence", async () => {
+    const b = makeBacklog(EMPTY);
+    try {
+      await add(b);
+      const task = await b.store.get("public-final-ab");
+      if (!task?.public_followup) throw new Error("missing fixture payload");
+      const oversized = clonePublicFollowup(task.public_followup);
+      oversized.work_relations = Array.from({ length: 7_500 }, (_, index) => ({
+        ...relation(`rel-oversized-${index}`, `work-oversized-${index}`),
+        state: "bound" as const,
+        successor_relation_id: null,
+        accepted_event_ids: [],
+        accepted_events: [],
+      }));
+      oversized.delivery.state = "pending-work";
+      oversized.revision += 1;
+
+      await expect(
+        b.store.updatePublicFollowup("public-final-ab", {
+          expectedRevision: task.public_followup.revision,
+          expectedPublicFollowup: task.public_followup,
+          publicFollowup: oversized,
+        }),
+      ).rejects.toMatchObject({
+        code: "VALIDATION_ERROR",
+        message: "public_followup metadata is too large",
+      });
+      expect((await b.store.get("public-final-ab"))?.public_followup).toEqual(
+        task.public_followup,
+      );
+    } finally {
+      b.cleanup();
+    }
+  });
+
   it("rejects private or unknown JSON fields and projects only the typed schema", async () => {
     const b = makeBacklog(EMPTY);
     try {
