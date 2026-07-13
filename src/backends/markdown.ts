@@ -22,6 +22,17 @@ import type {
   TransitionOpts,
 } from "../model.js";
 import { HOLD_KINDS } from "../model.js";
+import {
+  PUBLIC_FOLLOWUP_KIND,
+  assertPublicFollowupMutation,
+  assertPublicFollowupTaskState,
+  canonicalEqual,
+  clonePublicFollowup,
+  isPublicFollowupTask,
+  isPublicFollowupTerminal,
+  normalizePublicFollowup,
+  type PublicFollowupMutation,
+} from "../public-followup.js";
 import type {
   Capabilities,
   PruneOptions,
@@ -280,6 +291,9 @@ function taskToInput(task: Task): TaskInput {
   if (task.priority !== undefined) input.priority = task.priority;
   input.created = task.created ?? null;
   if (task.closed) input.closed = task.closed;
+  if (task.public_followup) {
+    input.public_followup = clonePublicFollowup(task.public_followup);
+  }
   if (task.meta) input.meta = { ...task.meta };
   return input;
 }
@@ -321,6 +335,7 @@ export class MarkdownStore implements Store {
       realtimeSync: false,
       customStates: true,
       serverMintsIds: false,
+      publicFollowups: true,
     };
   }
 
@@ -530,6 +545,29 @@ export class MarkdownStore implements Store {
     if (hold) task.hold = hold;
     const priority = normalizePriority(input.priority);
     if (priority !== undefined) task.priority = priority;
+    if (kind === PUBLIC_FOLLOWUP_KIND) {
+      if (task.hold) {
+        throw new AxiError(
+          "Public-followup obligations cannot use dispatch holds",
+          "VALIDATION_ERROR",
+        );
+      }
+      if (!input.public_followup) {
+        throw new AxiError(
+          "kind=public-followup requires typed public_followup data",
+          "VALIDATION_ERROR",
+          ["Use `tasks-axi public-followup add ...`"],
+        );
+      }
+      const publicFollowup = normalizePublicFollowup(input.public_followup);
+      assertPublicFollowupTaskState(state, publicFollowup, id);
+      task.public_followup = publicFollowup;
+    } else if (input.public_followup) {
+      throw new AxiError(
+        "Typed public_followup data requires kind=public-followup",
+        "VALIDATION_ERROR",
+      );
+    }
     if (input.meta) task.meta = input.meta;
     if (input.created !== undefined) {
       if (input.created !== null) {
@@ -550,6 +588,27 @@ export class MarkdownStore implements Store {
 
   async create(input: TaskInput): Promise<Task> {
     return withLock(this.path, () => {
+      if (input.kind === PUBLIC_FOLLOWUP_KIND) {
+        const value = input.public_followup
+          ? normalizePublicFollowup(input.public_followup)
+          : undefined;
+        if (
+          !value ||
+          value.revision !== 1 ||
+          value.delivery.state !== "intent" ||
+          value.work_relations.length !== 0 ||
+          input.title.trim() !== value.request.public_safe_summary ||
+          input.body !== undefined ||
+          (input.links?.length ?? 0) > 0 ||
+          (input.state !== undefined && input.state !== "queued")
+        ) {
+          throw new AxiError(
+            "New public-followup must start as a revision 1 queued intent",
+            "VALIDATION_ERROR",
+            ["Use `tasks-axi public-followup add ...`"],
+          );
+        }
+      }
       const loaded = this.loadForUpdate();
       const { doc } = loaded;
       this.ensureSections(doc);
@@ -577,6 +636,21 @@ export class MarkdownStore implements Store {
       const found = this.findEntry(doc, id);
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
       const task = found.entry.task;
+      if (
+        isPublicFollowupTask(task) &&
+        (patch.title !== undefined ||
+          patch.body !== undefined ||
+          patch.archiveBody ||
+          (patch.addBodyLines?.length ?? 0) > 0 ||
+          (patch.addLinks?.length ?? 0) > 0 ||
+          patch.hold !== undefined)
+      ) {
+        throw new AxiError(
+          "Public-followup content and holds cannot change through generic update",
+          "VALIDATION_ERROR",
+          ["Create a successor obligation when the public promise changes"],
+        );
+      }
       const nextBody =
         patch.body !== undefined ? patch.body || undefined : task.body;
       const supersededBody =
@@ -627,6 +701,16 @@ export class MarkdownStore implements Store {
       }
       if (patch.kind !== undefined) {
         const kind = normalizeTagValue(patch.kind, "kind");
+        if (
+          task.kind === PUBLIC_FOLLOWUP_KIND ||
+          kind === PUBLIC_FOLLOWUP_KIND
+        ) {
+          throw new AxiError(
+            "Public-followup kind cannot be changed through generic update",
+            "VALIDATION_ERROR",
+            ["Use the dedicated `tasks-axi public-followup` commands"],
+          );
+        }
         if (task.kind !== kind) {
           if (kind === undefined) {
             delete task.kind;
@@ -701,6 +785,17 @@ export class MarkdownStore implements Store {
       const found = this.findEntry(doc, id);
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
       const task = found.entry.task;
+      if (
+        isPublicFollowupTask(task) &&
+        task.public_followup &&
+        !isPublicFollowupTerminal(task.public_followup)
+      ) {
+        throw new AxiError(
+          "Active public-followup obligations cannot be removed",
+          "VALIDATION_ERROR",
+          ["Record a posted receipt or Captain-approved waiver first"],
+        );
+      }
       this.requireNoActiveDependents(doc, id);
       found.section.entries.splice(found.index, 1);
       this.persist(loaded);
@@ -868,6 +963,15 @@ export class MarkdownStore implements Store {
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
 
       const task = found.entry.task;
+      if (isPublicFollowupTask(task)) {
+        throw new AxiError(
+          "Public-followup state cannot change through generic transitions",
+          "VALIDATION_ERROR",
+          [
+            "Use `tasks-axi public-followup record-delivery` or `tasks-axi public-followup waive`",
+          ],
+        );
+      }
       const date = normalizeDate(opts.date ?? this.now(), "transition date");
 
       // Record links / notes before stamping so closureVerb sees them.
@@ -908,6 +1012,92 @@ export class MarkdownStore implements Store {
     });
   }
 
+  async updatePublicFollowup(
+    id: string,
+    mutation: PublicFollowupMutation,
+  ): Promise<Task> {
+    return withLock(this.path, () => {
+      const loaded = this.loadForUpdate();
+      const { doc } = loaded;
+      this.ensureSections(doc);
+      const found = this.findEntry(doc, id);
+      if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
+      const task = found.entry.task;
+      if (!isPublicFollowupTask(task) || !task.public_followup) {
+        throw new AxiError(
+          `Task "${id}" is not a public-followup obligation`,
+          "VALIDATION_ERROR",
+        );
+      }
+      const expected = normalizePublicFollowup(mutation.expectedPublicFollowup);
+      if (
+        task.public_followup.revision !== mutation.expectedRevision ||
+        expected.revision !== mutation.expectedRevision ||
+        !canonicalEqual(task.public_followup, expected)
+      ) {
+        throw new AxiError(
+          `Public-followup "${id}" changed; retry the command`,
+          "CONFLICT",
+          ["Read the latest obligation revision, then retry"],
+        );
+      }
+      if (task.state === "done") {
+        throw new AxiError(
+          `Public-followup "${id}" is already complete`,
+          "CONFLICT",
+        );
+      }
+      if (mutation.requireUnblocked) {
+        const byId = new Map(this.allTasks(doc).map((item) => [item.id, item]));
+        const blocked = task.deps.some((dep) => {
+          if (dep.type !== "blocked-by") return false;
+          const blocker = byId.get(dep.id);
+          return blocker !== undefined && blocker.state !== "done";
+        });
+        if (blocked) {
+          throw new AxiError(
+            "Cannot begin delivery while the obligation has an active blocker",
+            "VALIDATION_ERROR",
+          );
+        }
+      }
+
+      const next = normalizePublicFollowup(mutation.publicFollowup);
+      assertPublicFollowupMutation(task.public_followup, next);
+      if (mutation.complete && !isPublicFollowupTerminal(next)) {
+        throw new AxiError(
+          "Only a posted receipt or Captain-approved waiver may complete a public-followup",
+          "VALIDATION_ERROR",
+        );
+      }
+      if (!mutation.complete && isPublicFollowupTerminal(next)) {
+        throw new AxiError(
+          "Terminal public-followup data requires an atomic completion mutation",
+          "VALIDATION_ERROR",
+        );
+      }
+
+      task.public_followup = next;
+      task.updated = this.now();
+      if (mutation.complete) {
+        task.state = "done";
+        task.closed = normalizeDate(this.now(), "transition date");
+        assertPublicFollowupTaskState(task.state, next, id);
+        found.section.entries.splice(found.index, 1);
+        this.insert(
+          this.section(doc, "done"),
+          { kind: "task", task, raw: [], dirty: true },
+          true,
+        );
+      } else {
+        assertPublicFollowupTaskState(task.state, next, id);
+        found.entry.dirty = true;
+      }
+      this.persist(loaded);
+      return task;
+    });
+  }
+
   async addDep(id: string, dep: Dep): Promise<boolean> {
     const checkedDep = normalizeDep(id, dep);
     return withLock(this.path, () => {
@@ -916,6 +1106,17 @@ export class MarkdownStore implements Store {
       const found = this.findEntry(doc, id);
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
       const task = found.entry.task;
+      if (
+        task.public_followup &&
+        !["intent", "pending-work", "ready"].includes(
+          task.public_followup.delivery.state,
+        )
+      ) {
+        throw new AxiError(
+          "Cannot add blockers after public delivery has started",
+          "VALIDATION_ERROR",
+        );
+      }
       if (
         task.deps.some(
           (d) => d.type === checkedDep.type && d.id === checkedDep.id,
@@ -963,7 +1164,15 @@ export class MarkdownStore implements Store {
 
       const taskIndices: number[] = [];
       section.entries.forEach((entry, index) => {
-        if (entry.kind === "task") taskIndices.push(index);
+        if (entry.kind !== "task") return;
+        if (
+          isPublicFollowupTask(entry.task) &&
+          entry.task.public_followup &&
+          !isPublicFollowupTerminal(entry.task.public_followup)
+        ) {
+          return;
+        }
+        taskIndices.push(index);
       });
 
       const keep = Math.max(0, options.keep);

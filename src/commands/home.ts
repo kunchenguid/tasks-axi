@@ -2,6 +2,7 @@ import { encode } from "@toon-format/toon";
 import { requireCtx, type TasksContext } from "../context.js";
 import { blockedIds, readyTasks } from "../derive.js";
 import type { Task } from "../model.js";
+import { DELIVERY_STATES, PUBLIC_FOLLOWUP_KIND } from "../public-followup.js";
 import { getSuggestions, withSuggestionGlobals } from "../suggestions.js";
 import { field, renderHelp, renderList, renderOutput } from "../toon.js";
 import { showFullTextHint, toRow } from "../view.js";
@@ -31,15 +32,18 @@ export async function homeCommand(
   const all = (await store.list({})).items;
 
   const inFlight = all.filter((t) => t.state === "in_flight");
-  const queued = all.filter((t) => t.state === "queued");
+  const queued = all.filter(
+    (t) => t.state === "queued" && t.kind !== PUBLIC_FOLLOWUP_KIND,
+  );
+  const publicFollowups = all.filter(
+    (t) => t.kind === PUBLIC_FOLLOWUP_KIND && t.public_followup,
+  );
   const doneCount = all.filter((t) => t.state === "done").length;
   const blocked = blockedIds(all);
   const readyCount = readyTasks(all).length;
 
   const rows = (tasks: Task[]) =>
-    tasks.map((t) =>
-      toRow(t, { all, truncationHint: showFullTextHint(t) }),
-    );
+    tasks.map((t) => toRow(t, { all, truncationHint: showFullTextHint(t) }));
 
   const blocks: string[] = [];
 
@@ -57,6 +61,20 @@ export async function homeCommand(
     blocks.push(renderList("queued", rows(preview), queuedSchema));
   } else {
     blocks.push("queued: 0 tasks");
+  }
+
+  if (publicFollowups.length > 0) {
+    const counts = Object.fromEntries(
+      DELIVERY_STATES.map((state) => [
+        state,
+        publicFollowups.filter(
+          (task) => task.public_followup?.delivery.state === state,
+        ).length,
+      ]),
+    );
+    blocks.push(encode({ public_followups: counts }));
+  } else {
+    blocks.push("public_followups: 0 obligations");
   }
 
   blocks.push(`done: ${doneCount} retained`);

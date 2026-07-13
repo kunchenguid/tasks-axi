@@ -1,0 +1,10 @@
+{
+  "relation_id": "rel-code",
+  "work_ref": {
+    "home_id": "secondmate:demo",
+    "task_id": "work-code-q1"
+  },
+  "role": "fulfills",
+  "required": true,
+  "generation": 1
+}

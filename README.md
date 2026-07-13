@@ -136,6 +136,58 @@ For `mv`, a single task returns `id`, while a multi-task move returns first-occu
 
 Run `tasks-axi --help` for the command list, or `tasks-axi <command> --help` for per-command usage.
 
+## Durable public follow-ups
+
+A promised public final is a first-class `kind=public-followup` obligation, not a worker task or a `blocked-by` edge.
+Create and mutate it only through the dedicated namespace:
+
+```sh
+tasks-axi public-followup add public-final-ab \
+  --request-context-file request.json \
+  --purpose promised-final \
+  --expected-final-file expected.json \
+  --expires-at 2026-10-01T00:00:00Z \
+  --json
+
+tasks-axi public-followup bind-work public-final-ab --relation-file relation.json --json
+tasks-axi public-followup supersede-work public-final-ab --relation rel-code --successor-file successor.json --json
+tasks-axi public-followup work-event public-final-ab --event-file event.json --json
+tasks-axi public-followup list --work-ref secondmate:demo/work-code-q1 --json
+tasks-axi public-followup ready --json
+tasks-axi public-followup begin-delivery public-final-ab --payload-hash <sha256> --json
+tasks-axi public-followup record-error public-final-ab --error-file error.json --json
+tasks-axi public-followup record-delivery public-final-ab --receipt-file receipt.json --json
+```
+
+The request context file contains the relay-issued request id, platform, opaque `ctx1` binding, bounded public-safe summary, received time, follow-up expiry, and reservation expiry.
+The expected-final file defines its typed outcome, stable project, required deliverable names, and `all-required` or `any-required` completion policy.
+Relation files contain a stable `relation_id`, `{home_id, task_id}` work reference, `fulfills` or `contributes` role, required flag, and generation.
+Completion event files use schema version 1 and bind an event id, obligation id, relation id, generation, source home, work id, typed outcome, safe deliverables, bounded public-safe outcome, and a `successor` field that is null unless the outcome supersedes the relation.
+A posted receipt file records `state=posted`, request id, platform, attempt and chunk counts, posted time, and optional retention time.
+Its attempt count must exactly match the currently recorded delivery attempt, including late receipts that reconcile that same attempt from `unknown` or `partial`.
+An error file records the current attempt count, a safe delivery state, validated error code, occurrence time, optional retry time, and optional chunk counts.
+Its attempt count must exactly match the currently recorded delivery attempt, and stale or future-attempt errors fail without mutation.
+Expected-final types permit only their matching safe deliverables: `pr_url`, `report_path`, `commit_sha`, or `error_code`.
+Run `tasks-axi public-followup --help` for the exact file-backed command surface and state names.
+
+Each mutation is idempotent and returns the monotonic obligation `revision`, changed fields, and complete typed payload under `--json`.
+Duplicate accepted event ids are no-ops, while conflicting ids, stale generations, source mismatches, malformed typed data, and changed immutable intake fields fail closed.
+One work item can relate to several obligations, and one obligation can require work from several homes.
+These cross-home relations are separate from same-backlog dispatch dependencies.
+Existing same-backlog `blocked-by` edges remain delivery gates for `ready` and `begin-delivery`.
+
+`tasks-axi ready` excludes public obligations from its ordinary `ready` worker group and exposes delivery-ready obligations only in `ready_public_followups`.
+Use `tasks-axi public-followup ready` when handling public delivery.
+Generic `start`, `done`, `reopen`, active removal, content or kind changes, and dispatch holds cannot bypass the public-followup state machine.
+Only `record-delivery` with a validated terminal `posted` receipt or `waive --approved-by captain` can atomically move an obligation to Done.
+Normal Done pruning then preserves the complete typed receipt or waiver in `done-archive.md`.
+
+The Markdown backend stores version 1 typed data in a reserved base64url canonical-JSON HTML comment immediately below the task bullet.
+The bounded public-safe title and `(kind: public-followup)` remain visible, but callers other than tasks-axi must not parse or rewrite the reserved comment.
+Generic title and body updates are refused because changing the immutable public promise requires a successor obligation.
+The typed schema permits public-safe identifiers, summaries, deliverables, receipt counters, timestamps, and validated error codes.
+It rejects unknown fields so raw request text, parent context, author or channel ids, signed URLs, and raw platform responses cannot silently enter machine-readable output.
+
 ## The markdown backend
 
 `backlog.md` stays the hand-editable source of truth.

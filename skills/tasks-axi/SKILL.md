@@ -37,8 +37,8 @@ Use tasks-axi whenever a task touches the backlog: filing or dispatching work, m
 ## Commands
 
 ```
-commands[18]:
-  (none)=dashboard, add, list, show, start, done, reopen, update, rm, block, unblock, hold, unhold, ready, mv, prune, render, setup
+commands[19]:
+  (none)=dashboard, add, list, show, start, done, reopen, update, rm, block, unblock, hold, unhold, ready, public-followup, mv, prune, render, setup
 ```
 
 Run `npx -y tasks-axi --help` for global flags, or `npx -y tasks-axi <command> --help` for per-command usage.
