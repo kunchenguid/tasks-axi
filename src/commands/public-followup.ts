@@ -930,7 +930,7 @@ async function recordDelivery(
   if (
     task.public_followup.delivery.payload_digest === null ||
     task.public_followup.delivery.attempt_count < 1 ||
-    receipt.attempt_count < task.public_followup.delivery.attempt_count
+    receipt.attempt_count !== task.public_followup.delivery.attempt_count
   ) {
     throw new AxiError(
       "Posted receipt does not match a recorded delivery attempt",
@@ -950,10 +950,6 @@ async function recordDelivery(
   const next = nextPayload(task);
   next.delivery.state = "posted";
   next.delivery.receipt = receipt;
-  next.delivery.attempt_count = Math.max(
-    next.delivery.attempt_count,
-    receipt.attempt_count,
-  );
   next.delivery.last_error_code = null;
   next.delivery.next_attempt_at = null;
   next.delivery.last_error = null;

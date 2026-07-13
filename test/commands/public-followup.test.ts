@@ -598,6 +598,113 @@ describe("public-followup commands", () => {
     }
   });
 
+  it("rejects a future-attempt receipt without mutating the obligation", async () => {
+    const b = makeBacklog(EMPTY);
+    try {
+      await makeReady(b);
+      await begin(b);
+      const before = await b.store.get("public-final-ab");
+      const sourceBefore = b.read();
+      expect(before?.public_followup?.delivery.attempt_count).toBe(1);
+
+      await expect(
+        run(b, "record-delivery", [
+          "public-final-ab",
+          "--receipt-file",
+          jsonFile(b, "future-receipt.json", receipt({ attempt_count: 2 })),
+          "--json",
+        ]),
+      ).rejects.toMatchObject({
+        code: "VALIDATION_ERROR",
+        message: expect.stringContaining("recorded delivery attempt"),
+      });
+
+      const after = await b.store.get("public-final-ab");
+      expect(b.read()).toBe(sourceBefore);
+      expect(after).toEqual(before);
+      expect(after).toMatchObject({
+        state: "queued",
+        public_followup: {
+          revision: 4,
+          delivery: {
+            state: "delivery-posting",
+            attempt_count: 1,
+            receipt: null,
+          },
+        },
+      });
+    } finally {
+      b.cleanup();
+    }
+  });
+
+  it.each([
+    {
+      state: "unknown",
+      errorCode: "transport-ambiguous",
+      totalChunks: 1,
+      postedChunks: 0,
+    },
+    {
+      state: "partial",
+      errorCode: "delivery-partial",
+      totalChunks: 2,
+      postedChunks: 1,
+    },
+  ])(
+    "accepts a late current-attempt receipt from $state",
+    async ({ state, errorCode, totalChunks, postedChunks }) => {
+      const b = makeBacklog(EMPTY);
+      try {
+        await makeReady(b);
+        await begin(b);
+        await run(b, "record-error", [
+          "public-final-ab",
+          "--error-file",
+          jsonFile(b, `${state}-error.json`, {
+            schema_version: 1,
+            state,
+            error_code: errorCode,
+            occurred_at: "2026-07-14T13:01:00Z",
+            next_attempt_at: null,
+            total_chunks: totalChunks,
+            posted_chunks: postedChunks,
+          }),
+          "--json",
+        ]);
+
+        const completed = JSON.parse(
+          await run(b, "record-delivery", [
+            "public-final-ab",
+            "--receipt-file",
+            jsonFile(
+              b,
+              `${state}-late-receipt.json`,
+              receipt({
+                attempt_count: 1,
+                total_chunks: totalChunks,
+                posted_chunks: totalChunks,
+              }),
+            ),
+            "--json",
+          ]),
+        ) as Record<string, any>;
+        expect(completed.task).toMatchObject({
+          state: "done",
+          public_followup: {
+            delivery: {
+              state: "posted",
+              attempt_count: 1,
+              receipt: { attempt_count: 1 },
+            },
+          },
+        });
+      } finally {
+        b.cleanup();
+      }
+    },
+  );
+
   it("never archives active obligations through section pruning", async () => {
     const b = makeBacklog(EMPTY);
     try {

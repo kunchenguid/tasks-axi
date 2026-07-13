@@ -1020,7 +1020,7 @@ export function normalizePublicFollowup(
     normalizedDelivery.receipt !== null &&
     (normalizedDelivery.receipt.request_id !== normalized.request.request_id ||
       normalizedDelivery.receipt.platform !== normalized.request.platform ||
-      normalizedDelivery.receipt.attempt_count >
+      normalizedDelivery.receipt.attempt_count !==
         normalizedDelivery.attempt_count)
   ) {
     validation(`${path}.delivery receipt does not match the obligation`);
