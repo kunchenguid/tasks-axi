@@ -11,7 +11,7 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 - `src/context.ts` — `resolveTasksContext` builds the backend `Store` + `ResolvedConfig`; every command receives this `TasksContext`.
 - `src/store.ts` - the `Store` interface and `Capabilities`. Core contract: `create/get/update/remove/list/transition/addDep/removeDep/updatePublicFollowup`. `prune`/`render` are optional and capability-gated.
 - `src/model.ts` — the `Task` data model (report §5).
-- `src/derive.ts` — `blocked` / `ready` / active `held` are derived in the CLI from `list` + the dep graph + hold date gates, never Store methods, so every backend gets them for free.
+- `src/derive.ts` - worker `blocked` / `ready` / active `held` and public delivery readiness are derived in the CLI from `list` + the dep graph + hold date gates, never Store methods, so every backend gets them for free.
 - `src/backends/markdown*.ts` — the only P1 backend.
 - `src/public-followup.ts` - authoritative versioned schema, strict privacy-safe validation, canonical encoding, immutable-field checks, relation/event readiness, and terminal-state invariants for `kind=public-followup`; `src/commands/public-followup.ts` owns its dedicated CLI state machine.
 - `src/commands/*` — one file per verb group; `src/view.ts` owns the read-side TOON projection; `src/confirm.ts` owns the write-side output (the `ok:` confirmation line, the `--json` payload, and `renderMutation`, which assembles both).

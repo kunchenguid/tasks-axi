@@ -46,11 +46,12 @@ export interface PruneResult {
  * The single narrow seam every backend implements (report §8). The CLI layer
  * (arg parsing, TOON rendering, suggestions, help) never knows which backend
  * is active. `ready`/`blocked`/`held` are derived in the CLI from `list`, the
- * dependency graph, and structured hold tags, so every backend gets them for
- * free.
+ * dependency graph, structured hold tags, and public-followup state, so every
+ * backend gets them for free.
  *
  * The core contract is create/get/update/remove/list/transition/addDep/
- * removeDep. `prune` and `render` are optional and capability-gated.
+ * removeDep/updatePublicFollowup. `prune` and `render` are optional and
+ * capability-gated.
  */
 export interface Store {
   capabilities(): Capabilities;

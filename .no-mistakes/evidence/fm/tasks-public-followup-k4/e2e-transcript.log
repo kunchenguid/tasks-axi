@@ -1,5 +1,5 @@
 
-$ tasks-axi public-followup add public-final-ab --request-context-file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/request.json --purpose promised-final --expected-final-file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/expected.json --expires-at 2026-10-01T00:00:00Z --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/source-backlog.md --json
+$ tasks-axi public-followup add public-final-ab --request-context-file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/request.json --purpose promised-final --expected-final-file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/expected.json --expires-at 2026-10-01T00:00:00Z --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/source-backlog.md --json
 {
   "ok": true,
   "action": "public-followup.add",
@@ -48,7 +48,7 @@ $ tasks-axi public-followup add public-final-ab --request-context-file /Users/ku
       "obligation_expires_at": "2026-10-01T00:00:00Z",
       "delivery": {
         "state": "intent",
-        "delivery_key": "fd1_paGqVJk4zY7XWezo7bAdl-9VM5VEd3uT",
+        "delivery_key": "fd1_N_PasuCJajWSw1bgu4QBIkfwqxSsnEtd",
         "payload_digest": null,
         "attempt_count": 0,
         "last_error_code": null,
@@ -69,7 +69,7 @@ $ tasks-axi public-followup add public-final-ab --request-context-file /Users/ku
   }
 }
 
-$ tasks-axi public-followup bind-work public-final-ab --relation-file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/relation.json --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/source-backlog.md --json
+$ tasks-axi public-followup bind-work public-final-ab --relation-file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/relation.json --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/source-backlog.md --json
 {
   "ok": true,
   "action": "public-followup.bind-work",
@@ -118,7 +118,7 @@ $ tasks-axi public-followup bind-work public-final-ab --relation-file /Users/kun
       "obligation_expires_at": "2026-10-01T00:00:00Z",
       "delivery": {
         "state": "pending-work",
-        "delivery_key": "fd1_paGqVJk4zY7XWezo7bAdl-9VM5VEd3uT",
+        "delivery_key": "fd1_N_PasuCJajWSw1bgu4QBIkfwqxSsnEtd",
         "payload_digest": null,
         "attempt_count": 0,
         "last_error_code": null,
@@ -154,16 +154,16 @@ $ tasks-axi public-followup bind-work public-final-ab --relation-file /Users/kun
   }
 }
 
-$ tasks-axi mv public-final-ab --to /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/source-backlog.md --json
+$ tasks-axi mv public-final-ab --to /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/source-backlog.md --json
 {
   "ok": true,
   "action": "mv",
   "id": "public-final-ab",
-  "from": "/Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/source-backlog.md",
-  "to": "/Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md"
+  "from": "/Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/source-backlog.md",
+  "to": "/Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md"
 }
 
-$ tasks-axi public-followup list --work-ref secondmate:demo/work-code-q1 --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+$ tasks-axi public-followup list --work-ref secondmate:demo/work-code-q1 --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
 {
   "ok": true,
   "action": "public-followup.list",
@@ -209,7 +209,7 @@ $ tasks-axi public-followup list --work-ref secondmate:demo/work-code-q1 --file 
         "obligation_expires_at": "2026-10-01T00:00:00Z",
         "delivery": {
           "state": "pending-work",
-          "delivery_key": "fd1_paGqVJk4zY7XWezo7bAdl-9VM5VEd3uT",
+          "delivery_key": "fd1_N_PasuCJajWSw1bgu4QBIkfwqxSsnEtd",
           "payload_digest": null,
           "attempt_count": 0,
           "last_error_code": null,
@@ -246,7 +246,7 @@ $ tasks-axi public-followup list --work-ref secondmate:demo/work-code-q1 --file 
   ]
 }
 
-$ tasks-axi public-followup work-event public-final-ab --event-file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/event.json --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+$ tasks-axi public-followup work-event public-final-ab --event-file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/event.json --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
 {
   "ok": true,
   "action": "public-followup.work-event",
@@ -295,7 +295,7 @@ $ tasks-axi public-followup work-event public-final-ab --event-file /Users/kunch
       "obligation_expires_at": "2026-10-01T00:00:00Z",
       "delivery": {
         "state": "ready",
-        "delivery_key": "fd1_paGqVJk4zY7XWezo7bAdl-9VM5VEd3uT",
+        "delivery_key": "fd1_N_PasuCJajWSw1bgu4QBIkfwqxSsnEtd",
         "payload_digest": null,
         "attempt_count": 0,
         "last_error_code": null,
@@ -349,7 +349,7 @@ $ tasks-axi public-followup work-event public-final-ab --event-file /Users/kunch
   }
 }
 
-$ tasks-axi public-followup work-event public-final-ab --event-file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/event.json --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+$ tasks-axi public-followup work-event public-final-ab --event-file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/event.json --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
 {
   "ok": true,
   "action": "public-followup.work-event",
@@ -396,7 +396,7 @@ $ tasks-axi public-followup work-event public-final-ab --event-file /Users/kunch
       "obligation_expires_at": "2026-10-01T00:00:00Z",
       "delivery": {
         "state": "ready",
-        "delivery_key": "fd1_paGqVJk4zY7XWezo7bAdl-9VM5VEd3uT",
+        "delivery_key": "fd1_N_PasuCJajWSw1bgu4QBIkfwqxSsnEtd",
         "payload_digest": null,
         "attempt_count": 0,
         "last_error_code": null,
@@ -450,7 +450,7 @@ $ tasks-axi public-followup work-event public-final-ab --event-file /Users/kunch
   }
 }
 
-$ tasks-axi block public-final-ab --by ordinary-q1 --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+$ tasks-axi block public-final-ab --by ordinary-q1 --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
 {
   "ok": true,
   "action": "block",
@@ -500,7 +500,7 @@ $ tasks-axi block public-final-ab --by ordinary-q1 --file /Users/kunchen/.no-mis
       "obligation_expires_at": "2026-10-01T00:00:00Z",
       "delivery": {
         "state": "ready",
-        "delivery_key": "fd1_paGqVJk4zY7XWezo7bAdl-9VM5VEd3uT",
+        "delivery_key": "fd1_N_PasuCJajWSw1bgu4QBIkfwqxSsnEtd",
         "payload_digest": null,
         "attempt_count": 0,
         "last_error_code": null,
@@ -556,7 +556,7 @@ $ tasks-axi block public-final-ab --by ordinary-q1 --file /Users/kunchen/.no-mis
   }
 }
 
-$ tasks-axi public-followup ready --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+$ tasks-axi public-followup ready --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
 {
   "ok": true,
   "action": "public-followup.ready",
@@ -564,12 +564,12 @@ $ tasks-axi public-followup ready --file /Users/kunchen/.no-mistakes/worktrees/6
   "ready_public_followups": []
 }
 
-$ tasks-axi public-followup begin-delivery public-final-ab --payload-hash aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+$ tasks-axi public-followup begin-delivery public-final-ab --payload-hash aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
 error: Cannot begin delivery while the obligation has an active blocker
 code: VALIDATION_ERROR
 [exit 2, rejected as expected]
 
-$ tasks-axi unblock public-final-ab --by ordinary-q1 --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+$ tasks-axi unblock public-final-ab --by ordinary-q1 --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
 {
   "ok": true,
   "action": "unblock",
@@ -614,7 +614,7 @@ $ tasks-axi unblock public-final-ab --by ordinary-q1 --file /Users/kunchen/.no-m
       "obligation_expires_at": "2026-10-01T00:00:00Z",
       "delivery": {
         "state": "ready",
-        "delivery_key": "fd1_paGqVJk4zY7XWezo7bAdl-9VM5VEd3uT",
+        "delivery_key": "fd1_N_PasuCJajWSw1bgu4QBIkfwqxSsnEtd",
         "payload_digest": null,
         "attempt_count": 0,
         "last_error_code": null,
@@ -668,16 +668,16 @@ $ tasks-axi unblock public-final-ab --by ordinary-q1 --file /Users/kunchen/.no-m
   }
 }
 
-$ tasks-axi ready --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md
+$ tasks-axi ready --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md
 count: 1
 ready[1]{id,state,kind,repo,title}:
   ordinary-q1,queued,task,"-",Same-home operational blocker
 ready_public_followups[1]{id,state,kind,repo,title,delivery_state}:
   public-final-ab,queued,public-followup,"-",Publish the public-safe result after the fix lands,ready
 help[1]:
-  - Run `tasks-axi start <id> --file=/Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md` to dispatch one of these
+  - Run `tasks-axi start <id> --file=/Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md` to dispatch one of these
 
-$ tasks-axi public-followup ready --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+$ tasks-axi public-followup ready --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
 {
   "ok": true,
   "action": "public-followup.ready",
@@ -723,7 +723,7 @@ $ tasks-axi public-followup ready --file /Users/kunchen/.no-mistakes/worktrees/6
         "obligation_expires_at": "2026-10-01T00:00:00Z",
         "delivery": {
           "state": "ready",
-          "delivery_key": "fd1_paGqVJk4zY7XWezo7bAdl-9VM5VEd3uT",
+          "delivery_key": "fd1_N_PasuCJajWSw1bgu4QBIkfwqxSsnEtd",
           "payload_digest": null,
           "attempt_count": 0,
           "last_error_code": null,
@@ -778,25 +778,25 @@ $ tasks-axi public-followup ready --file /Users/kunchen/.no-mistakes/worktrees/6
   ]
 }
 
-$ tasks-axi start public-final-ab --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+$ tasks-axi start public-final-ab --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
 error: Public-followup state cannot change through generic transitions
 code: VALIDATION_ERROR
 help[1]: Use `tasks-axi public-followup record-delivery` or `tasks-axi public-followup waive`
 [exit 2, rejected as expected]
 
-$ tasks-axi done public-final-ab --no-prune --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+$ tasks-axi done public-final-ab --no-prune --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
 error: Public-followup state cannot change through generic transitions
 code: VALIDATION_ERROR
 help[1]: Use `tasks-axi public-followup record-delivery` or `tasks-axi public-followup waive`
 [exit 2, rejected as expected]
 
-$ tasks-axi hold public-final-ab --reason unsafe-dispatch-hold --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+$ tasks-axi hold public-final-ab --reason unsafe-dispatch-hold --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
 error: Public-followup content and holds cannot change through generic update
 code: VALIDATION_ERROR
 help[1]: Create a successor obligation when the public promise changes
 [exit 2, rejected as expected]
 
-$ tasks-axi public-followup begin-delivery public-final-ab --payload-hash aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+$ tasks-axi public-followup begin-delivery public-final-ab --payload-hash aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
 {
   "ok": true,
   "action": "public-followup.begin-delivery",
@@ -844,7 +844,7 @@ $ tasks-axi public-followup begin-delivery public-final-ab --payload-hash aaaaaa
       "obligation_expires_at": "2026-10-01T00:00:00Z",
       "delivery": {
         "state": "delivery-posting",
-        "delivery_key": "fd1_paGqVJk4zY7XWezo7bAdl-9VM5VEd3uT",
+        "delivery_key": "fd1_N_PasuCJajWSw1bgu4QBIkfwqxSsnEtd",
         "payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "attempt_count": 1,
         "last_error_code": null,
@@ -898,7 +898,7 @@ $ tasks-axi public-followup begin-delivery public-final-ab --payload-hash aaaaaa
   }
 }
 
-$ tasks-axi public-followup record-delivery public-final-ab --receipt-file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/receipt.json --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+$ tasks-axi public-followup record-delivery public-final-ab --receipt-file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/receipt.json --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
 {
   "ok": true,
   "action": "public-followup.record-delivery",
@@ -948,7 +948,7 @@ $ tasks-axi public-followup record-delivery public-final-ab --receipt-file /User
       "obligation_expires_at": "2026-10-01T00:00:00Z",
       "delivery": {
         "state": "posted",
-        "delivery_key": "fd1_paGqVJk4zY7XWezo7bAdl-9VM5VEd3uT",
+        "delivery_key": "fd1_N_PasuCJajWSw1bgu4QBIkfwqxSsnEtd",
         "payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "attempt_count": 1,
         "last_error_code": null,
@@ -1012,13 +1012,13 @@ $ tasks-axi public-followup record-delivery public-final-ab --receipt-file /User
   }
 }
 
-$ tasks-axi reopen public-final-ab --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+$ tasks-axi reopen public-final-ab --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
 error: Public-followup state cannot change through generic transitions
 code: VALIDATION_ERROR
 help[1]: Use `tasks-axi public-followup record-delivery` or `tasks-axi public-followup waive`
 [exit 2, rejected as expected]
 
-$ tasks-axi prune --state done --keep 0 --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+$ tasks-axi prune --state done --keep 0 --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEK7C9NZSYF26KG0243B871/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
 {
   "ok": true,
   "action": "prune",
