@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "state": "posted",
+  "request_id": "req-e2e-public-final",
+  "platform": "discord",
+  "attempt_count": 1,
+  "total_chunks": 1,
+  "posted_chunks": 1,
+  "posted_at": "2026-07-14T13:00:00Z",
+  "retain_until": "2026-10-14T13:00:00Z"
+}

@@ -162,9 +162,9 @@ tasks-axi public-followup record-delivery public-final-ab --receipt-file receipt
 The request context file contains the relay-issued request id, platform, opaque `ctx1` binding, bounded public-safe summary, received time, follow-up expiry, and reservation expiry.
 The expected-final file defines its typed outcome, stable project, required deliverable names, and `all-required` or `any-required` completion policy.
 Relation files contain a stable `relation_id`, `{home_id, task_id}` work reference, `fulfills` or `contributes` role, required flag, and generation.
-Completion event files use schema version 1 and bind an event id, obligation id, relation id, generation, source home, work id, typed outcome, safe deliverables, bounded public-safe outcome, and optional successor.
+Completion event files use schema version 1 and bind an event id, obligation id, relation id, generation, source home, work id, typed outcome, safe deliverables, bounded public-safe outcome, and a `successor` field that is null unless the outcome supersedes the relation.
 A posted receipt file records `state=posted`, request id, platform, attempt and chunk counts, posted time, and optional retention time.
-An error file records a safe delivery state, safe error enum, occurrence time, optional retry time, and optional chunk counts.
+An error file records a safe delivery state, validated error code, occurrence time, optional retry time, and optional chunk counts.
 Expected-final types permit only their matching safe deliverables: `pr_url`, `report_path`, `commit_sha`, or `error_code`.
 Run `tasks-axi public-followup --help` for the exact file-backed command surface and state names.
 
@@ -172,17 +172,18 @@ Each mutation is idempotent and returns the monotonic obligation `revision`, cha
 Duplicate accepted event ids are no-ops, while conflicting ids, stale generations, source mismatches, malformed typed data, and changed immutable intake fields fail closed.
 One work item can relate to several obligations, and one obligation can require work from several homes.
 These cross-home relations are separate from same-backlog dispatch dependencies.
+Existing same-backlog `blocked-by` edges remain delivery gates for `ready` and `begin-delivery`.
 
 `tasks-axi ready` excludes public obligations from its ordinary `ready` worker group and exposes delivery-ready obligations only in `ready_public_followups`.
 Use `tasks-axi public-followup ready` when handling public delivery.
-Generic `start`, `done`, `reopen`, active removal, and kind-changing paths cannot bypass the public-followup state machine.
+Generic `start`, `done`, `reopen`, active removal, content or kind changes, and dispatch holds cannot bypass the public-followup state machine.
 Only `record-delivery` with a validated terminal `posted` receipt or `waive --approved-by captain` can atomically move an obligation to Done.
 Normal Done pruning then preserves the complete typed receipt or waiver in `done-archive.md`.
 
 The Markdown backend stores version 1 typed data in a reserved base64url canonical-JSON HTML comment immediately below the task bullet.
 The bounded public-safe title and `(kind: public-followup)` remain visible, but callers other than tasks-axi must not parse or rewrite the reserved comment.
 Generic title and body updates are refused because changing the immutable public promise requires a successor obligation.
-The typed schema permits public-safe identifiers, summaries, deliverables, receipt counters, timestamps, and safe error enums.
+The typed schema permits public-safe identifiers, summaries, deliverables, receipt counters, timestamps, and validated error codes.
 It rejects unknown fields so raw request text, parent context, author or channel ids, signed URLs, and raw platform responses cannot silently enter machine-readable output.
 
 ## The markdown backend

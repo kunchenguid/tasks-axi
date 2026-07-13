@@ -1,0 +1,12 @@
+{
+  "request_id": "req-e2e-public-final",
+  "platform": "discord",
+  "context_binding": {
+    "version": "ctx1",
+    "value": "ctx1_e2e_opaque"
+  },
+  "public_safe_summary": "Publish the public-safe result after the fix lands",
+  "received_at": "2026-07-13T12:00:00Z",
+  "followup_expires_at": "2026-08-13T12:00:00Z",
+  "reservation_expires_at": "2026-09-13T12:00:00Z"
+}

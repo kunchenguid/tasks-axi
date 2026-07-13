@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "evt-code-landed",
+  "obligation_id": "public-final-ab",
+  "relation_id": "rel-code",
+  "generation": 1,
+  "source_home_id": "secondmate:demo",
+  "work_id": "work-code-q1",
+  "outcome_type": "pr-merged",
+  "deliverables": {
+    "pr_url": "https://github.com/o/r/pull/519"
+  },
+  "public_safe_outcome": "The fix merged in PR 519.",
+  "successor": null,
+  "occurred_at": "2026-07-14T12:00:00Z"
+}

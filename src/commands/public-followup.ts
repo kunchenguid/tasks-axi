@@ -63,7 +63,7 @@ file contracts:
   request context: request_id, platform, ctx1 binding, public_safe_summary, and RFC3339 expiries
   expected final: type, project, required_deliverables, completion_policy
   relation/successor: relation_id, work_ref, role, required, generation
-  event: schema_version=1, stable ids/source/generation, typed outcome, safe deliverables, successor
+  event: schema_version=1, stable ids/source/generation, typed outcome, safe deliverables, successor (null unless superseded)
   receipt: posted request/platform, attempt and chunk counts, posted_at, optional retain_until
   error: safe state/error_code, occurred_at, optional retry time and chunk counts
 examples:

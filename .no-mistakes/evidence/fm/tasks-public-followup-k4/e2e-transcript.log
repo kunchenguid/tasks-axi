@@ -1,0 +1,1043 @@
+
+$ tasks-axi public-followup add public-final-ab --request-context-file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/request.json --purpose promised-final --expected-final-file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/expected.json --expires-at 2026-10-01T00:00:00Z --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/source-backlog.md --json
+{
+  "ok": true,
+  "action": "public-followup.add",
+  "revision": 1,
+  "changed": [
+    "task",
+    "public_followup"
+  ],
+  "task": {
+    "id": "public-final-ab",
+    "title": "Publish the public-safe result after the fix lands",
+    "state": "queued",
+    "kind": "public-followup",
+    "repo": null,
+    "priority": null,
+    "created": "2026-07-13",
+    "closed": null,
+    "deps": [],
+    "hold": null,
+    "links": [],
+    "body": null,
+    "public_followup": {
+      "schema_version": 1,
+      "revision": 1,
+      "request": {
+        "request_id": "req-e2e-public-final",
+        "platform": "discord",
+        "context_binding": {
+          "version": "ctx1",
+          "value": "ctx1_e2e_opaque"
+        },
+        "public_safe_summary": "Publish the public-safe result after the fix lands",
+        "received_at": "2026-07-13T12:00:00Z",
+        "followup_expires_at": "2026-08-13T12:00:00Z",
+        "reservation_expires_at": "2026-09-13T12:00:00Z"
+      },
+      "purpose": "promised-final",
+      "expected_final": {
+        "type": "pr-merged",
+        "project": "demo",
+        "required_deliverables": [
+          "pr_url"
+        ],
+        "completion_policy": "all-required"
+      },
+      "obligation_expires_at": "2026-10-01T00:00:00Z",
+      "delivery": {
+        "state": "intent",
+        "delivery_key": "fd1_paGqVJk4zY7XWezo7bAdl-9VM5VEd3uT",
+        "payload_digest": null,
+        "attempt_count": 0,
+        "last_error_code": null,
+        "next_attempt_at": null,
+        "receipt": null,
+        "last_error": null,
+        "waiver": null
+      },
+      "work_relations": [],
+      "lineage": {
+        "predecessor_obligation_id": null,
+        "successor_obligation_id": null
+      }
+    },
+    "blocked": false,
+    "blocked_by": [],
+    "held": false
+  }
+}
+
+$ tasks-axi public-followup bind-work public-final-ab --relation-file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/relation.json --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/source-backlog.md --json
+{
+  "ok": true,
+  "action": "public-followup.bind-work",
+  "revision": 2,
+  "changed": [
+    "work_relations",
+    "delivery.state"
+  ],
+  "task": {
+    "id": "public-final-ab",
+    "title": "Publish the public-safe result after the fix lands",
+    "state": "queued",
+    "kind": "public-followup",
+    "repo": null,
+    "priority": null,
+    "created": "2026-07-13",
+    "closed": null,
+    "deps": [],
+    "hold": null,
+    "links": [],
+    "body": null,
+    "public_followup": {
+      "schema_version": 1,
+      "revision": 2,
+      "request": {
+        "request_id": "req-e2e-public-final",
+        "platform": "discord",
+        "context_binding": {
+          "version": "ctx1",
+          "value": "ctx1_e2e_opaque"
+        },
+        "public_safe_summary": "Publish the public-safe result after the fix lands",
+        "received_at": "2026-07-13T12:00:00Z",
+        "followup_expires_at": "2026-08-13T12:00:00Z",
+        "reservation_expires_at": "2026-09-13T12:00:00Z"
+      },
+      "purpose": "promised-final",
+      "expected_final": {
+        "type": "pr-merged",
+        "project": "demo",
+        "required_deliverables": [
+          "pr_url"
+        ],
+        "completion_policy": "all-required"
+      },
+      "obligation_expires_at": "2026-10-01T00:00:00Z",
+      "delivery": {
+        "state": "pending-work",
+        "delivery_key": "fd1_paGqVJk4zY7XWezo7bAdl-9VM5VEd3uT",
+        "payload_digest": null,
+        "attempt_count": 0,
+        "last_error_code": null,
+        "next_attempt_at": null,
+        "receipt": null,
+        "last_error": null,
+        "waiver": null
+      },
+      "work_relations": [
+        {
+          "relation_id": "rel-code",
+          "work_ref": {
+            "home_id": "secondmate:demo",
+            "task_id": "work-code-q1"
+          },
+          "role": "fulfills",
+          "required": true,
+          "generation": 1,
+          "state": "bound",
+          "successor_relation_id": null,
+          "accepted_event_ids": [],
+          "accepted_events": []
+        }
+      ],
+      "lineage": {
+        "predecessor_obligation_id": null,
+        "successor_obligation_id": null
+      }
+    },
+    "blocked": false,
+    "blocked_by": [],
+    "held": false
+  }
+}
+
+$ tasks-axi mv public-final-ab --to /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/source-backlog.md --json
+{
+  "ok": true,
+  "action": "mv",
+  "id": "public-final-ab",
+  "from": "/Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/source-backlog.md",
+  "to": "/Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md"
+}
+
+$ tasks-axi public-followup list --work-ref secondmate:demo/work-code-q1 --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+{
+  "ok": true,
+  "action": "public-followup.list",
+  "count": 1,
+  "public_followups": [
+    {
+      "id": "public-final-ab",
+      "title": "Publish the public-safe result after the fix lands",
+      "state": "queued",
+      "kind": "public-followup",
+      "repo": null,
+      "priority": null,
+      "created": "2026-07-13",
+      "closed": null,
+      "deps": [],
+      "hold": null,
+      "links": [],
+      "body": null,
+      "public_followup": {
+        "schema_version": 1,
+        "revision": 2,
+        "request": {
+          "request_id": "req-e2e-public-final",
+          "platform": "discord",
+          "context_binding": {
+            "version": "ctx1",
+            "value": "ctx1_e2e_opaque"
+          },
+          "public_safe_summary": "Publish the public-safe result after the fix lands",
+          "received_at": "2026-07-13T12:00:00Z",
+          "followup_expires_at": "2026-08-13T12:00:00Z",
+          "reservation_expires_at": "2026-09-13T12:00:00Z"
+        },
+        "purpose": "promised-final",
+        "expected_final": {
+          "type": "pr-merged",
+          "project": "demo",
+          "required_deliverables": [
+            "pr_url"
+          ],
+          "completion_policy": "all-required"
+        },
+        "obligation_expires_at": "2026-10-01T00:00:00Z",
+        "delivery": {
+          "state": "pending-work",
+          "delivery_key": "fd1_paGqVJk4zY7XWezo7bAdl-9VM5VEd3uT",
+          "payload_digest": null,
+          "attempt_count": 0,
+          "last_error_code": null,
+          "next_attempt_at": null,
+          "receipt": null,
+          "last_error": null,
+          "waiver": null
+        },
+        "work_relations": [
+          {
+            "relation_id": "rel-code",
+            "work_ref": {
+              "home_id": "secondmate:demo",
+              "task_id": "work-code-q1"
+            },
+            "role": "fulfills",
+            "required": true,
+            "generation": 1,
+            "state": "bound",
+            "successor_relation_id": null,
+            "accepted_event_ids": [],
+            "accepted_events": []
+          }
+        ],
+        "lineage": {
+          "predecessor_obligation_id": null,
+          "successor_obligation_id": null
+        }
+      },
+      "blocked": false,
+      "blocked_by": [],
+      "held": false
+    }
+  ]
+}
+
+$ tasks-axi public-followup work-event public-final-ab --event-file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/event.json --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+{
+  "ok": true,
+  "action": "public-followup.work-event",
+  "revision": 3,
+  "changed": [
+    "work_relations",
+    "delivery.state"
+  ],
+  "task": {
+    "id": "public-final-ab",
+    "title": "Publish the public-safe result after the fix lands",
+    "state": "queued",
+    "kind": "public-followup",
+    "repo": null,
+    "priority": null,
+    "created": "2026-07-13",
+    "closed": null,
+    "deps": [],
+    "hold": null,
+    "links": [],
+    "body": null,
+    "public_followup": {
+      "schema_version": 1,
+      "revision": 3,
+      "request": {
+        "request_id": "req-e2e-public-final",
+        "platform": "discord",
+        "context_binding": {
+          "version": "ctx1",
+          "value": "ctx1_e2e_opaque"
+        },
+        "public_safe_summary": "Publish the public-safe result after the fix lands",
+        "received_at": "2026-07-13T12:00:00Z",
+        "followup_expires_at": "2026-08-13T12:00:00Z",
+        "reservation_expires_at": "2026-09-13T12:00:00Z"
+      },
+      "purpose": "promised-final",
+      "expected_final": {
+        "type": "pr-merged",
+        "project": "demo",
+        "required_deliverables": [
+          "pr_url"
+        ],
+        "completion_policy": "all-required"
+      },
+      "obligation_expires_at": "2026-10-01T00:00:00Z",
+      "delivery": {
+        "state": "ready",
+        "delivery_key": "fd1_paGqVJk4zY7XWezo7bAdl-9VM5VEd3uT",
+        "payload_digest": null,
+        "attempt_count": 0,
+        "last_error_code": null,
+        "next_attempt_at": null,
+        "receipt": null,
+        "last_error": null,
+        "waiver": null
+      },
+      "work_relations": [
+        {
+          "relation_id": "rel-code",
+          "work_ref": {
+            "home_id": "secondmate:demo",
+            "task_id": "work-code-q1"
+          },
+          "role": "fulfills",
+          "required": true,
+          "generation": 1,
+          "state": "landed",
+          "successor_relation_id": null,
+          "accepted_event_ids": [
+            "evt-code-landed"
+          ],
+          "accepted_events": [
+            {
+              "schema_version": 1,
+              "event_id": "evt-code-landed",
+              "obligation_id": "public-final-ab",
+              "relation_id": "rel-code",
+              "generation": 1,
+              "source_home_id": "secondmate:demo",
+              "work_id": "work-code-q1",
+              "outcome_type": "pr-merged",
+              "deliverables": {
+                "pr_url": "https://github.com/o/r/pull/519"
+              },
+              "public_safe_outcome": "The fix merged in PR 519.",
+              "occurred_at": "2026-07-14T12:00:00Z"
+            }
+          ]
+        }
+      ],
+      "lineage": {
+        "predecessor_obligation_id": null,
+        "successor_obligation_id": null
+      }
+    },
+    "blocked": false,
+    "blocked_by": [],
+    "held": false
+  }
+}
+
+$ tasks-axi public-followup work-event public-final-ab --event-file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/event.json --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+{
+  "ok": true,
+  "action": "public-followup.work-event",
+  "already": true,
+  "revision": 3,
+  "changed": [],
+  "task": {
+    "id": "public-final-ab",
+    "title": "Publish the public-safe result after the fix lands",
+    "state": "queued",
+    "kind": "public-followup",
+    "repo": null,
+    "priority": null,
+    "created": "2026-07-13",
+    "closed": null,
+    "deps": [],
+    "hold": null,
+    "links": [],
+    "body": null,
+    "public_followup": {
+      "schema_version": 1,
+      "revision": 3,
+      "request": {
+        "request_id": "req-e2e-public-final",
+        "platform": "discord",
+        "context_binding": {
+          "version": "ctx1",
+          "value": "ctx1_e2e_opaque"
+        },
+        "public_safe_summary": "Publish the public-safe result after the fix lands",
+        "received_at": "2026-07-13T12:00:00Z",
+        "followup_expires_at": "2026-08-13T12:00:00Z",
+        "reservation_expires_at": "2026-09-13T12:00:00Z"
+      },
+      "purpose": "promised-final",
+      "expected_final": {
+        "type": "pr-merged",
+        "project": "demo",
+        "required_deliverables": [
+          "pr_url"
+        ],
+        "completion_policy": "all-required"
+      },
+      "obligation_expires_at": "2026-10-01T00:00:00Z",
+      "delivery": {
+        "state": "ready",
+        "delivery_key": "fd1_paGqVJk4zY7XWezo7bAdl-9VM5VEd3uT",
+        "payload_digest": null,
+        "attempt_count": 0,
+        "last_error_code": null,
+        "next_attempt_at": null,
+        "receipt": null,
+        "last_error": null,
+        "waiver": null
+      },
+      "work_relations": [
+        {
+          "relation_id": "rel-code",
+          "work_ref": {
+            "home_id": "secondmate:demo",
+            "task_id": "work-code-q1"
+          },
+          "role": "fulfills",
+          "required": true,
+          "generation": 1,
+          "state": "landed",
+          "successor_relation_id": null,
+          "accepted_event_ids": [
+            "evt-code-landed"
+          ],
+          "accepted_events": [
+            {
+              "schema_version": 1,
+              "event_id": "evt-code-landed",
+              "obligation_id": "public-final-ab",
+              "relation_id": "rel-code",
+              "generation": 1,
+              "source_home_id": "secondmate:demo",
+              "work_id": "work-code-q1",
+              "outcome_type": "pr-merged",
+              "deliverables": {
+                "pr_url": "https://github.com/o/r/pull/519"
+              },
+              "public_safe_outcome": "The fix merged in PR 519.",
+              "occurred_at": "2026-07-14T12:00:00Z"
+            }
+          ]
+        }
+      ],
+      "lineage": {
+        "predecessor_obligation_id": null,
+        "successor_obligation_id": null
+      }
+    },
+    "blocked": false,
+    "blocked_by": [],
+    "held": false
+  }
+}
+
+$ tasks-axi block public-final-ab --by ordinary-q1 --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+{
+  "ok": true,
+  "action": "block",
+  "blocked_by": "ordinary-q1",
+  "task": {
+    "id": "public-final-ab",
+    "title": "Publish the public-safe result after the fix lands",
+    "state": "queued",
+    "kind": "public-followup",
+    "repo": null,
+    "priority": null,
+    "created": "2026-07-13",
+    "closed": null,
+    "deps": [
+      {
+        "type": "blocked-by",
+        "id": "ordinary-q1"
+      }
+    ],
+    "hold": null,
+    "links": [],
+    "body": null,
+    "public_followup": {
+      "schema_version": 1,
+      "revision": 3,
+      "request": {
+        "request_id": "req-e2e-public-final",
+        "platform": "discord",
+        "context_binding": {
+          "version": "ctx1",
+          "value": "ctx1_e2e_opaque"
+        },
+        "public_safe_summary": "Publish the public-safe result after the fix lands",
+        "received_at": "2026-07-13T12:00:00Z",
+        "followup_expires_at": "2026-08-13T12:00:00Z",
+        "reservation_expires_at": "2026-09-13T12:00:00Z"
+      },
+      "purpose": "promised-final",
+      "expected_final": {
+        "type": "pr-merged",
+        "project": "demo",
+        "required_deliverables": [
+          "pr_url"
+        ],
+        "completion_policy": "all-required"
+      },
+      "obligation_expires_at": "2026-10-01T00:00:00Z",
+      "delivery": {
+        "state": "ready",
+        "delivery_key": "fd1_paGqVJk4zY7XWezo7bAdl-9VM5VEd3uT",
+        "payload_digest": null,
+        "attempt_count": 0,
+        "last_error_code": null,
+        "next_attempt_at": null,
+        "receipt": null,
+        "last_error": null,
+        "waiver": null
+      },
+      "work_relations": [
+        {
+          "relation_id": "rel-code",
+          "work_ref": {
+            "home_id": "secondmate:demo",
+            "task_id": "work-code-q1"
+          },
+          "role": "fulfills",
+          "required": true,
+          "generation": 1,
+          "state": "landed",
+          "successor_relation_id": null,
+          "accepted_event_ids": [
+            "evt-code-landed"
+          ],
+          "accepted_events": [
+            {
+              "schema_version": 1,
+              "event_id": "evt-code-landed",
+              "obligation_id": "public-final-ab",
+              "relation_id": "rel-code",
+              "generation": 1,
+              "source_home_id": "secondmate:demo",
+              "work_id": "work-code-q1",
+              "outcome_type": "pr-merged",
+              "deliverables": {
+                "pr_url": "https://github.com/o/r/pull/519"
+              },
+              "public_safe_outcome": "The fix merged in PR 519.",
+              "occurred_at": "2026-07-14T12:00:00Z"
+            }
+          ]
+        }
+      ],
+      "lineage": {
+        "predecessor_obligation_id": null,
+        "successor_obligation_id": null
+      }
+    },
+    "blocked": true,
+    "blocked_by": [
+      "ordinary-q1"
+    ],
+    "held": false
+  }
+}
+
+$ tasks-axi public-followup ready --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+{
+  "ok": true,
+  "action": "public-followup.ready",
+  "count": 0,
+  "ready_public_followups": []
+}
+
+$ tasks-axi public-followup begin-delivery public-final-ab --payload-hash aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+error: Cannot begin delivery while the obligation has an active blocker
+code: VALIDATION_ERROR
+[exit 2, rejected as expected]
+
+$ tasks-axi unblock public-final-ab --by ordinary-q1 --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+{
+  "ok": true,
+  "action": "unblock",
+  "blocked_by": "ordinary-q1",
+  "task": {
+    "id": "public-final-ab",
+    "title": "Publish the public-safe result after the fix lands",
+    "state": "queued",
+    "kind": "public-followup",
+    "repo": null,
+    "priority": null,
+    "created": "2026-07-13",
+    "closed": null,
+    "deps": [],
+    "hold": null,
+    "links": [],
+    "body": null,
+    "public_followup": {
+      "schema_version": 1,
+      "revision": 3,
+      "request": {
+        "request_id": "req-e2e-public-final",
+        "platform": "discord",
+        "context_binding": {
+          "version": "ctx1",
+          "value": "ctx1_e2e_opaque"
+        },
+        "public_safe_summary": "Publish the public-safe result after the fix lands",
+        "received_at": "2026-07-13T12:00:00Z",
+        "followup_expires_at": "2026-08-13T12:00:00Z",
+        "reservation_expires_at": "2026-09-13T12:00:00Z"
+      },
+      "purpose": "promised-final",
+      "expected_final": {
+        "type": "pr-merged",
+        "project": "demo",
+        "required_deliverables": [
+          "pr_url"
+        ],
+        "completion_policy": "all-required"
+      },
+      "obligation_expires_at": "2026-10-01T00:00:00Z",
+      "delivery": {
+        "state": "ready",
+        "delivery_key": "fd1_paGqVJk4zY7XWezo7bAdl-9VM5VEd3uT",
+        "payload_digest": null,
+        "attempt_count": 0,
+        "last_error_code": null,
+        "next_attempt_at": null,
+        "receipt": null,
+        "last_error": null,
+        "waiver": null
+      },
+      "work_relations": [
+        {
+          "relation_id": "rel-code",
+          "work_ref": {
+            "home_id": "secondmate:demo",
+            "task_id": "work-code-q1"
+          },
+          "role": "fulfills",
+          "required": true,
+          "generation": 1,
+          "state": "landed",
+          "successor_relation_id": null,
+          "accepted_event_ids": [
+            "evt-code-landed"
+          ],
+          "accepted_events": [
+            {
+              "schema_version": 1,
+              "event_id": "evt-code-landed",
+              "obligation_id": "public-final-ab",
+              "relation_id": "rel-code",
+              "generation": 1,
+              "source_home_id": "secondmate:demo",
+              "work_id": "work-code-q1",
+              "outcome_type": "pr-merged",
+              "deliverables": {
+                "pr_url": "https://github.com/o/r/pull/519"
+              },
+              "public_safe_outcome": "The fix merged in PR 519.",
+              "occurred_at": "2026-07-14T12:00:00Z"
+            }
+          ]
+        }
+      ],
+      "lineage": {
+        "predecessor_obligation_id": null,
+        "successor_obligation_id": null
+      }
+    },
+    "blocked": false,
+    "blocked_by": [],
+    "held": false
+  }
+}
+
+$ tasks-axi ready --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md
+count: 1
+ready[1]{id,state,kind,repo,title}:
+  ordinary-q1,queued,task,"-",Same-home operational blocker
+ready_public_followups[1]{id,state,kind,repo,title,delivery_state}:
+  public-final-ab,queued,public-followup,"-",Publish the public-safe result after the fix lands,ready
+help[1]:
+  - Run `tasks-axi start <id> --file=/Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md` to dispatch one of these
+
+$ tasks-axi public-followup ready --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+{
+  "ok": true,
+  "action": "public-followup.ready",
+  "count": 1,
+  "ready_public_followups": [
+    {
+      "id": "public-final-ab",
+      "title": "Publish the public-safe result after the fix lands",
+      "state": "queued",
+      "kind": "public-followup",
+      "repo": null,
+      "priority": null,
+      "created": "2026-07-13",
+      "closed": null,
+      "deps": [],
+      "hold": null,
+      "links": [],
+      "body": null,
+      "public_followup": {
+        "schema_version": 1,
+        "revision": 3,
+        "request": {
+          "request_id": "req-e2e-public-final",
+          "platform": "discord",
+          "context_binding": {
+            "version": "ctx1",
+            "value": "ctx1_e2e_opaque"
+          },
+          "public_safe_summary": "Publish the public-safe result after the fix lands",
+          "received_at": "2026-07-13T12:00:00Z",
+          "followup_expires_at": "2026-08-13T12:00:00Z",
+          "reservation_expires_at": "2026-09-13T12:00:00Z"
+        },
+        "purpose": "promised-final",
+        "expected_final": {
+          "type": "pr-merged",
+          "project": "demo",
+          "required_deliverables": [
+            "pr_url"
+          ],
+          "completion_policy": "all-required"
+        },
+        "obligation_expires_at": "2026-10-01T00:00:00Z",
+        "delivery": {
+          "state": "ready",
+          "delivery_key": "fd1_paGqVJk4zY7XWezo7bAdl-9VM5VEd3uT",
+          "payload_digest": null,
+          "attempt_count": 0,
+          "last_error_code": null,
+          "next_attempt_at": null,
+          "receipt": null,
+          "last_error": null,
+          "waiver": null
+        },
+        "work_relations": [
+          {
+            "relation_id": "rel-code",
+            "work_ref": {
+              "home_id": "secondmate:demo",
+              "task_id": "work-code-q1"
+            },
+            "role": "fulfills",
+            "required": true,
+            "generation": 1,
+            "state": "landed",
+            "successor_relation_id": null,
+            "accepted_event_ids": [
+              "evt-code-landed"
+            ],
+            "accepted_events": [
+              {
+                "schema_version": 1,
+                "event_id": "evt-code-landed",
+                "obligation_id": "public-final-ab",
+                "relation_id": "rel-code",
+                "generation": 1,
+                "source_home_id": "secondmate:demo",
+                "work_id": "work-code-q1",
+                "outcome_type": "pr-merged",
+                "deliverables": {
+                  "pr_url": "https://github.com/o/r/pull/519"
+                },
+                "public_safe_outcome": "The fix merged in PR 519.",
+                "occurred_at": "2026-07-14T12:00:00Z"
+              }
+            ]
+          }
+        ],
+        "lineage": {
+          "predecessor_obligation_id": null,
+          "successor_obligation_id": null
+        }
+      },
+      "blocked": false,
+      "blocked_by": [],
+      "held": false
+    }
+  ]
+}
+
+$ tasks-axi start public-final-ab --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+error: Public-followup state cannot change through generic transitions
+code: VALIDATION_ERROR
+help[1]: Use `tasks-axi public-followup record-delivery` or `tasks-axi public-followup waive`
+[exit 2, rejected as expected]
+
+$ tasks-axi done public-final-ab --no-prune --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+error: Public-followup state cannot change through generic transitions
+code: VALIDATION_ERROR
+help[1]: Use `tasks-axi public-followup record-delivery` or `tasks-axi public-followup waive`
+[exit 2, rejected as expected]
+
+$ tasks-axi hold public-final-ab --reason unsafe-dispatch-hold --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+error: Public-followup content and holds cannot change through generic update
+code: VALIDATION_ERROR
+help[1]: Create a successor obligation when the public promise changes
+[exit 2, rejected as expected]
+
+$ tasks-axi public-followup begin-delivery public-final-ab --payload-hash aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+{
+  "ok": true,
+  "action": "public-followup.begin-delivery",
+  "revision": 4,
+  "changed": [
+    "delivery"
+  ],
+  "task": {
+    "id": "public-final-ab",
+    "title": "Publish the public-safe result after the fix lands",
+    "state": "queued",
+    "kind": "public-followup",
+    "repo": null,
+    "priority": null,
+    "created": "2026-07-13",
+    "closed": null,
+    "deps": [],
+    "hold": null,
+    "links": [],
+    "body": null,
+    "public_followup": {
+      "schema_version": 1,
+      "revision": 4,
+      "request": {
+        "request_id": "req-e2e-public-final",
+        "platform": "discord",
+        "context_binding": {
+          "version": "ctx1",
+          "value": "ctx1_e2e_opaque"
+        },
+        "public_safe_summary": "Publish the public-safe result after the fix lands",
+        "received_at": "2026-07-13T12:00:00Z",
+        "followup_expires_at": "2026-08-13T12:00:00Z",
+        "reservation_expires_at": "2026-09-13T12:00:00Z"
+      },
+      "purpose": "promised-final",
+      "expected_final": {
+        "type": "pr-merged",
+        "project": "demo",
+        "required_deliverables": [
+          "pr_url"
+        ],
+        "completion_policy": "all-required"
+      },
+      "obligation_expires_at": "2026-10-01T00:00:00Z",
+      "delivery": {
+        "state": "delivery-posting",
+        "delivery_key": "fd1_paGqVJk4zY7XWezo7bAdl-9VM5VEd3uT",
+        "payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "attempt_count": 1,
+        "last_error_code": null,
+        "next_attempt_at": null,
+        "receipt": null,
+        "last_error": null,
+        "waiver": null
+      },
+      "work_relations": [
+        {
+          "relation_id": "rel-code",
+          "work_ref": {
+            "home_id": "secondmate:demo",
+            "task_id": "work-code-q1"
+          },
+          "role": "fulfills",
+          "required": true,
+          "generation": 1,
+          "state": "landed",
+          "successor_relation_id": null,
+          "accepted_event_ids": [
+            "evt-code-landed"
+          ],
+          "accepted_events": [
+            {
+              "schema_version": 1,
+              "event_id": "evt-code-landed",
+              "obligation_id": "public-final-ab",
+              "relation_id": "rel-code",
+              "generation": 1,
+              "source_home_id": "secondmate:demo",
+              "work_id": "work-code-q1",
+              "outcome_type": "pr-merged",
+              "deliverables": {
+                "pr_url": "https://github.com/o/r/pull/519"
+              },
+              "public_safe_outcome": "The fix merged in PR 519.",
+              "occurred_at": "2026-07-14T12:00:00Z"
+            }
+          ]
+        }
+      ],
+      "lineage": {
+        "predecessor_obligation_id": null,
+        "successor_obligation_id": null
+      }
+    },
+    "blocked": false,
+    "blocked_by": [],
+    "held": false
+  }
+}
+
+$ tasks-axi public-followup record-delivery public-final-ab --receipt-file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/receipt.json --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+{
+  "ok": true,
+  "action": "public-followup.record-delivery",
+  "revision": 5,
+  "changed": [
+    "delivery",
+    "state"
+  ],
+  "pruned": 0,
+  "task": {
+    "id": "public-final-ab",
+    "title": "Publish the public-safe result after the fix lands",
+    "state": "done",
+    "kind": "public-followup",
+    "repo": null,
+    "priority": null,
+    "created": "2026-07-13",
+    "closed": "2026-07-13",
+    "deps": [],
+    "hold": null,
+    "links": [],
+    "body": null,
+    "public_followup": {
+      "schema_version": 1,
+      "revision": 5,
+      "request": {
+        "request_id": "req-e2e-public-final",
+        "platform": "discord",
+        "context_binding": {
+          "version": "ctx1",
+          "value": "ctx1_e2e_opaque"
+        },
+        "public_safe_summary": "Publish the public-safe result after the fix lands",
+        "received_at": "2026-07-13T12:00:00Z",
+        "followup_expires_at": "2026-08-13T12:00:00Z",
+        "reservation_expires_at": "2026-09-13T12:00:00Z"
+      },
+      "purpose": "promised-final",
+      "expected_final": {
+        "type": "pr-merged",
+        "project": "demo",
+        "required_deliverables": [
+          "pr_url"
+        ],
+        "completion_policy": "all-required"
+      },
+      "obligation_expires_at": "2026-10-01T00:00:00Z",
+      "delivery": {
+        "state": "posted",
+        "delivery_key": "fd1_paGqVJk4zY7XWezo7bAdl-9VM5VEd3uT",
+        "payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "attempt_count": 1,
+        "last_error_code": null,
+        "next_attempt_at": null,
+        "receipt": {
+          "schema_version": 1,
+          "state": "posted",
+          "request_id": "req-e2e-public-final",
+          "platform": "discord",
+          "attempt_count": 1,
+          "total_chunks": 1,
+          "posted_chunks": 1,
+          "posted_at": "2026-07-14T13:00:00Z",
+          "retain_until": "2026-10-14T13:00:00Z"
+        },
+        "last_error": null,
+        "waiver": null
+      },
+      "work_relations": [
+        {
+          "relation_id": "rel-code",
+          "work_ref": {
+            "home_id": "secondmate:demo",
+            "task_id": "work-code-q1"
+          },
+          "role": "fulfills",
+          "required": true,
+          "generation": 1,
+          "state": "landed",
+          "successor_relation_id": null,
+          "accepted_event_ids": [
+            "evt-code-landed"
+          ],
+          "accepted_events": [
+            {
+              "schema_version": 1,
+              "event_id": "evt-code-landed",
+              "obligation_id": "public-final-ab",
+              "relation_id": "rel-code",
+              "generation": 1,
+              "source_home_id": "secondmate:demo",
+              "work_id": "work-code-q1",
+              "outcome_type": "pr-merged",
+              "deliverables": {
+                "pr_url": "https://github.com/o/r/pull/519"
+              },
+              "public_safe_outcome": "The fix merged in PR 519.",
+              "occurred_at": "2026-07-14T12:00:00Z"
+            }
+          ]
+        }
+      ],
+      "lineage": {
+        "predecessor_obligation_id": null,
+        "successor_obligation_id": null
+      }
+    },
+    "blocked": false,
+    "blocked_by": [],
+    "held": false
+  }
+}
+
+$ tasks-axi reopen public-final-ab --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+error: Public-followup state cannot change through generic transitions
+code: VALIDATION_ERROR
+help[1]: Use `tasks-axi public-followup record-delivery` or `tasks-axi public-followup waive`
+[exit 2, rejected as expected]
+
+$ tasks-axi prune --state done --keep 0 --file /Users/kunchen/.no-mistakes/worktrees/6a0c69bae187/01KXEBC0DESECBZN62WMQZAXV7/.no-mistakes/evidence/fm/tasks-public-followup-k4/destination-backlog.md --json
+{
+  "ok": true,
+  "action": "prune",
+  "state": "done",
+  "kept": 0,
+  "archived": 1,
+  "ids": [
+    "public-final-ab"
+  ]
+}
+
+$ decode archived reserved metadata
+{
+  "schema_version": 1,
+  "revision": 5,
+  "delivery_state": "posted",
+  "receipt_state": "posted",
+  "request_id": "req-e2e-public-final",
+  "accepted_event_ids": [
+    "evt-code-landed"
+  ]
+}
