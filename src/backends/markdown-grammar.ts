@@ -1,5 +1,12 @@
+import { AxiError } from "../errors.js";
 import type { Dep, Hold, HoldKind, State, Task, TaskLink } from "../model.js";
 import { HOLD_KINDS } from "../model.js";
+import {
+  PUBLIC_FOLLOWUP_KIND,
+  assertPublicFollowupTaskState,
+  decodePublicFollowup,
+  encodePublicFollowup,
+} from "../public-followup.js";
 
 /**
  * The markdown grammar: pure parse / render with no I/O.
@@ -334,10 +341,26 @@ function bulletPrefix(state: State, id: string): string {
   return `- [ ] ${id} - `;
 }
 
-/** Render a task to its canonical source lines (bullet + body continuations). */
+/** Render a task to its canonical source lines (bullet + typed metadata + body). */
 export function renderTaskLines(task: Task): string[] {
   const first = bulletPrefix(task.state, task.id) + buildProse(task);
   const lines = [first];
+  if (task.kind === PUBLIC_FOLLOWUP_KIND) {
+    if (!task.public_followup) {
+      throw new AxiError(
+        `Task "${task.id}" is missing public-followup metadata`,
+        "VALIDATION_ERROR",
+      );
+    }
+    lines.push(
+      `  <!-- tasks-axi:public-followup/v1:${encodePublicFollowup(task.public_followup)} -->`,
+    );
+  } else if (task.public_followup) {
+    throw new AxiError(
+      `Task "${task.id}" has public-followup metadata without kind=public-followup`,
+      "VALIDATION_ERROR",
+    );
+  }
   if (task.body && task.body.length > 0) {
     for (const bodyLine of task.body.split("\n")) {
       // Blank body paragraphs stay blank (not two spaces). Indented content
@@ -374,6 +397,54 @@ function structuredBody(bodyLines: string[]): string | undefined {
   return bodyLines.slice(0, end).join("\n");
 }
 
+const PUBLIC_FOLLOWUP_MARKER = "tasks-axi:public-followup";
+const PUBLIC_FOLLOWUP_METADATA_RE =
+  /^<!-- tasks-axi:public-followup\/v(\d+):([A-Za-z0-9_-]+) -->$/;
+
+function extractPublicFollowupMetadata(
+  id: string,
+  kind: string | undefined,
+  bodyLines: string[],
+): { bodyLines: string[]; publicFollowup?: Task["public_followup"] } {
+  const markerIndexes = bodyLines
+    .map((line, index) => (line.includes(PUBLIC_FOLLOWUP_MARKER) ? index : -1))
+    .filter((index) => index >= 0);
+
+  if (markerIndexes.length === 0) {
+    if (kind === PUBLIC_FOLLOWUP_KIND) {
+      throw new AxiError(
+        `Task "${id}" is missing public-followup metadata`,
+        "VALIDATION_ERROR",
+      );
+    }
+    return { bodyLines };
+  }
+
+  if (markerIndexes.length !== 1 || markerIndexes[0] !== 0) {
+    throw new AxiError(
+      `Task "${id}" has malformed or misplaced public-followup metadata`,
+      "VALIDATION_ERROR",
+    );
+  }
+  const match = bodyLines[0].match(PUBLIC_FOLLOWUP_METADATA_RE);
+  if (!match || match[1] !== "1") {
+    throw new AxiError(
+      `Task "${id}" has unsupported public-followup metadata`,
+      "VALIDATION_ERROR",
+    );
+  }
+  if (kind !== PUBLIC_FOLLOWUP_KIND) {
+    throw new AxiError(
+      `Task "${id}" has public-followup metadata without kind=public-followup`,
+      "VALIDATION_ERROR",
+    );
+  }
+  return {
+    bodyLines: bodyLines.slice(1),
+    publicFollowup: decodePublicFollowup(match[2]),
+  };
+}
+
 function buildTask(
   id: string,
   rest: string,
@@ -381,6 +452,7 @@ function buildTask(
   bodyLines: string[],
 ): Task {
   const tags = extractTags(rest);
+  const metadata = extractPublicFollowupMetadata(id, tags.kind, bodyLines);
   const task: Task = {
     id,
     title: tags.title,
@@ -390,7 +462,17 @@ function buildTask(
   };
   if (tags.kind) task.kind = tags.kind;
   if (tags.repo) task.repo = tags.repo;
-  const body = structuredBody(bodyLines);
+  if (metadata.publicFollowup) {
+    if (tags.hold) {
+      throw new AxiError(
+        `Task "${id}" cannot use dispatch holds as a public-followup`,
+        "VALIDATION_ERROR",
+      );
+    }
+    assertPublicFollowupTaskState(state, metadata.publicFollowup, id);
+    task.public_followup = metadata.publicFollowup;
+  }
+  const body = structuredBody(metadata.bodyLines);
   if (body !== undefined) task.body = body;
   if (tags.created) task.created = tags.created;
   if (tags.closed) task.closed = tags.closed;

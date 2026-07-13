@@ -29,11 +29,12 @@ export function showFullTextHint(task: Task): string {
 export function toRow(task: Task, opts: RowOptions): Record<string, unknown> {
   const blockers = activeBlockers(task, opts.all);
   const held = isHoldActive(task);
+  const title = task.public_followup?.request.public_safe_summary ?? task.title;
   return {
     id: task.id,
     title: opts.full
-      ? task.title
-      : truncate(task.title, TITLE_LIST_LIMIT, opts.truncationHint),
+      ? title
+      : truncate(title, TITLE_LIST_LIMIT, opts.truncationHint),
     state: task.state,
     blocked: blockers.length > 0 ? "yes" : "no",
     blocked_by: blockers.length > 0 ? blockers.join(",") : "none",
@@ -42,21 +43,24 @@ export function toRow(task: Task, opts: RowOptions): Record<string, unknown> {
     hold_kind: task.hold?.kind ?? "-",
     hold_until: task.hold?.until ?? "-",
     kind: task.kind ?? "task",
-    repo: task.repo ?? "-",
+    repo: task.public_followup ? "-" : (task.repo ?? "-"),
     priority: task.priority ?? "-",
     created: task.created ?? "-",
     closed: task.closed ?? "-",
+    delivery_state: task.public_followup?.delivery.state ?? "-",
     deps:
       task.deps.length > 0
         ? task.deps.map((d) => `${d.type}:${d.id}`).join(",")
         : "none",
     links:
-      task.links.length > 0
+      !task.public_followup && task.links.length > 0
         ? task.links.map((l) => `${l.kind}:${l.url}`).join(",")
         : "none",
-    body: opts.full
-      ? (task.body ?? "")
-      : truncate(task.body, BODY_LIMIT, opts.truncationHint),
+    body: task.public_followup
+      ? ""
+      : opts.full
+        ? (task.body ?? "")
+        : truncate(task.body, BODY_LIMIT, opts.truncationHint),
   };
 }
 
@@ -75,6 +79,7 @@ export const LIST_EXTRA_FIELDS: Record<string, FieldDef> = {
   body: field("body"),
   created: field("created"),
   closed: field("closed"),
+  delivery_state: field("delivery_state"),
   deps: field("deps"),
   held: field("held"),
   hold_kind: field("hold_kind"),

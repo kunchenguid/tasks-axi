@@ -1,4 +1,8 @@
 import type { Task } from "./model.js";
+import {
+  PUBLIC_FOLLOWUP_KIND,
+  type PublicFollowupDeliveryState,
+} from "./public-followup.js";
 
 export interface DateGatedOptions {
   /** YYYY-MM-DD local date used for date-gated holds. Defaults to today. */
@@ -70,8 +74,34 @@ export function readyTasks(tasks: Task[], options: ReadyOptions = {}): Task[] {
   return tasks.filter(
     (t) =>
       t.state === "queued" &&
+      t.kind !== PUBLIC_FOLLOWUP_KIND &&
       !blocked.has(t.id) &&
       (options.includeHeld || !isHoldActive(t, options)),
+  );
+}
+
+/** Public obligations ready for delivery, never for worker dispatch. */
+export function readyPublicFollowups(tasks: Task[]): Task[] {
+  const blocked = blockedIds(tasks);
+  return tasks.filter(
+    (task) =>
+      task.state !== "done" &&
+      task.kind === PUBLIC_FOLLOWUP_KIND &&
+      task.public_followup?.delivery.state === "ready" &&
+      !blocked.has(task.id),
+  );
+}
+
+/** Public obligations in a requested delivery state. */
+export function publicFollowupsByDeliveryState(
+  tasks: Task[],
+  state?: PublicFollowupDeliveryState,
+): Task[] {
+  return tasks.filter(
+    (task) =>
+      task.kind === PUBLIC_FOLLOWUP_KIND &&
+      task.public_followup !== undefined &&
+      (state === undefined || task.public_followup.delivery.state === state),
   );
 }
 

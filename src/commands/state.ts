@@ -13,7 +13,12 @@ import {
 } from "../args.js";
 import { renderMutation, stateLabel, taskToJson } from "../confirm.js";
 import { requireCtx, type TasksContext } from "../context.js";
-import { blockedIds, heldTasks, readyTasks } from "../derive.js";
+import {
+  blockedIds,
+  heldTasks,
+  readyPublicFollowups,
+  readyTasks,
+} from "../derive.js";
 import { AxiError, notFound } from "../errors.js";
 import { formatCountLine } from "../format.js";
 import { validateDependencyId } from "../id.js";
@@ -27,6 +32,10 @@ import type {
   TaskPatch,
 } from "../model.js";
 import { HOLD_KINDS } from "../model.js";
+import {
+  PUBLIC_FOLLOWUP_KIND,
+  clonePublicFollowup,
+} from "../public-followup.js";
 import type { Store } from "../store.js";
 import { getSuggestions } from "../suggestions.js";
 import { renderHelp, renderOutput } from "../toon.js";
@@ -86,6 +95,8 @@ flags:
 
 export const READY_HELP = `usage: tasks-axi ready [--repo <name>] [--include-held]
 List unblocked, unheld queued work dispatchable right now.
+Public-followup obligations are never dispatchable and appear only in the separate
+ready_public_followups group; use tasks-axi public-followup ready for their full payloads.
 Held work is excluded by default; --include-held shows it in a separate held group.`;
 
 export const MV_HELP = `usage: tasks-axi mv <id> [<id>...] --to <path-or-dir>
@@ -498,11 +509,14 @@ export async function holdCommand(
       task: taskToJson(task, all),
     },
     detail: renderTaskDetail(task, all, false, showFullTextHint(task)),
-    suggestions: getSuggestions({
-      action: "hold",
-      id,
-      globals: context?.suggestionGlobals,
-    }),
+    suggestions:
+      task.kind === PUBLIC_FOLLOWUP_KIND
+        ? []
+        : getSuggestions({
+            action: "hold",
+            id,
+            globals: context?.suggestionGlobals,
+          }),
   });
 }
 
@@ -549,11 +563,14 @@ export async function unholdCommand(
       task: taskToJson(task, all),
     },
     detail: renderTaskDetail(task, all, false, showFullTextHint(task)),
-    suggestions: getSuggestions({
-      action: "unhold",
-      id,
-      globals: context?.suggestionGlobals,
-    }),
+    suggestions:
+      task.kind === PUBLIC_FOLLOWUP_KIND
+        ? []
+        : getSuggestions({
+            action: "unhold",
+            id,
+            globals: context?.suggestionGlobals,
+          }),
   });
 }
 
@@ -574,10 +591,15 @@ export async function readyCommand(
   let items = readyTasks(all);
   const blocked = blockedIds(all);
   let held = heldTasks(all).filter(
-    (t) => t.state === "queued" && !blocked.has(t.id),
+    (t) =>
+      t.state === "queued" &&
+      t.kind !== PUBLIC_FOLLOWUP_KIND &&
+      !blocked.has(t.id),
   );
+  let publicFollowups = readyPublicFollowups(all);
   if (repo) items = items.filter((t) => t.repo === repo);
   if (repo) held = held.filter((t) => t.repo === repo);
+  if (repo) publicFollowups = publicFollowups.filter((t) => t.repo === repo);
   const isEmpty = items.length === 0;
 
   const blocks: string[] = [formatCountLine({ count: items.length })];
@@ -585,6 +607,15 @@ export async function readyCommand(
     blocks.push("ready: 0 unblocked queued tasks");
   } else {
     blocks.push(renderTaskList("ready", items, all));
+  }
+  if (publicFollowups.length > 0) {
+    blocks.push(
+      renderTaskList("ready_public_followups", publicFollowups, all, [
+        { type: "field", key: "delivery_state" },
+      ]),
+    );
+  } else {
+    blocks.push("ready_public_followups: 0 delivery-ready obligations");
   }
   if (includeHeld && held.length > 0) {
     blocks.push(
@@ -637,6 +668,9 @@ function taskToInput(task: Task): TaskInput {
   if (task.priority !== undefined) input.priority = task.priority;
   input.created = task.created ?? null;
   if (task.closed) input.closed = task.closed;
+  if (task.public_followup) {
+    input.public_followup = clonePublicFollowup(task.public_followup);
+  }
   if (task.meta) input.meta = { ...task.meta };
   return input;
 }

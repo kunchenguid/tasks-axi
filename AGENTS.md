@@ -9,10 +9,11 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 
 - `src/cli.ts` — `runAxiCli` wiring: `DESCRIPTION`, `TOP_HELP`, the verb→handler map (with aliases create/view/edit/delete/close), the optional `task` noun prefix, and the global `--backend` / `--file` flags (stripped before handlers, parsed for `resolveContext`).
 - `src/context.ts` — `resolveTasksContext` builds the backend `Store` + `ResolvedConfig`; every command receives this `TasksContext`.
-- `src/store.ts` — the `Store` interface and `Capabilities`. Core contract: `create/get/update/remove/list/transition/addDep/removeDep`. `prune`/`render` are optional and capability-gated.
+- `src/store.ts` - the `Store` interface and `Capabilities`. Core contract: `create/get/update/remove/list/transition/addDep/removeDep/updatePublicFollowup`. `prune`/`render` are optional and capability-gated.
 - `src/model.ts` — the `Task` data model (report §5).
 - `src/derive.ts` — `blocked` / `ready` / active `held` are derived in the CLI from `list` + the dep graph + hold date gates, never Store methods, so every backend gets them for free.
 - `src/backends/markdown*.ts` — the only P1 backend.
+- `src/public-followup.ts` - authoritative versioned schema, strict privacy-safe validation, canonical encoding, immutable-field checks, relation/event readiness, and terminal-state invariants for `kind=public-followup`; `src/commands/public-followup.ts` owns its dedicated CLI state machine.
 - `src/commands/*` — one file per verb group; `src/view.ts` owns the read-side TOON projection; `src/confirm.ts` owns the write-side output (the `ok:` confirmation line, the `--json` payload, and `renderMutation`, which assembles both).
 - Shared helpers copied from the family: `args.ts`, `body.ts`, `format.ts`, `fields.ts`, `toon.ts`, `suggestions.ts`, `skill.ts`.
 
@@ -29,6 +30,10 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 - **body** = the item block under a bullet: every following indented (2-space) OR blank line, up to the next item header or free-form column-0 content (column-0 `## ` section headings are split earlier). Blank separators between paragraphs and trailing blanks before the next item/section belong to the block and move with it (`mv`/`start`/`done`/etc.). Indented pseudo-headings (e.g. `  ## Intent`) are body, never section boundaries. Owned by `parseEntries` in `markdown-grammar.ts`.
   Note writes are inspect-then-update: `show <id> --full`, then `update --body` or `update --body-file` with a curated replacement.
   Add `--archive-body` when the superseded body should be preserved in `note-archive.md`.
+- **Public-followup metadata** is one reserved `  <!-- tasks-axi:public-followup/v1:<base64url-canonical-json> -->` line immediately below a `kind=public-followup` bullet.
+  The grammar validates it strictly on every read, excludes it from the human body, and re-emits it through render, move, transition, prune, and archive.
+  Firstmate and other callers must use `tasks-axi public-followup` and `--json`, never parse or rewrite the comment.
+  Generic worker readiness and lifecycle transitions cannot dispatch, complete, reopen, remove, or change the kind of an active obligation; only a posted receipt or Captain waiver completes it.
 - **Concurrency:** every mutation runs under `withLock` (advisory `<path>.lock`) and fails closed with a `LOCKED` error if another process holds the lock past the bounded timeout.
   If the lock looks stale, the error tells the user to remove `<path>.lock` only after confirming no `tasks-axi` process is running.
   Corruption-safety is guaranteed independently by atomic temp-file + rename writes, and a hand-edit landing between read and write is detected and refused.
@@ -50,7 +55,7 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
   `list --state held` filters to active held tasks, and hold columns are available via `--fields held,hold_reason,hold_kind,hold_until`.
 - **Hold migration mapping.** Future migration code should map prose markers to structured holds without bulk-rewriting by hand: `HELD` / `do not dispatch` / `CAPTAIN-DECISION` -> `kind: captain` unless the text points elsewhere; `PARKED` -> `kind: parked`; `DEFERRED` -> `kind: future`; load-clearing language such as `hold until <load clears>` -> `kind: load`; external dependency wording -> `kind: external`. Preserve the original prose as the hold reason unless a safer human-readable reason is explicitly supplied.
 - Idempotent mutations exit 0 with `already: true`; errors are `AxiError` with SDK exit codes (VALIDATION_ERROR→2, else 1).
-- **Write ops are confirmation-forward.** Every mutation (`add`/`start`/`done`/`reopen`/`update`/`rm`/`block`/`unblock`/`hold`/`unhold`/`mv`/`prune`/`render`) leads with a terse `ok:` line (built in `confirm.ts`) confirming the write result.
+- **Write ops are confirmation-forward.** Every mutation (`add`/`start`/`done`/`reopen`/`update`/`rm`/`block`/`unblock`/`hold`/`unhold`/`public-followup`/`mv`/`prune`/`render`) leads with a terse `ok:` line (built in `confirm.ts`) confirming the write result.
   Task-state mutations include the resulting state (e.g. `ok: start <id> -> In flight`), while maintenance/removal commands confirm their own result shape (e.g. `ok: render -> normalized <n>`, `ok: removed <id>`).
   Optional structured detail follows (`add`/`update` keep the full `task:` record), then state-aware hints.
   The `ok:` line is a plain top-level TOON scalar (no `encode()` quoting) - confirmation messages are built from bounded values (ids, names, validated urls/paths, counts) so the combined output still decodes as TOON.

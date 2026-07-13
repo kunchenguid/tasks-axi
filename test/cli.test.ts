@@ -215,4 +215,83 @@ describe("CLI entrypoint", () => {
     await main({ argv: ["done", "--help"], stdout: c.stdout });
     expect(c.read()).toContain("usage: tasks-axi done");
   });
+
+  it("returns focused help for a public-followup subcommand", async () => {
+    const c = capture();
+    await main({
+      argv: ["public-followup", "work-event", "--help"],
+      stdout: c.stdout,
+    });
+    expect(c.read()).toBe(
+      "usage: tasks-axi public-followup work-event <id> --event-file <file> [--json]",
+    );
+  });
+
+  it("creates and reads a durable public-followup through the CLI namespace", async () => {
+    const requestPath = join(dir, "request.json");
+    const expectedPath = join(dir, "expected.json");
+    writeFileSync(
+      requestPath,
+      JSON.stringify({
+        request_id: "req-cli-demo",
+        platform: "discord",
+        context_binding: { version: "ctx1", value: "ctx1_cli_demo" },
+        public_safe_summary: "Post the public-safe CLI result",
+        received_at: "2026-07-13T12:00:00Z",
+        followup_expires_at: "2026-08-13T12:00:00Z",
+        reservation_expires_at: "2026-09-13T12:00:00Z",
+      }),
+    );
+    writeFileSync(
+      expectedPath,
+      JSON.stringify({
+        type: "report-ready",
+        project: "tasks-axi",
+        required_deliverables: ["report_path"],
+        completion_policy: "all-required",
+      }),
+    );
+
+    const created = capture();
+    await main({
+      argv: [
+        "public-followup",
+        "add",
+        "public-cli-q1",
+        "--request-context-file",
+        requestPath,
+        "--purpose",
+        "investigation-result",
+        "--expected-final-file",
+        expectedPath,
+        "--expires-at",
+        "2026-10-01T00:00:00Z",
+        "--json",
+      ],
+      stdout: created.stdout,
+    });
+    expect(JSON.parse(created.read())).toMatchObject({
+      ok: true,
+      action: "public-followup.add",
+      task: {
+        id: "public-cli-q1",
+        kind: "public-followup",
+        public_followup: { schema_version: 1 },
+      },
+    });
+    expect(readFileSync(path, "utf8")).toContain(
+      "tasks-axi:public-followup/v1:",
+    );
+
+    const listed = capture();
+    await main({
+      argv: ["public-followup", "list", "--json"],
+      stdout: listed.stdout,
+    });
+    expect(JSON.parse(listed.read())).toMatchObject({
+      ok: true,
+      count: 1,
+      public_followups: [{ id: "public-cli-q1" }],
+    });
+  });
 });

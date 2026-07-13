@@ -1,3 +1,4 @@
+import type { PublicFollowupMutation } from "./public-followup.js";
 import type {
   Dep,
   State,
@@ -26,6 +27,8 @@ export interface Capabilities {
   customStates: boolean;
   /** Does the server assign its own ids (remote trackers)? */
   serverMintsIds: boolean;
+  /** Supports the durable, receipt-gated public-followup state machine. */
+  publicFollowups: boolean;
 }
 
 export interface PruneOptions {
@@ -66,6 +69,12 @@ export interface Store {
   transition(id: string, to: State, opts?: TransitionOpts): Promise<Task>;
   addDep(id: string, dep: Dep): Promise<boolean>;
   removeDep(id: string, dep: Dep): Promise<boolean>;
+
+  /** Atomically replace one typed obligation revision and optionally complete it. */
+  updatePublicFollowup(
+    id: string,
+    mutation: PublicFollowupMutation,
+  ): Promise<Task>;
 
   // maintenance (optional, capability-gated)
   prune?(options: PruneOptions): Promise<PruneResult>;
