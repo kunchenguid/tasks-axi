@@ -818,7 +818,11 @@ export class MarkdownStore implements Store {
    * endpoints travel together; `requireNoSplitDeps` refuses any move that would
    * strand a link across the two files.
    */
-  async moveManyTo(ids: string[], target: MarkdownStore): Promise<Task[]> {
+  async moveManyTo(
+    ids: string[],
+    target: MarkdownStore,
+    options: { requiredState?: State } = {},
+  ): Promise<Task[]> {
     const uniqueIds = [...new Set(ids)];
     return withLocks([this.path, target.path], () => {
       const loaded = this.loadForUpdate();
@@ -831,6 +835,17 @@ export class MarkdownStore implements Store {
         if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
         return found;
       });
+
+      if (options.requiredState !== undefined) {
+        for (const found of founds) {
+          if (found.entry.task.state !== options.requiredState) {
+            throw new AxiError(
+              `Task "${found.entry.task.id}" has state "${found.entry.task.state}"; move requires state "${options.requiredState}"`,
+              "VALIDATION_ERROR",
+            );
+          }
+        }
+      }
 
       const targetLoaded = target.loadForUpdate();
       const { doc: targetDoc } = targetLoaded;

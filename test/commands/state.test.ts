@@ -879,6 +879,93 @@ describe("state commands", () => {
       }
     });
 
+    it("revalidates --require-state inside the locked move transaction", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## Queued\n- [ ] race-q1 - queued before lock\n\n## Done\n",
+      );
+      const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      const originalGet = b.store.get.bind(b.store);
+      let edited = false;
+      b.store.get = async (taskId: string) => {
+        const task = await originalGet(taskId);
+        if (taskId === "race-q1" && !edited) {
+          edited = true;
+          writeFileSync(
+            b.path,
+            "# Backlog\n\n## In flight\n- [ ] race-q1 - changed after advisory read\n\n## Queued\n\n## Done\n",
+            "utf8",
+          );
+        }
+        return task;
+      };
+      const sourceBeforeMove = () => b.read();
+      try {
+        await expect(
+          mvCommand(
+            ["race-q1", "--to", target.path, "--require-state", "queued"],
+            b.ctx,
+          ),
+        ).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: expect.stringContaining('requires state "queued"'),
+        });
+        expect(edited).toBe(true);
+        expect(sourceBeforeMove()).toContain("## In flight");
+        expect(sourceBeforeMove()).toContain("race-q1");
+        expect(readFileSync(target.path, "utf8")).not.toContain("race-q1");
+      } finally {
+        b.cleanup();
+        target.cleanup();
+      }
+    });
+
+    it("rejects an invalid --require-state before moving", async () => {
+      const b = makeBacklog();
+      const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      const sourceBefore = b.read();
+      const targetBefore = target.read();
+      try {
+        await expect(
+          mvCommand(
+            ["cert-cleanup", "--to", target.path, "--require-state", "blocked"],
+            b.ctx,
+          ),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toBe(sourceBefore);
+        expect(target.read()).toBe(targetBefore);
+      } finally {
+        b.cleanup();
+        target.cleanup();
+      }
+    });
+
+    it("moves every queued member with --require-state queued", async () => {
+      const source = [
+        "# Backlog",
+        "",
+        "## Queued",
+        "- [ ] pair-a - first",
+        "- [ ] pair-b - second blocked-by: pair-a",
+        "",
+        "## Done",
+        "",
+      ].join("\n");
+      const b = makeBacklog(source);
+      const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      try {
+        await mvCommand(
+          ["pair-a", "pair-b", "--to", target.path, "--require-state=queued"],
+          b.ctx,
+        );
+        expect(b.read()).not.toContain("pair-a");
+        expect(readFileSync(target.path, "utf8")).toContain("pair-a");
+        expect(readFileSync(target.path, "utf8")).toContain("pair-b");
+      } finally {
+        b.cleanup();
+        target.cleanup();
+      }
+    });
+
     it("leaves the source intact when destination validation fails", async () => {
       const b = makeBacklog(
         "# Backlog\n\n## Queued\n- [ ] bad-q1 - invalid parsed repo (repo: foo(bar)\n\n## Done\n",

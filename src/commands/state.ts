@@ -3,6 +3,7 @@ import { existsSync, statSync } from "node:fs";
 import { MarkdownStore } from "../backends/markdown.js";
 import {
   parseNonNegativeIntegerFlag,
+  parseStateFlag,
   requireNoUnknownFlags,
   requireNonEmptyFlagValue,
   requireNonEmptySingleLineFlagValue,
@@ -107,10 +108,13 @@ Duplicate ids are ignored after their first occurrence.
 Refuses if a moved item's dependency or active dependent would be stranded in the other
 file - include the whole set, or move the missing endpoint there first.
 flags:
+  --require-state queued|in_flight|done
+           atomically refuse unless every moved task is still in this state
   --json   print the result as a JSON object
 examples:
   tasks-axi mv hibit-cert-cleanup --to ../homemux/data/backlog.md
-  tasks-axi mv blocker-b1 dependent-d2 --to ../homemux/data/backlog.md`;
+  tasks-axi mv blocker-b1 dependent-d2 --to ../homemux/data/backlog.md
+  tasks-axi mv queued-a queued-b --to ../other/backlog.md --require-state queued`;
 
 export async function startCommand(
   rawArgs: string[],
@@ -683,6 +687,10 @@ export async function mvCommand(
   const args = [...rawArgs];
 
   const json = takeBoolFlag(args, "--json");
+  const requiredState = parseStateFlag(
+    "--require-state",
+    takeFlag(args, "--require-state"),
+  );
   const to = requireNonEmptySingleLineFlagValue("--to", takeFlag(args, "--to"));
   if (to === undefined) {
     throw new AxiError("--to <path-or-dir> is required", "VALIDATION_ERROR", [
@@ -724,7 +732,12 @@ export async function mvCommand(
   }
 
   if (store instanceof MarkdownStore) {
-    await store.moveManyTo(ids, target);
+    await store.moveManyTo(ids, target, { requiredState });
+  } else if (requiredState !== undefined) {
+    throw new AxiError(
+      "--require-state requires the markdown backend",
+      "UNSUPPORTED",
+    );
   } else if (ids.length === 1) {
     await target.create(taskToInput(tasks[0]));
     await store.remove(ids[0]);

@@ -1236,6 +1236,40 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("atomically refuses a mixed-state set under requiredState", async () => {
+      const sourceText = [
+        "# Backlog",
+        "",
+        "## In flight",
+        "- [ ] active-a - already active",
+        "",
+        "## Queued",
+        "- [ ] queued-b - still queued",
+        "",
+        "## Done",
+        "",
+      ].join("\n");
+      const source = makeBacklog(sourceText);
+      const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      const sourceBefore = source.read();
+      const targetBefore = target.read();
+      try {
+        await expect(
+          source.store.moveManyTo(["active-a", "queued-b"], target.store, {
+            requiredState: "queued",
+          }),
+        ).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: expect.stringContaining('requires state "queued"'),
+        });
+        expect(source.read()).toBe(sourceBefore);
+        expect(target.read()).toBe(targetBefore);
+      } finally {
+        source.cleanup();
+        target.cleanup();
+      }
+    });
+
     it("rolls back every created destination task when source removal fails", async () => {
       const source = makeBacklog(linkedSet);
       const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
