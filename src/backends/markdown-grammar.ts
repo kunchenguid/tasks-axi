@@ -612,10 +612,7 @@ function rawTaskIdentity(line: string): string | undefined {
 }
 
 /** Detect a requested identity whose task-shaped line was rejected by the parser. */
-export function hasMalformedTaskIdentity(
-  doc: BacklogDoc,
-  id: string,
-): boolean {
+export function hasMalformedTaskIdentity(doc: BacklogDoc, id: string): boolean {
   return doc.sections.some(
     (section) =>
       section.state !== undefined &&
