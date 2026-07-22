@@ -42,7 +42,7 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 ## Conventions
 
 - **Ids are caller-supplied join keys (D6)** validated by `ID_RE` (slug-shaped); `add --mint [--prefix]` generates a `slug-xx` id.
-- **prune archives, never deletes (D4)** - surplus Done tasks are appended to `markdown.archive` or default `done-archive.md`. It keeps N _recognized_ tasks; free-form Done lines are preserved and not counted. `show --include-archive` is the read-only durable lookup: active wins, archive duplicates conflict, and normal `show` remains active-only.
+- **prune archives, never deletes (D4)** - surplus Done tasks are appended to `markdown.archive` or default `done-archive.md`. It keeps N _recognized_ tasks; free-form Done lines are preserved and not counted. `show --include-archive` is the read-only durable lookup and normal `show` remains active-only; `MarkdownStore.lookup` and its regression tests own the selection and fail-closed rules.
 - **`done` auto-prunes** to `config.doneKeep` (default 10) and archives, unless `--no-prune`.
 - **`done` on an already-Done task** stays idempotent but backfills supplied `--pr`, `--report`, and non-duplicate `--note` metadata without replacing the original closed date.
 - **Dependency mutations validate targets.** `add --blocked-by` and `block --by` reject missing blockers and self-blocks. Parsed dangling blockers are still treated as resolved for legacy hand-edited files.
@@ -68,8 +68,9 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 
 ## Build / test / ship
 
-- `pnpm build` (tsc), `pnpm test` (vitest, `test/` mirrors `src/`), `pnpm lint` (eslint), `pnpm run build:skill -- --check` (the generated `skills/tasks-axi/SKILL.md` is built from `DESCRIPTION` + `TOP_HELP` and must not drift — CI runs the check).
-- `skills/tasks-axi/SKILL.md` is generated — regenerate with `pnpm run build:skill` after changing the description or top-level help; never hand-edit it.
+- `pnpm build` (tsc), `pnpm test` (vitest, `test/` mirrors `src/`), `pnpm lint` (eslint), `pnpm run build:skill -- --check` (generated skill drift check). CI runs all four.
+- `src/skill.ts` owns the installable skill template. It imports the CLI `DESCRIPTION` and top-level command list; workflow and tips are skill-specific guidance.
+- `skills/tasks-axi/SKILL.md` is generated from that template and checked for byte drift. Regenerate with `pnpm run build:skill` after changing the source; never hand-edit it.
 - This repo is no-mistakes-gated; ship through `/no-mistakes`.
 
 ### Release & packaging (mirrors the `*-axi` siblings)
