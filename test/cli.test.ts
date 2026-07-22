@@ -407,7 +407,11 @@ describe("CLI entrypoint", () => {
     await main({ argv: ["show", "--help"], stdout: c.stdout });
     expect(c.read()).toContain("--include-archive");
     expect(c.read()).toContain("read-only");
-    expect(c.read()).toContain("Active identities always take precedence");
+    expect(c.read()).toContain(
+      "A valid active identity wins without reading the archive",
+    );
+    expect(c.read()).toContain("Matching malformed records fail validation");
+    expect(c.read()).toContain("multiple valid archive matches conflict");
   });
 
   it("returns focused help for a public-followup subcommand", async () => {
