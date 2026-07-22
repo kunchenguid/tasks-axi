@@ -159,6 +159,34 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("keeps Notes labels raw alongside a valid active identity", async () => {
+      const b = makeBacklog();
+      try {
+        writeFileSync(
+          b.path,
+          [
+            "# Backlog",
+            "",
+            "## Queued",
+            "- [ ] release-q1 - valid active task",
+            "",
+            "## Notes",
+            "- [RFC] release-q1 - rollout notes",
+            "- [NOTE] release-q1 - follow-up notes",
+            "",
+          ].join("\n"),
+          "utf8",
+        );
+
+        await expect(b.store.lookup("release-q1")).resolves.toMatchObject({
+          source: "active",
+          task: { id: "release-q1", title: "valid active task" },
+        });
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects ambiguous duplicate identities in the Done archive", async () => {
       const b = makeBacklog();
       try {
@@ -226,6 +254,54 @@ describe("MarkdownStore", () => {
 
         await expect(
           b.store.lookup("duplicate-c1", { includeArchive: true }),
+        ).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: expect.stringContaining("Done archive"),
+        });
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("fails closed on a bare archive-only identity", async () => {
+      const b = makeBacklog();
+      try {
+        writeFileSync(
+          join(b.dir, "done-archive.md"),
+          "\n## Archived 2026-07-01\n- bare-c1 - malformed archived record\n",
+          "utf8",
+        );
+
+        await expect(
+          b.store.lookup("bare-c1", { includeArchive: true }),
+        ).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: expect.stringContaining("Done archive"),
+        });
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects a bare archive identity before duplicate selection", async () => {
+      const b = makeBacklog();
+      try {
+        writeFileSync(
+          join(b.dir, "done-archive.md"),
+          [
+            "",
+            "## Archived 2026-07-01",
+            "- [x] bare-duplicate-c1 - valid archived record (done 2026-07-01)",
+            "",
+            "## Archived 2026-07-02",
+            "- bare-duplicate-c1 - malformed duplicate",
+            "",
+          ].join("\n"),
+          "utf8",
+        );
+
+        await expect(
+          b.store.lookup("bare-duplicate-c1", { includeArchive: true }),
         ).rejects.toMatchObject({
           code: "VALIDATION_ERROR",
           message: expect.stringContaining("Done archive"),

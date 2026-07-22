@@ -226,7 +226,7 @@ describe("CLI entrypoint", () => {
   it("does not hide malformed active data behind a valid archived identity", async () => {
     writeFileSync(
       path,
-      "# Backlog\n\n## Queued\n- [x] invalid-active-c1 - malformed active item\n",
+      "# Backlog\n\n## Queued\n- invalid-active-c1 - malformed active item\n",
       "utf8",
     );
     writeFileSync(

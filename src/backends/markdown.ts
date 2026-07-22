@@ -311,7 +311,7 @@ function requireWellFormedTaskIdentity(
   throw new AxiError(
     `Task "${id}" has malformed task syntax or an invalid section in the ${location}`,
     "VALIDATION_ERROR",
-    ["Fix the record's section and checkbox before retrying"],
+    ["Fix the record's section and task marker before retrying"],
   );
 }
 
