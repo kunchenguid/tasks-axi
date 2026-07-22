@@ -123,6 +123,42 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("fails closed on malformed active identity before archive fallback", async () => {
+      const b = makeBacklog();
+      try {
+        writeFileSync(
+          b.path,
+          "# Backlog\n\n## Queued\n- [x] release-q1 - malformed current record\n",
+          "utf8",
+        );
+        writeFileSync(
+          join(b.dir, "done-archive.md"),
+          "\n## Archived 2026-07-01\n- [x] release-q1 - stale archived record (done 2026-07-01)\n",
+          "utf8",
+        );
+
+        await expect(
+          b.store.lookup("release-q1", { includeArchive: true }),
+        ).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: expect.stringContaining("active backlog"),
+        });
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("keeps annotated free-form lines outside requested identity handling", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.lookup("go-live", { includeArchive: true }),
+        ).resolves.toBeNull();
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects ambiguous duplicate identities in the Done archive", async () => {
       const b = makeBacklog();
       try {
@@ -145,6 +181,54 @@ describe("MarkdownStore", () => {
         ).rejects.toMatchObject({
           code: "CONFLICT",
           message: expect.stringContaining("more than once"),
+        });
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("fails closed on a malformed archive-only identity", async () => {
+      const b = makeBacklog();
+      try {
+        writeFileSync(
+          join(b.dir, "done-archive.md"),
+          "\n## Archived 2026-07-01\n- [X] malformed-c1 - malformed archived record\n",
+          "utf8",
+        );
+
+        await expect(
+          b.store.lookup("malformed-c1", { includeArchive: true }),
+        ).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: expect.stringContaining("Done archive"),
+        });
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects a malformed archive identity before duplicate selection", async () => {
+      const b = makeBacklog();
+      try {
+        writeFileSync(
+          join(b.dir, "done-archive.md"),
+          [
+            "",
+            "## Archived 2026-07-01",
+            "- [x] duplicate-c1 - valid archived record (done 2026-07-01)",
+            "",
+            "## Archived 2026-07-02",
+            "- [X] duplicate-c1 - malformed duplicate",
+            "",
+          ].join("\n"),
+          "utf8",
+        );
+
+        await expect(
+          b.store.lookup("duplicate-c1", { includeArchive: true }),
+        ).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: expect.stringContaining("Done archive"),
         });
       } finally {
         b.cleanup();
