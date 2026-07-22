@@ -39,6 +39,7 @@ import {
   LIST_EXTRA_FIELDS,
   renderTaskDetail,
   renderTaskList,
+  renderTaskLookupDetail,
   showFullTextHint,
 } from "../view.js";
 
@@ -66,11 +67,16 @@ examples:
   tasks-axi list --repo no-mistakes --fields blocked_by,created
   tasks-axi list --blocked`;
 
-export const SHOW_HELP = `usage: tasks-axi show <id> [--full]
+export const SHOW_HELP = `usage: tasks-axi show <id> [--full] [--include-archive]
 aliases: view
+flags:
+  --full              show complete title and body text
+  --include-archive   active first, then the configured Done archive (read-only)
+Archive fallback uses canonical task parsing and first-match selection.
 examples:
   tasks-axi show homemux-h7
-  tasks-axi show homemux-h7 --full`;
+  tasks-axi show homemux-h7 --full
+  tasks-axi show completed-q1 --include-archive --full`;
 
 export const UPDATE_HELP = `usage: tasks-axi update <id> [flags]
 aliases: edit
@@ -463,16 +469,26 @@ export async function showCommand(
   const { store } = requireCtx(context);
   const args = [...rawArgs];
   const full = takeBoolFlag(args, "--full");
+  const includeArchive = takeBoolFlag(args, "--include-archive");
   const positionals = requirePositionals(args, 1, 1, SHOW_HELP.split("\n")[0]);
   const id = requireId(positionals[0], "id");
 
-  const task = await store.get(id);
-  if (!task) throw notFound(id, { globals: context?.suggestionGlobals });
+  const found = includeArchive
+    ? await store.lookup(id, { includeArchive: true })
+    : await store
+        .get(id)
+        .then((task) => (task ? { task, source: "active" as const } : null));
+  if (!found) throw notFound(id, { globals: context?.suggestionGlobals });
+  const { task, source } = found;
 
   const all = (await store.list({})).items;
   const isBlocked = blockedIds(all).has(id);
 
-  const blocks = [renderTaskDetail(task, all, full)];
+  const blocks = [
+    includeArchive
+      ? renderTaskLookupDetail(task, all, full, source)
+      : renderTaskDetail(task, all, full),
+  ];
   const help =
     task.kind === "public-followup"
       ? []

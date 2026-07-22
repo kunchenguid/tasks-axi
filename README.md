@@ -111,6 +111,9 @@ tasks-axi update nm-release-validation --title "clearer title"
 # read the full notes on demand (truncated by default)
 tasks-axi show homemux-h7 --full
 
+# verify a retained or archived completed identity without mutating the archive
+tasks-axi show completed-q1 --include-archive --full
+
 # maintenance
 tasks-axi prune --keep 10        # archives the surplus, never deletes
 tasks-axi render                 # normalize the markdown in place
@@ -121,6 +124,8 @@ tasks-axi mv blocker-b1 dependent-d2 --to ../homemux/data/backlog.md
 
 Output is [TOON](https://toonformat.dev)-encoded and token-efficient.
 The long task body is truncated by default — the whole point is that `list` stays cheap; use `--full` only when you need the complete notes.
+Normal `show` remains active-backlog-only. `show <id> --include-archive` first checks the active backlog and, only when the id is absent there, reads the configured Done archive; its task record includes `source: active` or `source: archive` for machine consumers.
+Archive lookup is strictly read-only: it never restores, rewrites, or otherwise mutates cold history, and it recognizes only canonical `## Archived YYYY-MM-DD` blocks in the format written by pruning. It follows the existing parser's deterministic first-match behavior, while noncanonical raw lines remain untouched and are not treated as task identities. If neither surface contains the id, `show` keeps the existing `NOT_FOUND` response and exit code.
 `update --body` and `update --body-file` replace the body wholesale, so agents should inspect the current body first and write back the curated current state rather than appending a journal entry.
 `--archive-body` preserves the replaced body in `note-archive.md` using the same dated markdown archive block style as done pruning.
 Every write leads with a terse `ok:` line confirming the write result, including the resulting task state when the command changes one (e.g. `ok: start lavish-share -> In flight`, `ok: done grok-harness-g7 -> Done (pr <url>)`, `ok: render -> normalized 3`), followed by state-aware next-step hints that never suggest an action the command just performed.
@@ -242,6 +247,7 @@ done_keep = 10
 ```
 
 `archive` is optional; when omitted, pruned tasks are appended to `done-archive.md` next to the active backlog.
+The same resolved archive path is the read-only fallback for `show --include-archive`; explicit project or home configuration and the backend default therefore apply equally to pruning and durable lookup.
 Body replacements with `--archive-body` append superseded bodies to `note-archive.md` next to the active backlog.
 
 ## Backends

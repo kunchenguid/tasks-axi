@@ -6,6 +6,7 @@ import {
   deriveLinks,
   leadingKind,
   parseBacklog,
+  parseDoneArchive,
   renderBacklog,
   renderTaskLines,
 } from "../../src/backends/markdown-grammar.js";
@@ -93,6 +94,29 @@ describe("markdown grammar", () => {
         "queued",
         "done",
       ]);
+    });
+
+    it("parses dated archive blocks as Done without changing their bytes", () => {
+      const src = [
+        "",
+        "## Archived 2026-07-01",
+        "- [x] archived-a1 - durable result (kind: captain) (done 2026-07-01)",
+        "  complete archived body",
+        "",
+        "## Archived 2026-07-02",
+        "- [x] archived-b2 - another result (repo: demo) (done 2026-07-02)",
+        "",
+      ].join("\n");
+      const doc = parseDoneArchive(src);
+      const tasks = tasksOf(doc);
+
+      expect(tasks.map((task) => task.id)).toEqual([
+        "archived-a1",
+        "archived-b2",
+      ]);
+      expect(tasks.every((task) => task.state === "done")).toBe(true);
+      expect(tasks[0].body).toBe("complete archived body");
+      expect(renderBacklog(doc)).toBe(src);
     });
 
     it("recognizes slug ids and leaves odd/annotated lines free-form", () => {

@@ -80,7 +80,209 @@ describe("CLI entrypoint", () => {
   it("honors aliases (view = show)", async () => {
     const c = capture();
     await main({ argv: ["view", "cert-cleanup"], stdout: c.stdout });
-    expect(c.read()).toContain("id: cert-cleanup");
+    const decoded = decode(c.read()) as {
+      task: { id: string; source?: string };
+    };
+    expect(decoded.task.id).toBe("cert-cleanup");
+    expect(decoded.task.source).toBeUndefined();
+  });
+
+  it("reads the backend's default Done archive only with explicit opt-in", async () => {
+    writeFileSync(
+      join(dir, "done-archive.md"),
+      "\n## Archived 2026-07-02\n- [x] durable-c1 - durable result (kind: captain) (done 2026-07-02)\n  complete archived body\n",
+      "utf8",
+    );
+    const c = capture();
+
+    await main({
+      argv: ["show", "durable-c1", "--include-archive", "--full"],
+      stdout: c.stdout,
+    });
+
+    const decoded = decode(c.read()) as {
+      task: { id: string; source: string; state: string; body: string };
+    };
+    expect(decoded.task).toMatchObject({
+      id: "durable-c1",
+      source: "archive",
+      state: "done",
+      body: "complete archived body",
+    });
+    expect(process.exitCode).toBeFalsy();
+  });
+
+  it("preserves the existing blocker projection for archived Done tasks", async () => {
+    writeFileSync(
+      join(dir, "done-archive.md"),
+      "\n## Archived 2026-07-02\n- [x] durable-c1 - durable result (done 2026-07-02) blocked-by: cert-cleanup\n",
+      "utf8",
+    );
+    const c = capture();
+
+    await main({
+      argv: ["show", "durable-c1", "--include-archive"],
+      stdout: c.stdout,
+    });
+
+    const decoded = decode(c.read()) as {
+      task: {
+        source: string;
+        state: string;
+        blocked: string;
+        blocked_by: string;
+        deps: string;
+      };
+    };
+    expect(decoded.task).toMatchObject({
+      source: "archive",
+      state: "done",
+      blocked: "yes",
+      blocked_by: "cert-cleanup",
+      deps: "blocked-by:cert-cleanup",
+    });
+    expect(process.exitCode).toBeFalsy();
+  });
+
+  it("resolves an explicit configured archive path", async () => {
+    process.chdir(dir);
+    writeFileSync(
+      join(dir, ".tasks.toml"),
+      '[markdown]\narchive = "custom-done-history.md"\n',
+      "utf8",
+    );
+    writeFileSync(
+      join(dir, "custom-done-history.md"),
+      "\n## Archived 2026-07-02\n- [x] configured-c1 - configured result (done 2026-07-02)\n",
+      "utf8",
+    );
+    const c = capture();
+
+    await main({
+      argv: ["show", "configured-c1", "--include-archive"],
+      stdout: c.stdout,
+    });
+
+    const decoded = decode(c.read()) as {
+      task: { id: string; source: string };
+    };
+    expect(decoded.task).toMatchObject({
+      id: "configured-c1",
+      source: "archive",
+    });
+    expect(process.exitCode).toBeFalsy();
+  });
+
+  it("keeps ordinary show active-only with the existing NOT_FOUND exit", async () => {
+    writeFileSync(
+      join(dir, "done-archive.md"),
+      "\n## Archived 2026-07-02\n- [x] archived-only-c1 - cold result (done 2026-07-02)\n",
+      "utf8",
+    );
+    const c = capture();
+
+    await main({ argv: ["show", "archived-only-c1"], stdout: c.stdout });
+
+    expect(c.read()).toContain("code: NOT_FOUND");
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("preserves NOT_FOUND when archive-inclusive lookup finds no identity", async () => {
+    const c = capture();
+
+    await main({
+      argv: ["show", "absent-c1", "--include-archive"],
+      stdout: c.stdout,
+    });
+
+    expect(c.read()).toContain("absent-c1");
+    expect(c.read()).toContain("not found in this backlog");
+    expect(c.read()).toContain("code: NOT_FOUND");
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("returns an active identity before reading malformed archive data", async () => {
+    writeFileSync(
+      join(dir, "done-archive.md"),
+      "\n## Archived 2026-07-01\n- [x] malformed-c1 - missing typed data (kind: public-followup) (done 2026-07-01)\n",
+      "utf8",
+    );
+    const c = capture();
+
+    await main({
+      argv: ["show", "cert-cleanup", "--include-archive"],
+      stdout: c.stdout,
+    });
+
+    const decoded = decode(c.read()) as {
+      task: { id: string; source: string };
+    };
+    expect(decoded.task).toMatchObject({
+      id: "cert-cleanup",
+      source: "active",
+    });
+    expect(process.exitCode).toBeFalsy();
+  });
+
+  it("treats a noncanonical active line as a parser miss before fallback", async () => {
+    writeFileSync(
+      path,
+      "# Backlog\n\n## Queued\n- invalid-active-c1 - noncanonical active line\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(dir, "done-archive.md"),
+      "\n## Archived 2026-07-01\n- [x] invalid-active-c1 - valid historical item (done 2026-07-01)\n",
+      "utf8",
+    );
+    const c = capture();
+
+    await main({
+      argv: ["show", "invalid-active-c1", "--include-archive"],
+      stdout: c.stdout,
+    });
+
+    const decoded = decode(c.read()) as {
+      task: { id: string; source: string; title: string };
+    };
+    expect(decoded.task).toMatchObject({
+      id: "invalid-active-c1",
+      source: "archive",
+      title: "valid historical item",
+    });
+    expect(process.exitCode).toBeFalsy();
+  });
+
+  it("returns the first parsed record for repeated archive identities", async () => {
+    writeFileSync(
+      join(dir, "done-archive.md"),
+      [
+        "",
+        "## Archived 2026-07-01",
+        "- [x] duplicate-c1 - first result (done 2026-07-01)",
+        "",
+        "## Archived 2026-07-02",
+        "- [x] duplicate-c1 - second result (done 2026-07-02)",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    const c = capture();
+
+    await main({
+      argv: ["show", "duplicate-c1", "--include-archive"],
+      stdout: c.stdout,
+    });
+
+    const decoded = decode(c.read()) as {
+      task: { id: string; source: string; title: string };
+    };
+    expect(decoded.task).toMatchObject({
+      id: "duplicate-c1",
+      source: "archive",
+      title: "first result",
+    });
+    expect(process.exitCode).toBeFalsy();
   });
 
   it("reports malformed task ids as validation errors", async () => {
@@ -214,6 +416,16 @@ describe("CLI entrypoint", () => {
     const c = capture();
     await main({ argv: ["done", "--help"], stdout: c.stdout });
     expect(c.read()).toContain("usage: tasks-axi done");
+  });
+
+  it("documents archive lookup in show help", async () => {
+    const c = capture();
+    await main({ argv: ["show", "--help"], stdout: c.stdout });
+    expect(c.read()).toContain("--include-archive");
+    expect(c.read()).toContain("active first");
+    expect(c.read()).toContain("read-only");
+    expect(c.read()).toContain("canonical task parsing");
+    expect(c.read()).toContain("first-match selection");
   });
 
   it("returns focused help for a public-followup subcommand", async () => {

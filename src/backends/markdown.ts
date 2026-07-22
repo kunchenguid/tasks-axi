@@ -38,6 +38,8 @@ import type {
   PruneOptions,
   PruneResult,
   Store,
+  TaskLookupOptions,
+  TaskLookupResult,
 } from "../store.js";
 import { atomicWrite, readFileSafe, withLock, withLocks } from "./lock.js";
 import {
@@ -48,13 +50,14 @@ import {
   deriveLinks,
   extractTags,
   parseBacklog,
+  parseDoneArchive,
   renderBacklog,
   renderTaskLines,
 } from "./markdown-grammar.js";
 
 export interface MarkdownStoreOptions {
   path: string;
-  /** Where pruned Done items are archived (default `<dir>/done-archive.md`). */
+  /** Done archive used by pruning and read-only lookup (default `<dir>/done-archive.md`). */
   archivePath?: string;
   /** Where superseded task bodies are archived (default `<dir>/note-archive.md`). */
   noteArchivePath?: string;
@@ -351,6 +354,10 @@ export class MarkdownStore implements Store {
     return parseBacklog(this.loadSource() ?? "");
   }
 
+  private loadArchive(): BacklogDoc {
+    return parseDoneArchive(readFileSafe(this.archivePath) ?? "");
+  }
+
   private loadForUpdate(): LoadedBacklogDoc {
     const source = this.loadSource();
     return { doc: parseBacklog(source ?? ""), source };
@@ -416,6 +423,18 @@ export class MarkdownStore implements Store {
   async get(id: string): Promise<Task | null> {
     const found = this.findEntry(this.load(), id);
     return found ? found.entry.task : null;
+  }
+
+  async lookup(
+    id: string,
+    options: TaskLookupOptions = {},
+  ): Promise<TaskLookupResult | null> {
+    const active = this.findEntry(this.load(), id);
+    if (active) return { task: active.entry.task, source: "active" };
+    if (!options.includeArchive) return null;
+
+    const archived = this.findEntry(this.loadArchive(), id);
+    return archived ? { task: archived.entry.task, source: "archive" } : null;
   }
 
   async list(query: TaskQuery): Promise<{ items: Task[]; total: number }> {

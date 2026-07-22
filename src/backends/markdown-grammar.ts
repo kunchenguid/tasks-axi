@@ -385,6 +385,12 @@ function sectionState(headerLine: string): State | undefined {
   return undefined;
 }
 
+function archiveSectionState(headerLine: string): State | undefined {
+  return /^##\s+Archived\s+\d{4}-\d{2}-\d{2}\s*$/.test(semanticLine(headerLine))
+    ? "done"
+    : undefined;
+}
+
 /**
  * Structured body drops trailing blank lines (section/item separators that
  * still belong to the item block in `raw` for byte-exact emit and removal).
@@ -539,7 +545,12 @@ function parseEntries(lines: string[], state: State | undefined): Entry[] {
   return entries;
 }
 
-export function parseBacklog(src: string): BacklogDoc {
+type SectionStateResolver = (headerLine: string) => State | undefined;
+
+function parseDocument(
+  src: string,
+  resolveSectionState: SectionStateResolver,
+): BacklogDoc {
   if (src === "") {
     return { finalNewline: false, preamble: [], sections: [] };
   }
@@ -563,7 +574,11 @@ export function parseBacklog(src: string): BacklogDoc {
   for (const line of lines) {
     if (/^##\s+/.test(semanticLine(line))) {
       closeSection();
-      current = { headerLine: line, state: sectionState(line), entries: [] };
+      current = {
+        headerLine: line,
+        state: resolveSectionState(line),
+        entries: [],
+      };
       continue;
     }
     if (current) {
@@ -575,6 +590,15 @@ export function parseBacklog(src: string): BacklogDoc {
   closeSection();
 
   return { finalNewline, preamble, sections };
+}
+
+export function parseBacklog(src: string): BacklogDoc {
+  return parseDocument(src, sectionState);
+}
+
+/** Parse append-only Done archive blocks without treating them as active sections. */
+export function parseDoneArchive(src: string): BacklogDoc {
+  return parseDocument(src, archiveSectionState);
 }
 
 // ---------------------------------------------------------------------------

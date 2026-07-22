@@ -9,7 +9,7 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 
 - `src/cli.ts` — `runAxiCli` wiring: `DESCRIPTION`, `TOP_HELP`, the verb→handler map (with aliases create/view/edit/delete/close), the optional `task` noun prefix, and the global `--backend` / `--file` flags (stripped before handlers, parsed for `resolveContext`).
 - `src/context.ts` — `resolveTasksContext` builds the backend `Store` + `ResolvedConfig`; every command receives this `TasksContext`.
-- `src/store.ts` - the `Store` interface and `Capabilities`. Core contract: `create/get/update/remove/list/transition/addDep/removeDep/updatePublicFollowup`. `prune`/`render` are optional and capability-gated.
+- `src/store.ts` - the `Store` interface and `Capabilities`. Core contract: `create/get/lookup/update/remove/list/transition/addDep/removeDep/updatePublicFollowup`; `lookup` owns active-first, optional read-only archive resolution and reports its source. `prune`/`render` are optional and capability-gated.
 - `src/model.ts` — the `Task` data model (report §5).
 - `src/derive.ts` - worker `blocked` / `ready` / active `held` and public delivery readiness are derived in the CLI from `list` + the dep graph + hold date gates, never Store methods, so every backend gets them for free.
 - `src/backends/markdown*.ts` — the only P1 backend.
@@ -42,7 +42,7 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 ## Conventions
 
 - **Ids are caller-supplied join keys (D6)** validated by `ID_RE` (slug-shaped); `add --mint [--prefix]` generates a `slug-xx` id.
-- **prune archives, never deletes (D4)** - surplus Done tasks are appended to `markdown.archive` or default `done-archive.md`. It keeps N _recognized_ tasks; free-form Done lines are preserved and not counted.
+- **prune archives, never deletes (D4)** - surplus Done tasks are appended to `markdown.archive` or default `done-archive.md`. It keeps N _recognized_ tasks; free-form Done lines are preserved and not counted. `show --include-archive` is the read-only durable lookup and normal `show` remains active-only; `MarkdownStore.lookup` owns active precedence without an archive read, parser-compatible archive blocks, and canonical first-match selection.
 - **`done` auto-prunes** to `config.doneKeep` (default 10) and archives, unless `--no-prune`.
 - **`done` on an already-Done task** stays idempotent but backfills supplied `--pr`, `--report`, and non-duplicate `--note` metadata without replacing the original closed date.
 - **Dependency mutations validate targets.** `add --blocked-by` and `block --by` reject missing blockers and self-blocks. Parsed dangling blockers are still treated as resolved for legacy hand-edited files.

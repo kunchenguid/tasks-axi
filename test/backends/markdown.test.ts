@@ -1,4 +1,5 @@
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MarkdownStore } from "../../src/backends/markdown.js";
 import { readyTasks } from "../../src/derive.js";
@@ -31,6 +32,165 @@ describe("MarkdownStore", () => {
         expect(got?.title).toBe("a brand new task");
         expect(got?.repo).toBe("demo");
         expect(b.read()).toContain("- [ ] new-task-q1 - a brand new task");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("finds an exact task in the default Done archive without rewriting it", async () => {
+      const b = makeBacklog();
+      const archivePath = join(b.dir, "done-archive.md");
+      const archive = [
+        "",
+        "## Archived 2026-07-02",
+        "- [x] durable-c1 - durable completion (repo: firstmate) (kind: captain) (priority: 1) (done 2026-07-01)",
+        "  Resolution recorded by the owner.",
+        "  Routed work: durable-route-r1",
+        "",
+      ].join("\n");
+      try {
+        writeFileSync(archivePath, archive, "utf8");
+
+        const found = await b.store.lookup("durable-c1", {
+          includeArchive: true,
+        });
+
+        expect(found).toMatchObject({
+          source: "archive",
+          task: {
+            id: "durable-c1",
+            state: "done",
+            repo: "firstmate",
+            kind: "captain",
+            priority: 1,
+            closed: "2026-07-01",
+            body: "Resolution recorded by the owner.\nRouted work: durable-route-r1",
+          },
+        });
+        expect(readFileSync(archivePath, "utf8")).toBe(archive);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("keeps single-character Notes labels raw during ordinary lookup", async () => {
+      const b = makeBacklog();
+      const source = [
+        "# Backlog",
+        "",
+        "## Queued",
+        "- [ ] release-q1 - valid active task",
+        "",
+        "## Notes",
+        "- [R] release-q1 - rollout notes",
+        "- [?] release-q1 - open question",
+        "- [!] release-q1 - important follow-up",
+        "",
+      ].join("\n");
+      try {
+        writeFileSync(b.path, source, "utf8");
+
+        await expect(b.store.lookup("release-q1")).resolves.toMatchObject({
+          source: "active",
+          task: { id: "release-q1", title: "valid active task" },
+        });
+        expect(b.read()).toBe(source);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("selects a parsed active task without reinterpreting raw same-id lines", async () => {
+      const b = makeBacklog();
+      const source = [
+        "# Backlog",
+        "",
+        "## Queued",
+        "- [ ] release-q1 - canonical active task",
+        "- release-q1 - noncanonical raw note",
+        "",
+      ].join("\n");
+      try {
+        writeFileSync(b.path, source, "utf8");
+
+        await expect(b.store.get("release-q1")).resolves.toMatchObject({
+          id: "release-q1",
+          title: "canonical active task",
+        });
+        expect(b.read()).toBe(source);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("uses canonical parser misses before archive fallback", async () => {
+      const b = makeBacklog();
+      try {
+        writeFileSync(
+          b.path,
+          "# Backlog\n\n## Queued\n- release-q1 - noncanonical active line\n",
+          "utf8",
+        );
+        writeFileSync(
+          join(b.dir, "done-archive.md"),
+          "\n## Archived 2026-07-01\n- [x] release-q1 - canonical completion (done 2026-07-01)\n",
+          "utf8",
+        );
+
+        await expect(b.store.get("release-q1")).resolves.toBeNull();
+        await expect(
+          b.store.lookup("release-q1", { includeArchive: true }),
+        ).resolves.toMatchObject({
+          source: "archive",
+          task: { id: "release-q1", title: "canonical completion" },
+        });
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("ignores noncanonical archive markers during fallback", async () => {
+      const b = makeBacklog();
+      const archivePath = join(b.dir, "done-archive.md");
+      const archive = [
+        "",
+        "## Archived 2026-07-01",
+        "- [R] durable-c1 - rollout notes",
+        "- [?] durable-c1 - open question",
+        "- [!] durable-c1 - important follow-up",
+        "- [x] durable-c1 - canonical completion (done 2026-07-01)",
+        "",
+      ].join("\n");
+      try {
+        writeFileSync(archivePath, archive, "utf8");
+
+        await expect(
+          b.store.lookup("durable-c1", { includeArchive: true }),
+        ).resolves.toMatchObject({
+          source: "archive",
+          task: { id: "durable-c1", title: "canonical completion" },
+        });
+        expect(readFileSync(archivePath, "utf8")).toBe(archive);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("fails closed on malformed structured records in the Done archive", async () => {
+      const b = makeBacklog();
+      try {
+        writeFileSync(
+          join(b.dir, "done-archive.md"),
+          "\n## Archived 2026-07-01\n- [x] malformed-c1 - missing typed data (kind: public-followup) (done 2026-07-01)\n",
+          "utf8",
+        );
+
+        await expect(
+          b.store.lookup("malformed-c1", { includeArchive: true }),
+        ).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: expect.stringContaining("missing public-followup metadata"),
+        });
       } finally {
         b.cleanup();
       }
@@ -1313,6 +1473,29 @@ describe("MarkdownStore", () => {
         expect(b.archive()).toContain("multi-line-w8");
         // the live file no longer contains the archived task
         expect(b.read()).not.toContain("- [x] multi-line-w8");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("returns the first parsed archive record after an id is reused", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n- [x] reused-q1 - first completion (done 2026-06-30)\n",
+        "2026-07-01",
+      );
+      try {
+        await b.store.prune({ state: "done", keep: 0, archive: true });
+        await b.store.create({ id: "reused-q1", title: "second completion" });
+        await b.store.transition("reused-q1", "done");
+        await b.store.prune({ state: "done", keep: 0, archive: true });
+
+        expect(b.archive().match(/- \[x\] reused-q1/g)).toHaveLength(2);
+        await expect(
+          b.store.lookup("reused-q1", { includeArchive: true }),
+        ).resolves.toMatchObject({
+          source: "archive",
+          task: { id: "reused-q1", title: "first completion" },
+        });
       } finally {
         b.cleanup();
       }
