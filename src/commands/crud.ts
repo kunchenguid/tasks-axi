@@ -475,9 +475,9 @@ export async function showCommand(
 
   const found = includeArchive
     ? await store.lookup(id, { includeArchive: true })
-    : await store.get(id).then((task) =>
-        task ? { task, source: "active" as const } : null,
-      );
+    : await store
+        .get(id)
+        .then((task) => (task ? { task, source: "active" as const } : null));
   if (!found) throw notFound(id, { globals: context?.suggestionGlobals });
   const { task, source } = found;
 
