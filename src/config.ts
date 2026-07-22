@@ -20,7 +20,7 @@ export interface ResolvedConfig {
   backend: string;
   /** Markdown backlog path (resolved to an absolute path). */
   path: string;
-  /** Optional archive path for pruned tasks (resolved to an absolute path). */
+  /** Optional Done archive path used by pruning and read-only lookup. */
   archivePath?: string;
   doneKeep: number;
 }
@@ -49,7 +49,7 @@ type ConfigTable = "root" | "markdown" | "unsupported";
 /**
  * Minimal TOML reader for the tiny config surface we need: a top-level
  * `backend` key and a `[markdown]` table with `path` / `archive` / `done_keep`.
- * `archive` points at the file that receives pruned tasks.
+ * `archive` points at the Done history used by pruning and read-only lookup.
  * Intentionally not a general TOML parser.
  */
 export function parseConfigToml(src: string): TomlConfig {
@@ -121,10 +121,7 @@ function stripTomlComment(raw: string): string {
   return raw;
 }
 
-function configKeySource(
-  table: ConfigTable,
-  key: string,
-): string | undefined {
+function configKeySource(table: ConfigTable, key: string): string | undefined {
   if (table === "root" && key === "backend") return "backend";
   if (
     table === "markdown" &&

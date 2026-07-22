@@ -36,7 +36,9 @@ describe("derive", () => {
   });
 
   it("ready = queued tasks with no unresolved blocker", () => {
-    const ready = readyTasks(tasks).map((t) => t.id).sort();
+    const ready = readyTasks(tasks)
+      .map((t) => t.id)
+      .sort();
     expect(ready).toEqual(["c", "e", "f"]);
   });
 
@@ -66,9 +68,7 @@ describe("derive", () => {
     expect(heldTasks([future, past], { today: "2026-07-08" })).toEqual([
       future,
     ]);
-    expect(readyTasks([future, past], { today: "2026-07-08" })).toEqual([
-      past,
-    ]);
+    expect(readyTasks([future, past], { today: "2026-07-08" })).toEqual([past]);
   });
 
   it("activeBlockers lists only the unresolved blockers of active tasks", () => {

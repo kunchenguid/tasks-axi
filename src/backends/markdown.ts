@@ -57,7 +57,7 @@ import {
 
 export interface MarkdownStoreOptions {
   path: string;
-  /** Where pruned Done items are archived (default `<dir>/done-archive.md`). */
+  /** Done archive used by pruning and read-only lookup (default `<dir>/done-archive.md`). */
   archivePath?: string;
   /** Where superseded task bodies are archived (default `<dir>/note-archive.md`). */
   noteArchivePath?: string;
