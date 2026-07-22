@@ -42,6 +42,18 @@ export interface PruneResult {
   ids: string[];
 }
 
+export type TaskLookupSource = "active" | "archive";
+
+export interface TaskLookupOptions {
+  /** Search the backend's read-only completed-task archive after active storage. */
+  includeArchive?: boolean;
+}
+
+export interface TaskLookupResult {
+  task: Task;
+  source: TaskLookupSource;
+}
+
 /**
  * The single narrow seam every backend implements (report §8). The CLI layer
  * (arg parsing, TOON rendering, suggestions, help) never knows which backend
@@ -49,8 +61,9 @@ export interface PruneResult {
  * dependency graph, structured hold tags, and public-followup state, so every
  * backend gets them for free.
  *
- * The core contract is create/get/update/remove/list/transition/addDep/
- * removeDep/updatePublicFollowup. `prune` and `render` are optional and
+ * The core contract is create/get/lookup/update/remove/list/transition/
+ * addDep/removeDep/updatePublicFollowup. `lookup` keeps durable archive reads
+ * behind the backend seam; `prune` and `render` are optional and
  * capability-gated.
  */
 export interface Store {
@@ -59,6 +72,11 @@ export interface Store {
   // CRUD
   create(input: TaskInput): Promise<Task>;
   get(id: string): Promise<Task | null>;
+  /** Locate active storage first, optionally falling back to read-only history. */
+  lookup(
+    id: string,
+    options?: TaskLookupOptions,
+  ): Promise<TaskLookupResult | null>;
   /** Apply a patch and report which fields actually changed. */
   update(id: string, patch: TaskPatch): Promise<TaskUpdateResult>;
   remove(id: string): Promise<Task>;

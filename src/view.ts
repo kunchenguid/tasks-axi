@@ -1,6 +1,7 @@
 import { truncate } from "./body.js";
 import { activeBlockers, isHoldActive } from "./derive.js";
 import type { Task } from "./model.js";
+import type { TaskLookupSource } from "./store.js";
 import { field, renderDetail, renderList, type FieldDef } from "./toon.js";
 
 /**
@@ -109,6 +110,12 @@ const DETAIL_SCHEMA: FieldDef[] = [
   field("body"),
 ];
 
+const LOOKUP_DETAIL_SCHEMA: FieldDef[] = [
+  field("id"),
+  field("source"),
+  ...DETAIL_SCHEMA.slice(1),
+];
+
 export function renderTaskList(
   label: string,
   tasks: Task[],
@@ -132,4 +139,15 @@ export function renderTaskDetail(
 ): string {
   const row = toRow(task, { all, full, truncationHint });
   return renderDetail("task", row, DETAIL_SCHEMA);
+}
+
+/** Detail projection for opt-in durable lookup, including storage provenance. */
+export function renderTaskLookupDetail(
+  task: Task,
+  all: Task[],
+  full: boolean,
+  source: TaskLookupSource,
+): string {
+  const row = { ...toRow(task, { all, full }), source };
+  return renderDetail("task", row, LOOKUP_DETAIL_SCHEMA);
 }
