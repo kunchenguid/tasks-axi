@@ -38,6 +38,8 @@ import type {
   PruneOptions,
   PruneResult,
   Store,
+  TaskLookupOptions,
+  TaskLookupResult,
 } from "../store.js";
 import { atomicWrite, readFileSafe, withLock, withLocks } from "./lock.js";
 import {
@@ -48,6 +50,7 @@ import {
   deriveLinks,
   extractTags,
   parseBacklog,
+  parseDoneArchive,
   renderBacklog,
   renderTaskLines,
 } from "./markdown-grammar.js";
@@ -351,6 +354,10 @@ export class MarkdownStore implements Store {
     return parseBacklog(this.loadSource() ?? "");
   }
 
+  private loadArchive(): BacklogDoc {
+    return parseDoneArchive(readFileSafe(this.archivePath) ?? "");
+  }
+
   private loadForUpdate(): LoadedBacklogDoc {
     const source = this.loadSource();
     return { doc: parseBacklog(source ?? ""), source };
@@ -414,8 +421,32 @@ export class MarkdownStore implements Store {
   }
 
   async get(id: string): Promise<Task | null> {
-    const found = this.findEntry(this.load(), id);
-    return found ? found.entry.task : null;
+    const result = await this.lookup(id);
+    return result?.task ?? null;
+  }
+
+  async lookup(
+    id: string,
+    options: TaskLookupOptions = {},
+  ): Promise<TaskLookupResult | null> {
+    // Parse active storage first so an invalid active record cannot be masked by
+    // a valid archived copy. A present active identity also wins without
+    // consulting cold history at all.
+    const active = this.findEntry(this.load(), id);
+    if (active) return { task: active.entry.task, source: "active" };
+    if (!options.includeArchive) return null;
+
+    const matches = this.allTasks(this.loadArchive()).filter(
+      (task) => task.id === id,
+    );
+    if (matches.length > 1) {
+      throw new AxiError(
+        `Task "${id}" appears more than once in the Done archive`,
+        "CONFLICT",
+        ["Resolve the duplicate archived identities manually, then retry"],
+      );
+    }
+    return matches[0] ? { task: matches[0], source: "archive" } : null;
   }
 
   async list(query: TaskQuery): Promise<{ items: Task[]; total: number }> {

@@ -12,7 +12,7 @@ import {
   unblockCommand,
   unholdCommand,
 } from "../../src/commands/state.js";
-import { listCommand } from "../../src/commands/crud.js";
+import { listCommand, showCommand } from "../../src/commands/crud.js";
 import { makeBacklog } from "../helpers.js";
 
 describe("state commands", () => {
@@ -166,6 +166,25 @@ describe("state commands", () => {
       try {
         await doneCommand(["cert-cleanup", "--keep", "2"], b.ctx);
         expect(b.archive()).toContain("## Archived");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("keeps a normally pruned completion available to durable show", async () => {
+      const b = makeBacklog(undefined, "2026-07-01");
+      b.ctx.config.doneKeep = 0;
+      try {
+        await doneCommand(["cert-cleanup"], b.ctx);
+        expect(await b.store.get("cert-cleanup")).toBeNull();
+
+        const out = await showCommand(
+          ["cert-cleanup", "--include-archive", "--full"],
+          b.ctx,
+        );
+        expect(out).toContain("id: cert-cleanup");
+        expect(out).toContain("source: archive");
+        expect(out).toContain("state: done");
       } finally {
         b.cleanup();
       }

@@ -1,4 +1,5 @@
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MarkdownStore } from "../../src/backends/markdown.js";
 import { readyTasks } from "../../src/derive.js";
@@ -31,6 +32,140 @@ describe("MarkdownStore", () => {
         expect(got?.title).toBe("a brand new task");
         expect(got?.repo).toBe("demo");
         expect(b.read()).toContain("- [ ] new-task-q1 - a brand new task");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("finds an exact task in the default Done archive without rewriting it", async () => {
+      const b = makeBacklog();
+      const archivePath = join(b.dir, "done-archive.md");
+      const archive = [
+        "",
+        "## Archived 2026-07-02",
+        "- [x] durable-c1 - durable completion (repo: firstmate) (kind: captain) (priority: 1) (done 2026-07-01)",
+        "  Resolution recorded by the owner.",
+        "  Routed work: durable-route-r1",
+        "",
+      ].join("\n");
+      try {
+        writeFileSync(archivePath, archive, "utf8");
+
+        const found = await b.store.lookup("durable-c1", {
+          includeArchive: true,
+        });
+
+        expect(found).toMatchObject({
+          source: "archive",
+          task: {
+            id: "durable-c1",
+            state: "done",
+            repo: "firstmate",
+            kind: "captain",
+            priority: 1,
+            closed: "2026-07-01",
+            body: "Resolution recorded by the owner.\nRouted work: durable-route-r1",
+          },
+        });
+        expect(readFileSync(archivePath, "utf8")).toBe(archive);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("honors an explicit custom Done archive path", async () => {
+      const b = makeBacklog();
+      const archivePath = join(b.dir, "custom-history.md");
+      try {
+        writeFileSync(
+          archivePath,
+          "\n## Archived 2026-07-02\n- [x] custom-c1 - custom history (done 2026-07-02)\n",
+          "utf8",
+        );
+        const store = new MarkdownStore({ path: b.path, archivePath });
+
+        await expect(
+          store.lookup("custom-c1", { includeArchive: true }),
+        ).resolves.toMatchObject({
+          source: "archive",
+          task: { id: "custom-c1", state: "done" },
+        });
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("returns an active identity without consulting conflicting archive copies", async () => {
+      const b = makeBacklog();
+      try {
+        writeFileSync(
+          join(b.dir, "done-archive.md"),
+          [
+            "",
+            "## Archived 2026-07-01",
+            "- [x] cert-cleanup - stale archived copy (done 2026-07-01)",
+            "",
+            "## Archived 2026-07-02",
+            "- [x] cert-cleanup - duplicate stale copy (done 2026-07-02)",
+            "",
+          ].join("\n"),
+          "utf8",
+        );
+
+        await expect(
+          b.store.lookup("cert-cleanup", { includeArchive: true }),
+        ).resolves.toMatchObject({
+          source: "active",
+          task: { id: "cert-cleanup", state: "queued" },
+        });
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects ambiguous duplicate identities in the Done archive", async () => {
+      const b = makeBacklog();
+      try {
+        writeFileSync(
+          join(b.dir, "done-archive.md"),
+          [
+            "",
+            "## Archived 2026-07-01",
+            "- [x] duplicate-c1 - first copy (done 2026-07-01)",
+            "",
+            "## Archived 2026-07-02",
+            "- [x] duplicate-c1 - second copy (done 2026-07-02)",
+            "",
+          ].join("\n"),
+          "utf8",
+        );
+
+        await expect(
+          b.store.lookup("duplicate-c1", { includeArchive: true }),
+        ).rejects.toMatchObject({
+          code: "CONFLICT",
+          message: expect.stringContaining("more than once"),
+        });
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("fails closed on malformed structured records in the Done archive", async () => {
+      const b = makeBacklog();
+      try {
+        writeFileSync(
+          join(b.dir, "done-archive.md"),
+          "\n## Archived 2026-07-01\n- [x] malformed-c1 - missing typed data (kind: public-followup) (done 2026-07-01)\n",
+          "utf8",
+        );
+
+        await expect(
+          b.store.lookup("malformed-c1", { includeArchive: true }),
+        ).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: expect.stringContaining("missing public-followup metadata"),
+        });
       } finally {
         b.cleanup();
       }

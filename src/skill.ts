@@ -66,7 +66,7 @@ Use tasks-axi whenever a task touches the backlog: filing or dispatching work, m
 
 1. Run \`npx -y tasks-axi\` with no arguments for a dashboard of the current backlog - in flight work, queued work with blockers, and suggested next commands.
 2. Drill in verb-first: \`list\`, \`show <id>\`, \`ready\`, then mutate with \`add\`, \`start\`, \`done\`, \`block\`/\`unblock\`, \`hold\`/\`unhold\`, \`update\`.
-3. The long notes never appear in \`list\`; run \`show <id> --full\` to read a task's complete body before replacing it.
+3. The long notes never appear in \`list\`; run \`show <id> --full\` to read a task's complete body before replacing it. For durable completed-identity checks, \`show <id> --include-archive --full\` reads active storage first and then the configured Done archive without mutating it; the result includes \`source: active|archive\`.
 4. \`add\` takes a caller-supplied id (the join key), e.g. \`tasks-axi add fm-x "title" --kind ship --repo firstmate --start\`; or pass \`--mint\` to generate a slug-xx id from the title.
 5. \`done <id> --pr <url>\` (or \`--report <path>\`) closes a task, records the link, and prunes the Done list (archived, never deleted). Then \`ready\` shows work it unblocked.
 6. \`hold <id> --reason "<text>"\` pauses dispatch without prose parsing; \`ready\` excludes active holds by default, and \`ready --include-held\` shows a separate held group.
@@ -85,7 +85,7 @@ Run \`npx -y tasks-axi --help\` for global flags, or \`npx -y tasks-axi <command
 ## Tips
 
 - Output is TOON-encoded and token-efficient; the long task body is truncated by default - the whole point is that \`list\` stays cheap.
-  Use \`--full\` only when you need the complete notes.
+  Use \`--full\` only when you need the complete notes. Normal \`show\` is active-only; \`--include-archive\` is an explicit read-only fallback where active wins and duplicate archived identities fail.
 - Every write leads with an \`ok:\` line confirming the write result, including the resulting task state when the command changes one (e.g. \`ok: start <id> -> In flight\`, \`ok: done <id> -> Done (pr <url>)\`, \`ok: render -> normalized <n>\`), then state-aware next-step hints.
   Mutations are idempotent and add \`already: true\` on a no-op; re-running is safe.
 - Pass \`--json\` to any mutation (\`add\`, \`start\`, \`done\`, \`reopen\`, \`update\`, \`rm\`, \`block\`, \`unblock\`, \`hold\`, \`unhold\`, \`mv\`, \`prune\`, \`render\`) for a machine-readable result object (\`{ "ok": true, "action": ..., "task": { ... } }\` or operation-specific result fields) instead of TOON - confirm a write deterministically without a follow-up read.
