@@ -226,7 +226,7 @@ describe("CLI entrypoint", () => {
   it("does not hide malformed active data behind a valid archived identity", async () => {
     writeFileSync(
       path,
-      "# Backlog\n\n## Done\n- [x] invalid-active-c1 - malformed active item (kind: public-followup) (done 2026-07-02)\n",
+      "# Backlog\n\n## Queued\n- [x] invalid-active-c1 - malformed active item\n",
       "utf8",
     );
     writeFileSync(
@@ -241,7 +241,7 @@ describe("CLI entrypoint", () => {
       stdout: c.stdout,
     });
 
-    expect(c.read()).toContain("missing public-followup metadata");
+    expect(c.read()).toContain("malformed task syntax");
     expect(c.read()).toContain("code: VALIDATION_ERROR");
     expect(process.exitCode).toBe(2);
   });

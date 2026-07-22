@@ -49,6 +49,7 @@ import {
   type TaskEntry,
   deriveLinks,
   extractTags,
+  hasMalformedTaskIdentity,
   parseBacklog,
   parseDoneArchive,
   renderBacklog,
@@ -301,6 +302,19 @@ function taskToInput(task: Task): TaskInput {
   return input;
 }
 
+function requireWellFormedTaskIdentity(
+  doc: BacklogDoc,
+  id: string,
+  location: "active backlog" | "Done archive",
+): void {
+  if (!hasMalformedTaskIdentity(doc, id)) return;
+  throw new AxiError(
+    `Task "${id}" has malformed task syntax or an invalid section in the ${location}`,
+    "VALIDATION_ERROR",
+    ["Fix the record's section and checkbox before retrying"],
+  );
+}
+
 export class MarkdownStore implements Store {
   private readonly path: string;
   private readonly archivePath: string;
@@ -432,13 +446,15 @@ export class MarkdownStore implements Store {
     // Parse active storage first so an invalid active record cannot be masked by
     // a valid archived copy. A present active identity also wins without
     // consulting cold history at all.
-    const active = this.findEntry(this.load(), id);
+    const activeDoc = this.load();
+    requireWellFormedTaskIdentity(activeDoc, id, "active backlog");
+    const active = this.findEntry(activeDoc, id);
     if (active) return { task: active.entry.task, source: "active" };
     if (!options.includeArchive) return null;
 
-    const matches = this.allTasks(this.loadArchive()).filter(
-      (task) => task.id === id,
-    );
+    const archiveDoc = this.loadArchive();
+    requireWellFormedTaskIdentity(archiveDoc, id, "Done archive");
+    const matches = this.allTasks(archiveDoc).filter((task) => task.id === id);
     if (matches.length > 1) {
       throw new AxiError(
         `Task "${id}" appears more than once in the Done archive`,
