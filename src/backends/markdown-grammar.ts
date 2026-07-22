@@ -386,9 +386,7 @@ function sectionState(headerLine: string): State | undefined {
 }
 
 function archiveSectionState(headerLine: string): State | undefined {
-  return /^##\s+Archived\s+\d{4}-\d{2}-\d{2}\s*$/.test(
-    semanticLine(headerLine),
-  )
+  return /^##\s+Archived\s+\d{4}-\d{2}-\d{2}\s*$/.test(semanticLine(headerLine))
     ? "done"
     : undefined;
 }
