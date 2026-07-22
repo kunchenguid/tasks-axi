@@ -100,6 +100,55 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("selects a parsed active task without reinterpreting raw same-id lines", async () => {
+      const b = makeBacklog();
+      const source = [
+        "# Backlog",
+        "",
+        "## Queued",
+        "- [ ] release-q1 - canonical active task",
+        "- release-q1 - noncanonical raw note",
+        "",
+      ].join("\n");
+      try {
+        writeFileSync(b.path, source, "utf8");
+
+        await expect(b.store.get("release-q1")).resolves.toMatchObject({
+          id: "release-q1",
+          title: "canonical active task",
+        });
+        expect(b.read()).toBe(source);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("uses canonical parser misses before archive fallback", async () => {
+      const b = makeBacklog();
+      try {
+        writeFileSync(
+          b.path,
+          "# Backlog\n\n## Queued\n- release-q1 - noncanonical active line\n",
+          "utf8",
+        );
+        writeFileSync(
+          join(b.dir, "done-archive.md"),
+          "\n## Archived 2026-07-01\n- [x] release-q1 - canonical completion (done 2026-07-01)\n",
+          "utf8",
+        );
+
+        await expect(b.store.get("release-q1")).resolves.toBeNull();
+        await expect(
+          b.store.lookup("release-q1", { includeArchive: true }),
+        ).resolves.toMatchObject({
+          source: "archive",
+          task: { id: "release-q1", title: "canonical completion" },
+        });
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("ignores noncanonical archive markers during fallback", async () => {
       const b = makeBacklog();
       const archivePath = join(b.dir, "done-archive.md");
@@ -1429,7 +1478,7 @@ describe("MarkdownStore", () => {
       }
     });
 
-    it("rejects duplicate archive records after an id is reused", async () => {
+    it("returns the first parsed archive record after an id is reused", async () => {
       const b = makeBacklog(
         "# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n- [x] reused-q1 - first completion (done 2026-06-30)\n",
         "2026-07-01",
@@ -1443,9 +1492,9 @@ describe("MarkdownStore", () => {
         expect(b.archive().match(/- \[x\] reused-q1/g)).toHaveLength(2);
         await expect(
           b.store.lookup("reused-q1", { includeArchive: true }),
-        ).rejects.toMatchObject({
-          code: "CONFLICT",
-          message: expect.stringContaining("more than once"),
+        ).resolves.toMatchObject({
+          source: "archive",
+          task: { id: "reused-q1", title: "first completion" },
         });
       } finally {
         b.cleanup();

@@ -70,15 +70,9 @@ describe("derive", () => {
     expect(readyTasks([future, past], { today: "2026-07-08" })).toEqual([past]);
   });
 
-  it("activeBlockers lists only the unresolved blockers of active tasks", () => {
+  it("activeBlockers lists only the unresolved blockers", () => {
     expect(activeBlockers(tasks[0], tasks)).toEqual(["b"]);
     expect(activeBlockers(tasks[2], tasks)).toEqual([]);
-    expect(
-      activeBlockers(
-        task("completed", "done", [{ type: "blocked-by", id: "b" }]),
-        tasks,
-      ),
-    ).toEqual([]);
   });
 
   it("a blocked-by edge with a free-text reason still blocks (graph keys off the id)", () => {

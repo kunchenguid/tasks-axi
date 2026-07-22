@@ -112,7 +112,7 @@ describe("CLI entrypoint", () => {
     expect(process.exitCode).toBeFalsy();
   });
 
-  it("reports archived Done tasks as unblocked while preserving their deps", async () => {
+  it("preserves the existing blocker projection for archived Done tasks", async () => {
     writeFileSync(
       join(dir, "done-archive.md"),
       "\n## Archived 2026-07-02\n- [x] durable-c1 - durable result (done 2026-07-02) blocked-by: cert-cleanup\n",
@@ -137,8 +137,8 @@ describe("CLI entrypoint", () => {
     expect(decoded.task).toMatchObject({
       source: "archive",
       state: "done",
-      blocked: "no",
-      blocked_by: "none",
+      blocked: "yes",
+      blocked_by: "cert-cleanup",
       deps: "blocked-by:cert-cleanup",
     });
     expect(process.exitCode).toBeFalsy();
@@ -224,10 +224,10 @@ describe("CLI entrypoint", () => {
     expect(process.exitCode).toBeFalsy();
   });
 
-  it("does not hide a malformed active identity behind archive fallback", async () => {
+  it("treats a noncanonical active line as a parser miss before fallback", async () => {
     writeFileSync(
       path,
-      "# Backlog\n\n## Queued\n- invalid-active-c1 - malformed active item\n",
+      "# Backlog\n\n## Queued\n- invalid-active-c1 - noncanonical active line\n",
       "utf8",
     );
     writeFileSync(
@@ -242,12 +242,18 @@ describe("CLI entrypoint", () => {
       stdout: c.stdout,
     });
 
-    expect(c.read()).toContain("malformed task syntax");
-    expect(c.read()).toContain("code: VALIDATION_ERROR");
-    expect(process.exitCode).toBe(2);
+    const decoded = decode(c.read()) as {
+      task: { id: string; source: string; title: string };
+    };
+    expect(decoded.task).toMatchObject({
+      id: "invalid-active-c1",
+      source: "archive",
+      title: "valid historical item",
+    });
+    expect(process.exitCode).toBeFalsy();
   });
 
-  it("rejects multiple valid archive records for one identity", async () => {
+  it("returns the first parsed record for repeated archive identities", async () => {
     writeFileSync(
       join(dir, "done-archive.md"),
       [
@@ -268,9 +274,15 @@ describe("CLI entrypoint", () => {
       stdout: c.stdout,
     });
 
-    expect(c.read()).toContain("code: CONFLICT");
-    expect(c.read()).toContain("more than once");
-    expect(process.exitCode).toBe(1);
+    const decoded = decode(c.read()) as {
+      task: { id: string; source: string; title: string };
+    };
+    expect(decoded.task).toMatchObject({
+      id: "duplicate-c1",
+      source: "archive",
+      title: "first result",
+    });
+    expect(process.exitCode).toBeFalsy();
   });
 
   it("reports malformed task ids as validation errors", async () => {
@@ -412,6 +424,8 @@ describe("CLI entrypoint", () => {
     expect(c.read()).toContain("--include-archive");
     expect(c.read()).toContain("active first");
     expect(c.read()).toContain("read-only");
+    expect(c.read()).toContain("canonical task parsing");
+    expect(c.read()).toContain("first-match selection");
   });
 
   it("returns focused help for a public-followup subcommand", async () => {

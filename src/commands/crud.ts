@@ -72,6 +72,7 @@ aliases: view
 flags:
   --full              show complete title and body text
   --include-archive   active first, then the configured Done archive (read-only)
+Archive fallback uses canonical task parsing and first-match selection.
 examples:
   tasks-axi show homemux-h7
   tasks-axi show homemux-h7 --full
@@ -472,7 +473,11 @@ export async function showCommand(
   const positionals = requirePositionals(args, 1, 1, SHOW_HELP.split("\n")[0]);
   const id = requireId(positionals[0], "id");
 
-  const found = await store.lookup(id, { includeArchive });
+  const found = includeArchive
+    ? await store.lookup(id, { includeArchive: true })
+    : await store.get(id).then((task) =>
+        task ? { task, source: "active" as const } : null,
+      );
   if (!found) throw notFound(id, { globals: context?.suggestionGlobals });
   const { task, source } = found;
 
