@@ -105,8 +105,9 @@ export function publicFollowupsByDeliveryState(
   );
 }
 
-/** The unresolved blocked-by edges for a task (blockers that are not done). */
+/** The unresolved blocked-by edges for an active task; Done tasks have none. */
 export function activeBlockers(task: Task, tasks: Task[]): string[] {
+  if (task.state === "done") return [];
   const byId = new Map(tasks.map((t) => [t.id, t]));
   return task.deps
     .filter((d) => d.type === "blocked-by")

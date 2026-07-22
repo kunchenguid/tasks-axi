@@ -112,6 +112,38 @@ describe("CLI entrypoint", () => {
     expect(process.exitCode).toBeFalsy();
   });
 
+  it("reports archived Done tasks as unblocked while preserving their deps", async () => {
+    writeFileSync(
+      join(dir, "done-archive.md"),
+      "\n## Archived 2026-07-02\n- [x] durable-c1 - durable result (done 2026-07-02) blocked-by: cert-cleanup\n",
+      "utf8",
+    );
+    const c = capture();
+
+    await main({
+      argv: ["show", "durable-c1", "--include-archive"],
+      stdout: c.stdout,
+    });
+
+    const decoded = decode(c.read()) as {
+      task: {
+        source: string;
+        state: string;
+        blocked: string;
+        blocked_by: string;
+        deps: string;
+      };
+    };
+    expect(decoded.task).toMatchObject({
+      source: "archive",
+      state: "done",
+      blocked: "no",
+      blocked_by: "none",
+      deps: "blocked-by:cert-cleanup",
+    });
+    expect(process.exitCode).toBeFalsy();
+  });
+
   it("resolves an explicit configured archive path", async () => {
     process.chdir(dir);
     writeFileSync(
@@ -190,6 +222,55 @@ describe("CLI entrypoint", () => {
       source: "active",
     });
     expect(process.exitCode).toBeFalsy();
+  });
+
+  it("does not hide a malformed active identity behind archive fallback", async () => {
+    writeFileSync(
+      path,
+      "# Backlog\n\n## Queued\n- invalid-active-c1 - malformed active item\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(dir, "done-archive.md"),
+      "\n## Archived 2026-07-01\n- [x] invalid-active-c1 - valid historical item (done 2026-07-01)\n",
+      "utf8",
+    );
+    const c = capture();
+
+    await main({
+      argv: ["show", "invalid-active-c1", "--include-archive"],
+      stdout: c.stdout,
+    });
+
+    expect(c.read()).toContain("malformed task syntax");
+    expect(c.read()).toContain("code: VALIDATION_ERROR");
+    expect(process.exitCode).toBe(2);
+  });
+
+  it("rejects multiple valid archive records for one identity", async () => {
+    writeFileSync(
+      join(dir, "done-archive.md"),
+      [
+        "",
+        "## Archived 2026-07-01",
+        "- [x] duplicate-c1 - first result (done 2026-07-01)",
+        "",
+        "## Archived 2026-07-02",
+        "- [x] duplicate-c1 - second result (done 2026-07-02)",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    const c = capture();
+
+    await main({
+      argv: ["show", "duplicate-c1", "--include-archive"],
+      stdout: c.stdout,
+    });
+
+    expect(c.read()).toContain("code: CONFLICT");
+    expect(c.read()).toContain("more than once");
+    expect(process.exitCode).toBe(1);
   });
 
   it("reports malformed task ids as validation errors", async () => {

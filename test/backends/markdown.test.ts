@@ -1429,7 +1429,7 @@ describe("MarkdownStore", () => {
       }
     });
 
-    it("uses the first archived match after an id is reused", async () => {
+    it("rejects duplicate archive records after an id is reused", async () => {
       const b = makeBacklog(
         "# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n- [x] reused-q1 - first completion (done 2026-06-30)\n",
         "2026-07-01",
@@ -1443,9 +1443,9 @@ describe("MarkdownStore", () => {
         expect(b.archive().match(/- \[x\] reused-q1/g)).toHaveLength(2);
         await expect(
           b.store.lookup("reused-q1", { includeArchive: true }),
-        ).resolves.toMatchObject({
-          source: "archive",
-          task: { id: "reused-q1", title: "first completion" },
+        ).rejects.toMatchObject({
+          code: "CONFLICT",
+          message: expect.stringContaining("more than once"),
         });
       } finally {
         b.cleanup();

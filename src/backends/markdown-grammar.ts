@@ -67,6 +67,7 @@ const ID_CHARS = "[A-Za-z0-9][A-Za-z0-9._-]*";
 const IN_FLIGHT_RE = new RegExp(`^- \\*\\*(${ID_CHARS})\\*\\* - (.*)$`);
 const QUEUED_RE = new RegExp(`^- \\[ \\] (${ID_CHARS}) - (.*)$`);
 const DONE_RE = new RegExp(`^- \\[x\\] (${ID_CHARS}) - (.*)$`);
+const BARE_TASK_RE = new RegExp(`^- (${ID_CHARS}) - .*$`);
 
 /** Validate a caller-supplied id round-trips through the markdown grammar. */
 export const ID_RE = new RegExp(`^${ID_CHARS}$`);
@@ -599,6 +600,31 @@ export function parseBacklog(src: string): BacklogDoc {
 /** Parse append-only Done archive blocks without treating them as active sections. */
 export function parseDoneArchive(src: string): BacklogDoc {
   return parseDocument(src, archiveSectionState);
+}
+
+function rawTaskIdentity(line: string): string | undefined {
+  const semantic = semanticLine(line);
+  return (
+    matchTaskBullet(semantic, "in_flight")?.id ??
+    matchTaskBullet(semantic, "done")?.id ??
+    semantic.match(BARE_TASK_RE)?.[1]
+  );
+}
+
+/** Detect a requested identity whose task-shaped line was rejected by the parser. */
+export function hasMalformedTaskIdentity(
+  doc: BacklogDoc,
+  id: string,
+): boolean {
+  return doc.sections.some(
+    (section) =>
+      section.state !== undefined &&
+      section.entries.some(
+        (entry) =>
+          entry.kind === "raw" &&
+          entry.lines.some((line) => rawTaskIdentity(line) === id),
+      ),
+  );
 }
 
 // ---------------------------------------------------------------------------
