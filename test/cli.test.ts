@@ -108,6 +108,38 @@ describe("CLI entrypoint", () => {
     expect(process.exitCode).toBeFalsy();
   });
 
+  it("reports archived Done tasks as unblocked when their blocker is active", async () => {
+    writeFileSync(
+      join(dir, "done-archive.md"),
+      "\n## Archived 2026-07-02\n- [x] durable-c1 - durable result (done 2026-07-02) blocked-by: cert-cleanup\n",
+      "utf8",
+    );
+    const c = capture();
+
+    await main({
+      argv: ["show", "durable-c1", "--include-archive"],
+      stdout: c.stdout,
+    });
+
+    const decoded = decode(c.read()) as {
+      task: {
+        source: string;
+        state: string;
+        blocked: string;
+        blocked_by: string;
+        deps: string;
+      };
+    };
+    expect(decoded.task).toMatchObject({
+      source: "archive",
+      state: "done",
+      blocked: "no",
+      blocked_by: "none",
+      deps: "blocked-by:cert-cleanup",
+    });
+    expect(process.exitCode).toBeFalsy();
+  });
+
   it("resolves an explicit configured archive path", async () => {
     process.chdir(dir);
     writeFileSync(
