@@ -70,9 +70,15 @@ describe("derive", () => {
     ]);
   });
 
-  it("activeBlockers lists only the unresolved blockers", () => {
+  it("activeBlockers lists only the unresolved blockers of active tasks", () => {
     expect(activeBlockers(tasks[0], tasks)).toEqual(["b"]);
     expect(activeBlockers(tasks[2], tasks)).toEqual([]);
+    expect(
+      activeBlockers(
+        task("completed", "done", [{ type: "blocked-by", id: "b" }]),
+        tasks,
+      ),
+    ).toEqual([]);
   });
 
   it("a blocked-by edge with a free-text reason still blocks (graph keys off the id)", () => {
