@@ -49,7 +49,6 @@ import {
   type TaskEntry,
   deriveLinks,
   extractTags,
-  hasMalformedTaskIdentity,
   parseBacklog,
   parseDoneArchive,
   renderBacklog,
@@ -302,19 +301,6 @@ function taskToInput(task: Task): TaskInput {
   return input;
 }
 
-function requireWellFormedTaskIdentity(
-  doc: BacklogDoc,
-  id: string,
-  location: "active backlog" | "Done archive",
-): void {
-  if (!hasMalformedTaskIdentity(doc, id)) return;
-  throw new AxiError(
-    `Task "${id}" has malformed task syntax or an invalid section in the ${location}`,
-    "VALIDATION_ERROR",
-    ["Fix the record's section and task marker before retrying"],
-  );
-}
-
 export class MarkdownStore implements Store {
   private readonly path: string;
   private readonly archivePath: string;
@@ -435,34 +421,22 @@ export class MarkdownStore implements Store {
   }
 
   async get(id: string): Promise<Task | null> {
-    const result = await this.lookup(id);
-    return result?.task ?? null;
+    const found = this.findEntry(this.load(), id);
+    return found ? found.entry.task : null;
   }
 
   async lookup(
     id: string,
     options: TaskLookupOptions = {},
   ): Promise<TaskLookupResult | null> {
-    // Parse active storage first so an invalid active record cannot be masked by
-    // a valid archived copy. A present active identity also wins without
-    // consulting cold history at all.
-    const activeDoc = this.load();
-    requireWellFormedTaskIdentity(activeDoc, id, "active backlog");
-    const active = this.findEntry(activeDoc, id);
-    if (active) return { task: active.entry.task, source: "active" };
+    const active = await this.get(id);
+    if (active) return { task: active, source: "active" };
     if (!options.includeArchive) return null;
 
-    const archiveDoc = this.loadArchive();
-    requireWellFormedTaskIdentity(archiveDoc, id, "Done archive");
-    const matches = this.allTasks(archiveDoc).filter((task) => task.id === id);
-    if (matches.length > 1) {
-      throw new AxiError(
-        `Task "${id}" appears more than once in the Done archive`,
-        "CONFLICT",
-        ["Resolve the duplicate archived identities manually, then retry"],
-      );
-    }
-    return matches[0] ? { task: matches[0], source: "archive" } : null;
+    const archived = this.findEntry(this.loadArchive(), id);
+    return archived
+      ? { task: archived.entry.task, source: "archive" }
+      : null;
   }
 
   async list(query: TaskQuery): Promise<{ items: Task[]; total: number }> {

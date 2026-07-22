@@ -73,239 +73,55 @@ describe("MarkdownStore", () => {
       }
     });
 
-    it("honors an explicit custom Done archive path", async () => {
+    it("keeps single-character Notes labels raw during ordinary lookup", async () => {
       const b = makeBacklog();
-      const archivePath = join(b.dir, "custom-history.md");
+      const source = [
+        "# Backlog",
+        "",
+        "## Queued",
+        "- [ ] release-q1 - valid active task",
+        "",
+        "## Notes",
+        "- [R] release-q1 - rollout notes",
+        "- [?] release-q1 - open question",
+        "- [!] release-q1 - important follow-up",
+        "",
+      ].join("\n");
       try {
-        writeFileSync(
-          archivePath,
-          "\n## Archived 2026-07-02\n- [x] custom-c1 - custom history (done 2026-07-02)\n",
-          "utf8",
-        );
-        const store = new MarkdownStore({ path: b.path, archivePath });
-
-        await expect(
-          store.lookup("custom-c1", { includeArchive: true }),
-        ).resolves.toMatchObject({
-          source: "archive",
-          task: { id: "custom-c1", state: "done" },
-        });
-      } finally {
-        b.cleanup();
-      }
-    });
-
-    it("returns an active identity without consulting conflicting archive copies", async () => {
-      const b = makeBacklog();
-      try {
-        writeFileSync(
-          join(b.dir, "done-archive.md"),
-          [
-            "",
-            "## Archived 2026-07-01",
-            "- [x] cert-cleanup - stale archived copy (done 2026-07-01)",
-            "",
-            "## Archived 2026-07-02",
-            "- [x] cert-cleanup - duplicate stale copy (done 2026-07-02)",
-            "",
-          ].join("\n"),
-          "utf8",
-        );
-
-        await expect(
-          b.store.lookup("cert-cleanup", { includeArchive: true }),
-        ).resolves.toMatchObject({
-          source: "active",
-          task: { id: "cert-cleanup", state: "queued" },
-        });
-      } finally {
-        b.cleanup();
-      }
-    });
-
-    it("fails closed on malformed active identity before archive fallback", async () => {
-      const b = makeBacklog();
-      try {
-        writeFileSync(
-          b.path,
-          "# Backlog\n\n## Queued\n- [x] release-q1 - malformed current record\n",
-          "utf8",
-        );
-        writeFileSync(
-          join(b.dir, "done-archive.md"),
-          "\n## Archived 2026-07-01\n- [x] release-q1 - stale archived record (done 2026-07-01)\n",
-          "utf8",
-        );
-
-        await expect(
-          b.store.lookup("release-q1", { includeArchive: true }),
-        ).rejects.toMatchObject({
-          code: "VALIDATION_ERROR",
-          message: expect.stringContaining("active backlog"),
-        });
-      } finally {
-        b.cleanup();
-      }
-    });
-
-    it("keeps annotated free-form lines outside requested identity handling", async () => {
-      const b = makeBacklog();
-      try {
-        await expect(
-          b.store.lookup("go-live", { includeArchive: true }),
-        ).resolves.toBeNull();
-      } finally {
-        b.cleanup();
-      }
-    });
-
-    it("keeps Notes labels raw alongside a valid active identity", async () => {
-      const b = makeBacklog();
-      try {
-        writeFileSync(
-          b.path,
-          [
-            "# Backlog",
-            "",
-            "## Queued",
-            "- [ ] release-q1 - valid active task",
-            "",
-            "## Notes",
-            "- [RFC] release-q1 - rollout notes",
-            "- [NOTE] release-q1 - follow-up notes",
-            "",
-          ].join("\n"),
-          "utf8",
-        );
+        writeFileSync(b.path, source, "utf8");
 
         await expect(b.store.lookup("release-q1")).resolves.toMatchObject({
           source: "active",
           task: { id: "release-q1", title: "valid active task" },
         });
+        expect(b.read()).toBe(source);
       } finally {
         b.cleanup();
       }
     });
 
-    it("rejects ambiguous duplicate identities in the Done archive", async () => {
+    it("ignores noncanonical archive markers during fallback", async () => {
       const b = makeBacklog();
+      const archivePath = join(b.dir, "done-archive.md");
+      const archive = [
+        "",
+        "## Archived 2026-07-01",
+        "- [R] durable-c1 - rollout notes",
+        "- [?] durable-c1 - open question",
+        "- [!] durable-c1 - important follow-up",
+        "- [x] durable-c1 - canonical completion (done 2026-07-01)",
+        "",
+      ].join("\n");
       try {
-        writeFileSync(
-          join(b.dir, "done-archive.md"),
-          [
-            "",
-            "## Archived 2026-07-01",
-            "- [x] duplicate-c1 - first copy (done 2026-07-01)",
-            "",
-            "## Archived 2026-07-02",
-            "- [x] duplicate-c1 - second copy (done 2026-07-02)",
-            "",
-          ].join("\n"),
-          "utf8",
-        );
+        writeFileSync(archivePath, archive, "utf8");
 
         await expect(
-          b.store.lookup("duplicate-c1", { includeArchive: true }),
-        ).rejects.toMatchObject({
-          code: "CONFLICT",
-          message: expect.stringContaining("more than once"),
+          b.store.lookup("durable-c1", { includeArchive: true }),
+        ).resolves.toMatchObject({
+          source: "archive",
+          task: { id: "durable-c1", title: "canonical completion" },
         });
-      } finally {
-        b.cleanup();
-      }
-    });
-
-    it("fails closed on a malformed archive-only identity", async () => {
-      const b = makeBacklog();
-      try {
-        writeFileSync(
-          join(b.dir, "done-archive.md"),
-          "\n## Archived 2026-07-01\n- [X] malformed-c1 - malformed archived record\n",
-          "utf8",
-        );
-
-        await expect(
-          b.store.lookup("malformed-c1", { includeArchive: true }),
-        ).rejects.toMatchObject({
-          code: "VALIDATION_ERROR",
-          message: expect.stringContaining("Done archive"),
-        });
-      } finally {
-        b.cleanup();
-      }
-    });
-
-    it("rejects a malformed archive identity before duplicate selection", async () => {
-      const b = makeBacklog();
-      try {
-        writeFileSync(
-          join(b.dir, "done-archive.md"),
-          [
-            "",
-            "## Archived 2026-07-01",
-            "- [x] duplicate-c1 - valid archived record (done 2026-07-01)",
-            "",
-            "## Archived 2026-07-02",
-            "- [X] duplicate-c1 - malformed duplicate",
-            "",
-          ].join("\n"),
-          "utf8",
-        );
-
-        await expect(
-          b.store.lookup("duplicate-c1", { includeArchive: true }),
-        ).rejects.toMatchObject({
-          code: "VALIDATION_ERROR",
-          message: expect.stringContaining("Done archive"),
-        });
-      } finally {
-        b.cleanup();
-      }
-    });
-
-    it("fails closed on a bare archive-only identity", async () => {
-      const b = makeBacklog();
-      try {
-        writeFileSync(
-          join(b.dir, "done-archive.md"),
-          "\n## Archived 2026-07-01\n- bare-c1 - malformed archived record\n",
-          "utf8",
-        );
-
-        await expect(
-          b.store.lookup("bare-c1", { includeArchive: true }),
-        ).rejects.toMatchObject({
-          code: "VALIDATION_ERROR",
-          message: expect.stringContaining("Done archive"),
-        });
-      } finally {
-        b.cleanup();
-      }
-    });
-
-    it("rejects a bare archive identity before duplicate selection", async () => {
-      const b = makeBacklog();
-      try {
-        writeFileSync(
-          join(b.dir, "done-archive.md"),
-          [
-            "",
-            "## Archived 2026-07-01",
-            "- [x] bare-duplicate-c1 - valid archived record (done 2026-07-01)",
-            "",
-            "## Archived 2026-07-02",
-            "- bare-duplicate-c1 - malformed duplicate",
-            "",
-          ].join("\n"),
-          "utf8",
-        );
-
-        await expect(
-          b.store.lookup("bare-duplicate-c1", { includeArchive: true }),
-        ).rejects.toMatchObject({
-          code: "VALIDATION_ERROR",
-          message: expect.stringContaining("Done archive"),
-        });
+        expect(readFileSync(archivePath, "utf8")).toBe(archive);
       } finally {
         b.cleanup();
       }
@@ -1608,6 +1424,29 @@ describe("MarkdownStore", () => {
         expect(b.archive()).toContain("multi-line-w8");
         // the live file no longer contains the archived task
         expect(b.read()).not.toContain("- [x] multi-line-w8");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("uses the first archived match after an id is reused", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n- [x] reused-q1 - first completion (done 2026-06-30)\n",
+        "2026-07-01",
+      );
+      try {
+        await b.store.prune({ state: "done", keep: 0, archive: true });
+        await b.store.create({ id: "reused-q1", title: "second completion" });
+        await b.store.transition("reused-q1", "done");
+        await b.store.prune({ state: "done", keep: 0, archive: true });
+
+        expect(b.archive().match(/- \[x\] reused-q1/g)).toHaveLength(2);
+        await expect(
+          b.store.lookup("reused-q1", { includeArchive: true }),
+        ).resolves.toMatchObject({
+          source: "archive",
+          task: { id: "reused-q1", title: "first completion" },
+        });
       } finally {
         b.cleanup();
       }

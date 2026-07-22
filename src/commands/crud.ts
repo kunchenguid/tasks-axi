@@ -72,7 +72,6 @@ aliases: view
 flags:
   --full              show complete title and body text
   --include-archive   active first, then the configured Done archive (read-only)
-A valid active identity wins without reading the archive. Matching malformed records fail validation; multiple valid archive matches conflict.
 examples:
   tasks-axi show homemux-h7
   tasks-axi show homemux-h7 --full

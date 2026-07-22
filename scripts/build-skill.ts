@@ -1,5 +1,5 @@
-// Generates skills/tasks-axi/SKILL.md from the src/skill.ts template; --check
-// fails when the committed generated file drifts from that source.
+// Generates skills/tasks-axi/SKILL.md from the shared CLI guidance so the
+// installable skill never drifts from what `tasks-axi` prints.
 //
 //   pnpm run build:skill            # write the file
 //   pnpm run build:skill -- --check # fail (exit 1) if the committed file is stale

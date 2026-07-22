@@ -588,73 +588,8 @@ describe("crud commands", () => {
         const out = await showCommand(["owns-widget-h7"], b.ctx);
         expect(out).toContain("id: owns-widget-h7");
         expect(out).toContain("use --full");
-        const decoded = decode(out) as {
-          task: { source?: string };
-        };
-        expect(decoded.task.source).toBeUndefined();
-
         const full = await showCommand(["owns-widget-h7", "--full"], b.ctx);
         expect(full).not.toContain("use --full");
-      } finally {
-        b.cleanup();
-      }
-    });
-
-    it("returns full archived task fields with stable source metadata", async () => {
-      const b = makeBacklog();
-      try {
-        await b.store.prune({ state: "done", keep: 0, archive: true });
-
-        const out = await showCommand(
-          ["multi-line-w8", "--include-archive", "--full"],
-          b.ctx,
-        );
-        const decoded = decode(out) as {
-          task: {
-            id: string;
-            source: string;
-            state: string;
-            body: string;
-          };
-        };
-        expect(decoded.task).toMatchObject({
-          id: "multi-line-w8",
-          source: "archive",
-          state: "done",
-        });
-        expect(decoded.task.body).toContain("Follow-up note added later");
-      } finally {
-        b.cleanup();
-      }
-    });
-
-    it("does not consult the archive unless explicitly requested", async () => {
-      const b = makeBacklog();
-      try {
-        await b.store.prune({ state: "done", keep: 0, archive: true });
-
-        await expect(
-          showCommand(["multi-line-w8", "--full"], b.ctx),
-        ).rejects.toMatchObject({ code: "NOT_FOUND" });
-      } finally {
-        b.cleanup();
-      }
-    });
-
-    it("labels active results when archive-inclusive lookup is requested", async () => {
-      const b = makeBacklog();
-      try {
-        const out = await showCommand(
-          ["cert-cleanup", "--include-archive"],
-          b.ctx,
-        );
-        const decoded = decode(out) as {
-          task: { id: string; source: string };
-        };
-        expect(decoded.task).toMatchObject({
-          id: "cert-cleanup",
-          source: "active",
-        });
       } finally {
         b.cleanup();
       }

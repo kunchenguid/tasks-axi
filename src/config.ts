@@ -121,7 +121,10 @@ function stripTomlComment(raw: string): string {
   return raw;
 }
 
-function configKeySource(table: ConfigTable, key: string): string | undefined {
+function configKeySource(
+  table: ConfigTable,
+  key: string,
+): string | undefined {
   if (table === "root" && key === "backend") return "backend";
   if (
     table === "markdown" &&
