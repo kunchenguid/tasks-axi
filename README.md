@@ -125,7 +125,7 @@ tasks-axi mv blocker-b1 dependent-d2 --to ../homemux/data/backlog.md
 Output is [TOON](https://toonformat.dev)-encoded and token-efficient.
 The long task body is truncated by default — the whole point is that `list` stays cheap; use `--full` only when you need the complete notes.
 Normal `show` remains active-backlog-only. `show <id> --include-archive` first checks the active backlog and, only when the id is absent there, reads the configured Done archive; its task record includes `source: active` or `source: archive` for machine consumers.
-Archive lookup is strictly read-only: it never restores, rewrites, or otherwise mutates cold history. A matching malformed active record fails with `VALIDATION_ERROR` instead of falling through. When archive lookup runs, matching malformed archive records fail with `VALIDATION_ERROR` before selection, and multiple valid archive matches fail with `CONFLICT`. If neither surface contains the id, `show` keeps the existing `NOT_FOUND` response and exit code.
+Archive lookup is strictly read-only: it never restores, rewrites, or otherwise mutates cold history, and it uses the same canonical parser and first-match selection as the active backlog. If neither surface contains the id, `show` keeps the existing `NOT_FOUND` response and exit code.
 `update --body` and `update --body-file` replace the body wholesale, so agents should inspect the current body first and write back the curated current state rather than appending a journal entry.
 `--archive-body` preserves the replaced body in `note-archive.md` using the same dated markdown archive block style as done pruning.
 Every write leads with a terse `ok:` line confirming the write result, including the resulting task state when the command changes one (e.g. `ok: start lavish-share -> In flight`, `ok: done grok-harness-g7 -> Done (pr <url>)`, `ok: render -> normalized 3`), followed by state-aware next-step hints that never suggest an action the command just performed.
@@ -270,7 +270,7 @@ pnpm lint          # eslint
 pnpm run build:skill -- --check   # fail if the generated skill is stale
 ```
 
-The installable skill is generated from the template in `src/skill.ts`; its CLI description and top-level command list are imported from the CLI source, and the drift check covers the complete generated file.
+The installable skill is generated from the same description and help the CLI prints, so it can never drift.
 
 ## Contributing
 

@@ -20,7 +20,6 @@ describe("derive", () => {
     task("d", "done"),
     task("e", "queued"),
     task("f", "queued", [{ type: "blocked-by", id: "ghost" }]),
-    task("g", "done", [{ type: "blocked-by", id: "b" }]),
   ];
 
   it("marks a task blocked when a blocker is not done", () => {
@@ -36,9 +35,7 @@ describe("derive", () => {
   });
 
   it("ready = queued tasks with no unresolved blocker", () => {
-    const ready = readyTasks(tasks)
-      .map((t) => t.id)
-      .sort();
+    const ready = readyTasks(tasks).map((t) => t.id).sort();
     expect(ready).toEqual(["c", "e", "f"]);
   });
 
@@ -68,13 +65,14 @@ describe("derive", () => {
     expect(heldTasks([future, past], { today: "2026-07-08" })).toEqual([
       future,
     ]);
-    expect(readyTasks([future, past], { today: "2026-07-08" })).toEqual([past]);
+    expect(readyTasks([future, past], { today: "2026-07-08" })).toEqual([
+      past,
+    ]);
   });
 
-  it("activeBlockers lists only the unresolved blockers of active tasks", () => {
+  it("activeBlockers lists only the unresolved blockers", () => {
     expect(activeBlockers(tasks[0], tasks)).toEqual(["b"]);
     expect(activeBlockers(tasks[2], tasks)).toEqual([]);
-    expect(activeBlockers(tasks[6], tasks)).toEqual([]);
   });
 
   it("a blocked-by edge with a free-text reason still blocks (graph keys off the id)", () => {

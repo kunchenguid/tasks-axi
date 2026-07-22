@@ -46,7 +46,7 @@ Run `npx -y tasks-axi --help` for global flags, or `npx -y tasks-axi <command> -
 ## Tips
 
 - Output is TOON-encoded and token-efficient; the long task body is truncated by default - the whole point is that `list` stays cheap.
-  Use `--full` only when you need the complete notes. Normal `show` is active-only; `--include-archive` is an explicit read-only fallback with provenance. Run `show --help` for selection and failure rules.
+  Use `--full` only when you need the complete notes. Normal `show` is active-only; `--include-archive` is an explicit read-only fallback with provenance.
 - Every write leads with an `ok:` line confirming the write result, including the resulting task state when the command changes one (e.g. `ok: start <id> -> In flight`, `ok: done <id> -> Done (pr <url>)`, `ok: render -> normalized <n>`), then state-aware next-step hints.
   Mutations are idempotent and add `already: true` on a no-op; re-running is safe.
 - Pass `--json` to any mutation (`add`, `start`, `done`, `reopen`, `update`, `rm`, `block`, `unblock`, `hold`, `unhold`, `mv`, `prune`, `render`) for a machine-readable result object (`{ "ok": true, "action": ..., "task": { ... } }` or operation-specific result fields) instead of TOON - confirm a write deterministically without a follow-up read.
