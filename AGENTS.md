@@ -42,7 +42,7 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 ## Conventions
 
 - **Ids are caller-supplied join keys (D6)** validated by `ID_RE` (slug-shaped); `add --mint [--prefix]` generates a `slug-xx` id.
-- **prune archives, never deletes (D4)** - surplus Done tasks are appended to `markdown.archive` or default `done-archive.md`. It keeps N _recognized_ tasks; free-form Done lines are preserved and not counted. `show --include-archive` is the read-only durable lookup and normal `show` remains active-only; `MarkdownStore.lookup` and its regression tests own active-first, first-match selection.
+- **prune archives, never deletes (D4)** - surplus Done tasks are appended to `markdown.archive` or default `done-archive.md`. It keeps N _recognized_ tasks; free-form Done lines are preserved and not counted. `show --include-archive` is the read-only durable lookup and normal `show` remains active-only; `MarkdownStore.lookup` and its regression tests own active precedence without an archive read, parser-compatible archive blocks, malformed requested-identity refusal, and duplicate archive rejection.
 - **`done` auto-prunes** to `config.doneKeep` (default 10) and archives, unless `--no-prune`.
 - **`done` on an already-Done task** stays idempotent but backfills supplied `--pr`, `--report`, and non-duplicate `--note` metadata without replacing the original closed date.
 - **Dependency mutations validate targets.** `add --blocked-by` and `block --by` reject missing blockers and self-blocks. Parsed dangling blockers are still treated as resolved for legacy hand-edited files.
