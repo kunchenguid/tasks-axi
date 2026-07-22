@@ -67,9 +67,11 @@ const ID_CHARS = "[A-Za-z0-9][A-Za-z0-9._-]*";
 const IN_FLIGHT_RE = new RegExp(`^- \\*\\*(${ID_CHARS})\\*\\* - (.*)$`);
 const QUEUED_RE = new RegExp(`^- \\[ \\] (${ID_CHARS}) - (.*)$`);
 const DONE_RE = new RegExp(`^- \\[x\\] (${ID_CHARS}) - (.*)$`);
-const TASK_SHAPED_RE = new RegExp(
-  `^- (?:\\[[^\\]]*\\]\\s*(${ID_CHARS})|\\*\\*(${ID_CHARS})\\*\\*) - .*$`,
+const CHECKBOX_LIKE = "\\[\\s*[^\\s\\]]?\\s*\\]";
+const MARKED_TASK_SHAPED_RE = new RegExp(
+  `^- (?:${CHECKBOX_LIKE}\\s*(${ID_CHARS})|\\*\\*(${ID_CHARS})\\*\\*) - .*$`,
 );
+const BARE_TASK_SHAPED_RE = new RegExp(`^- (${ID_CHARS}) - .*$`);
 
 /** Validate a caller-supplied id round-trips through the markdown grammar. */
 export const ID_RE = new RegExp(`^${ID_CHARS}$`);
@@ -604,21 +606,30 @@ export function parseDoneArchive(src: string): BacklogDoc {
   return parseDocument(src, archiveSectionState);
 }
 
-function taskShapedIdentity(line: string): string | undefined {
-  const match = semanticLine(line).match(TASK_SHAPED_RE);
-  return match?.[1] ?? match?.[2];
+function taskShapedIdentity(
+  line: string,
+  includeBare: boolean,
+): string | undefined {
+  const semantic = semanticLine(line);
+  const marked = semantic.match(MARKED_TASK_SHAPED_RE);
+  if (marked) return marked[1] ?? marked[2];
+  return includeBare ? semantic.match(BARE_TASK_SHAPED_RE)?.[1] : undefined;
 }
 
 export function hasMalformedTaskIdentity(
   doc: BacklogDoc,
   id: string,
 ): boolean {
-  if (doc.preamble.some((line) => taskShapedIdentity(line) === id)) return true;
+  if (doc.preamble.some((line) => taskShapedIdentity(line, false) === id)) {
+    return true;
+  }
   return doc.sections.some((section) =>
     section.entries.some(
       (entry) =>
         entry.kind === "raw" &&
-        entry.lines.some((line) => taskShapedIdentity(line) === id),
+        entry.lines.some(
+          (line) => taskShapedIdentity(line, section.state !== undefined) === id,
+        ),
     ),
   );
 }
