@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.4](https://github.com/kunchenguid/tasks-axi/compare/tasks-axi-v0.2.3...tasks-axi-v0.2.4) (2026-07-23)
+
+
+### Bug Fixes
+
+* execute every PR body compliance event ([#22](https://github.com/kunchenguid/tasks-axi/issues/22)) ([ce32241](https://github.com/kunchenguid/tasks-axi/commit/ce322417a186a90bfa6ff27e4e2243789166db09))
+
 ## [0.2.3](https://github.com/kunchenguid/tasks-axi/compare/tasks-axi-v0.2.2...tasks-axi-v0.2.3) (2026-07-13)
 
 
