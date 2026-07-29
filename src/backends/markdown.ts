@@ -754,6 +754,9 @@ export class MarkdownStore implements Store {
         if (task.resolution !== resolution) {
           if (resolution) {
             task.resolution = resolution;
+            if (!task.closed) {
+              task.closed = normalizeDate(this.now(), "closed date");
+            }
           } else {
             delete task.resolution;
           }
