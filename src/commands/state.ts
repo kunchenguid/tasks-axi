@@ -22,13 +22,7 @@ import {
 import { AxiError, notFound, requireCapability } from "../errors.js";
 import { formatCountLine } from "../format.js";
 import { validateDependencyId } from "../id.js";
-import type {
-  Dep,
-  Hold,
-  HoldKind,
-  TaskLink,
-  TaskPatch,
-} from "../model.js";
+import type { Dep, Hold, HoldKind, TaskLink, TaskPatch } from "../model.js";
 import { HOLD_KINDS } from "../model.js";
 import { PUBLIC_FOLLOWUP_KIND } from "../public-followup.js";
 import type { Store } from "../store.js";
@@ -96,6 +90,7 @@ Held work is excluded by default; --include-held shows it in a separate held gro
 
 export const MV_HELP = `usage: tasks-axi mv <id> [<id>...] --to <path-or-dir>
 Move one or more tasks to another backlog file in a single atomic transaction.
+The active source backend must be markdown; other backends are refused without mutation.
 Pass a whole connected set (a blocker and its dependents) to move it together;
 their blocked-by links and reason strings are preserved byte-exact.
 Duplicate ids are ignored after their first occurrence.
@@ -682,7 +677,7 @@ export async function mvCommand(
   }
 
   // A cross-backend move would recreate the task in a markdown file and
-  // delete the source record — a data-loss path, so refuse it outright.
+  // delete the source record. Refuse that data-loss path outright.
   if (!(store instanceof MarkdownStore)) {
     throw new AxiError(
       `mv moves tasks between markdown backlog files; the ${store.capabilities().backend} backend cannot be a move source`,
