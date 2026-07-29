@@ -1,4 +1,5 @@
 import { AxiError, exitCodeForError } from "axi-sdk-js";
+import type { Capabilities, Store } from "./store.js";
 import {
   type SuggestionGlobals,
   withSuggestionGlobals,
@@ -44,4 +45,18 @@ export function unsupported(capability: string, backend: string): AxiError {
     `The ${backend} backend does not support ${capability}`,
     "UNSUPPORTED",
   );
+}
+
+/**
+ * Enforce a declared `Capabilities` boolean before a command touches the
+ * store: a backend that declares a capability false gets a structured
+ * refusal naming the user-facing feature, never a raw backend error.
+ */
+export function requireCapability(
+  store: Store,
+  capability: Exclude<keyof Capabilities, "backend">,
+  feature: string,
+): void {
+  const caps = store.capabilities();
+  if (!caps[capability]) throw unsupported(feature, caps.backend);
 }

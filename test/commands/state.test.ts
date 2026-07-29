@@ -1,4 +1,10 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -13,7 +19,7 @@ import {
   unholdCommand,
 } from "../../src/commands/state.js";
 import { listCommand } from "../../src/commands/crud.js";
-import { makeBacklog } from "../helpers.js";
+import { makeBacklog, makeFakeBackendBacklog } from "../helpers.js";
 
 describe("state commands", () => {
   it("rejects malformed primary ids before store lookup", async () => {
@@ -536,6 +542,25 @@ describe("state commands", () => {
         b.cleanup();
       }
     });
+
+    it("refuses when the backend declares deps unsupported", async () => {
+      const b = makeFakeBackendBacklog({ deps: false });
+      try {
+        await expect(
+          blockCommand(["cert-cleanup", "--by", "owns-widget-h7"], b.ctx),
+        ).rejects.toMatchObject({
+          code: "UNSUPPORTED",
+          message: "The fake backend does not support dependencies",
+        });
+        expect(b.read()).not.toContain("blocked-by: owns-widget-h7");
+        await expect(
+          unblockCommand(["lease-adopt", "--by", "lease-core-t4"], b.ctx),
+        ).rejects.toMatchObject({ code: "UNSUPPORTED" });
+        expect(b.read()).toContain("blocked-by: lease-core-t4");
+      } finally {
+        b.cleanup();
+      }
+    });
   });
 
   describe("ready", () => {
@@ -895,6 +920,24 @@ describe("state commands", () => {
       } finally {
         b.cleanup();
         target.cleanup();
+      }
+    });
+
+    it("refuses a non-markdown source instead of copy-deleting the task", async () => {
+      const b = makeFakeBackendBacklog();
+      const targetPath = join(b.dir, "target.md");
+      try {
+        await expect(
+          mvCommand(["cert-cleanup", "--to", targetPath], b.ctx),
+        ).rejects.toMatchObject({
+          code: "UNSUPPORTED",
+          message:
+            "mv moves tasks between markdown backlog files; the fake backend cannot be a move source",
+        });
+        expect(await b.ctx.store.get("cert-cleanup")).not.toBeNull();
+        expect(existsSync(targetPath)).toBe(false);
+      } finally {
+        b.cleanup();
       }
     });
 
