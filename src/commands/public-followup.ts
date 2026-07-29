@@ -14,7 +14,7 @@ import {
   publicFollowupsByDeliveryState,
   readyPublicFollowups,
 } from "../derive.js";
-import { AxiError, notFound } from "../errors.js";
+import { AxiError, notFound, requireCapability } from "../errors.js";
 import { formatCountLine } from "../format.js";
 import type { Task } from "../model.js";
 import {
@@ -93,10 +93,14 @@ const SUBCOMMAND_HELP: Record<string, string> = {
     "usage: tasks-axi public-followup waive <id> --reason <text> --approved-by captain [--json]",
 };
 
+function hasSubcommand(command: string | undefined): command is string {
+  return command !== undefined && Object.hasOwn(SUBCOMMAND_HELP, command);
+}
+
 export function publicFollowupSubcommandHelp(
   command: string | undefined,
 ): string | undefined {
-  return command === undefined ? undefined : SUBCOMMAND_HELP[command];
+  return hasSubcommand(command) ? SUBCOMMAND_HELP[command] : undefined;
 }
 
 export async function publicFollowupCommand(
@@ -104,6 +108,13 @@ export async function publicFollowupCommand(
   context?: TasksContext,
 ): Promise<string> {
   const [command, ...args] = rawArgs;
+  if (hasSubcommand(command)) {
+    requireCapability(
+      requireCtx(context).store,
+      "publicFollowups",
+      "public-followup",
+    );
+  }
   switch (command) {
     case "add":
       return publicFollowupAdd(args, context);

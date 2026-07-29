@@ -13,7 +13,7 @@ import { deriveLinks, extractTags } from "../backends/markdown-grammar.js";
 import { renderMutation, stateLabel, taskToJson } from "../confirm.js";
 import { requireCtx, type TasksContext } from "../context.js";
 import { blockedIds, heldTasks } from "../derive.js";
-import { AxiError, notFound } from "../errors.js";
+import { AxiError, notFound, requireCapability } from "../errors.js";
 import { parseFields } from "../fields.js";
 import { formatCountLine } from "../format.js";
 import {
@@ -287,6 +287,7 @@ export async function addCommand(
   if (deps.some((dep) => dep.id === id)) {
     throw new AxiError("A task cannot block itself", "VALIDATION_ERROR");
   }
+  if (deps.length > 0) requireCapability(store, "deps", "dependencies");
   await requireExistingBlockers(store, deps);
   const links = parseLinks(pr, report);
 

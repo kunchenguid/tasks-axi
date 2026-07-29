@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MarkdownStore } from "../src/backends/markdown.js";
 import type { TasksContext } from "../src/context.js";
+import type { Capabilities, Store } from "../src/store.js";
 
 export const FIXTURE = readFileSync(
   new URL("./fixtures/backlog.md", import.meta.url),
@@ -79,4 +80,39 @@ export function makeBacklog(
     },
     cleanup: () => rmSync(dir, { recursive: true, force: true }),
   };
+}
+
+export interface FakeBackendBacklog extends Omit<TempBacklog, "store"> {
+  store: Store;
+}
+
+/**
+ * A non-markdown backend for seam tests: a real MarkdownStore wrapped behind
+ * the plain Store interface (so it fails `instanceof MarkdownStore`),
+ * reporting backend "fake" with the given capability overrides.
+ */
+export function makeFakeBackendBacklog(
+  overrides: Partial<Capabilities> = {},
+  content = FIXTURE,
+): FakeBackendBacklog {
+  const b = makeBacklog(content);
+  const inner = b.store;
+  const store: Store = {
+    capabilities: () => ({
+      ...inner.capabilities(),
+      backend: "fake",
+      ...overrides,
+    }),
+    create: (input) => inner.create(input),
+    get: (id) => inner.get(id),
+    update: (id, patch) => inner.update(id, patch),
+    remove: (id) => inner.remove(id),
+    list: (query) => inner.list(query),
+    transition: (id, to, opts) => inner.transition(id, to, opts),
+    addDep: (id, dep) => inner.addDep(id, dep),
+    removeDep: (id, dep) => inner.removeDep(id, dep),
+    updatePublicFollowup: (id, mutation) =>
+      inner.updatePublicFollowup(id, mutation),
+  };
+  return { ...b, store, ctx: { store, config: b.ctx.config } };
 }

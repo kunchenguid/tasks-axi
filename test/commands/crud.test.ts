@@ -8,7 +8,7 @@ import {
   showCommand,
   updateCommand,
 } from "../../src/commands/crud.js";
-import { makeBacklog } from "../helpers.js";
+import { makeBacklog, makeFakeBackendBacklog } from "../helpers.js";
 
 describe("crud commands", () => {
   describe("add", () => {
@@ -23,6 +23,24 @@ describe("crud commands", () => {
         expect(out).toContain("state: queued");
         expect(out).toContain("Run `tasks-axi start new-q1`");
         expect(b.read()).toContain("- [ ] new-q1 - a fresh task");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("refuses --blocked-by when the backend declares deps unsupported", async () => {
+      const b = makeFakeBackendBacklog({ deps: false });
+      try {
+        await expect(
+          addCommand(
+            ["new-q1", "a fresh task", "--blocked-by", "cert-cleanup"],
+            b.ctx,
+          ),
+        ).rejects.toMatchObject({
+          code: "UNSUPPORTED",
+          message: "The fake backend does not support dependencies",
+        });
+        expect(await b.ctx.store.get("new-q1")).toBeNull();
       } finally {
         b.cleanup();
       }
