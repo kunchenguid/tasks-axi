@@ -359,6 +359,33 @@ describe("state commands", () => {
       }
     });
 
+    it("stamps and persists a close date when backfilling an undated done task", async () => {
+      const b = makeBacklog();
+      try {
+        const out = JSON.parse(
+          await doneCommand(
+            ["multi-line-w8", "--dropped", "--no-prune", "--json"],
+            b.ctx,
+          ),
+        ) as {
+          already?: boolean;
+          task: { closed: string; resolution: string };
+        };
+        expect(out.already).toBe(true);
+        expect(out.task.closed).toBe("2026-07-01");
+        expect(out.task.resolution).toBe("dropped");
+        expect(b.read()).toContain(
+          "- [x] multi-line-w8 - SCOUT - data/multi-line-w8/report.md: isolated e2e of the feature. (closed 2026-07-01)",
+        );
+
+        const persisted = await b.store.get("multi-line-w8");
+        expect(persisted?.closed).toBe("2026-07-01");
+        expect(persisted?.resolution).toBe("dropped");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("exposes resolution as an opt-in list column", async () => {
       const b = makeBacklog();
       try {
