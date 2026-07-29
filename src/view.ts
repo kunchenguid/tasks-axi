@@ -47,8 +47,7 @@ export function toRow(task: Task, opts: RowOptions): Record<string, unknown> {
     priority: task.priority ?? "-",
     created: task.created ?? "-",
     closed: task.closed ?? "-",
-    resolution:
-      task.state === "done" ? (task.resolution ?? "completed") : "-",
+    resolution: task.state === "done" ? (task.resolution ?? "completed") : "-",
     delivery_state: task.public_followup?.delivery.state ?? "-",
     deps:
       task.deps.length > 0
