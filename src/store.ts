@@ -11,13 +11,18 @@ import type {
 } from "./model.js";
 
 /**
- * Backend capability descriptor (report §8). Optional capabilities degrade
- * gracefully: the CLI computes a missing capability from the core verbs, or
- * returns a structured error naming the capability — never a raw backend error.
+ * Backend capability descriptor (report §8).
+ *
+ * Command handlers must enforce each capability they depend on with
+ * `requireCapability` before calling the store. A false declaration produces a
+ * structured UNSUPPORTED error naming the feature and backend.
+ * `prune` and `render` retain their method-presence checks because their Store
+ * methods are optional.
  */
 export interface Capabilities {
   /** Backend identifier, e.g. "markdown". */
   backend: string;
+  /** Supports dependency-writing commands. */
   deps: boolean;
   prune: boolean;
   comments: boolean;
@@ -27,7 +32,7 @@ export interface Capabilities {
   customStates: boolean;
   /** Does the server assign its own ids (remote trackers)? */
   serverMintsIds: boolean;
-  /** Supports the durable, receipt-gated public-followup state machine. */
+  /** Supports every command in the durable public-followup namespace. */
   publicFollowups: boolean;
 }
 

@@ -204,16 +204,16 @@ describe("public-followup commands", () => {
   it("refuses every subcommand when the backend declares publicFollowups unsupported", async () => {
     const b = makeFakeBackendBacklog({ publicFollowups: false }, EMPTY);
     try {
-      await expect(publicFollowupCommand(["ready"], b.ctx)).rejects.toMatchObject(
-        {
-          code: "UNSUPPORTED",
-          message: "The fake backend does not support public-followup",
-        },
-      );
+      await expect(
+        publicFollowupCommand(["ready"], b.ctx),
+      ).rejects.toMatchObject({
+        code: "UNSUPPORTED",
+        message: "The fake backend does not support public-followup",
+      });
       // An unknown subcommand still reads as a usage error, not a capability one.
-      await expect(publicFollowupCommand(["bogus"], b.ctx)).rejects.toMatchObject(
-        { code: "VALIDATION_ERROR" },
-      );
+      await expect(
+        publicFollowupCommand(["bogus"], b.ctx),
+      ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
       await expect(
         publicFollowupCommand(["toString"], b.ctx),
       ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
