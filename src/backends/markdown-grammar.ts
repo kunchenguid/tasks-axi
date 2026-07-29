@@ -1,5 +1,13 @@
 import { AxiError } from "../errors.js";
-import type { Dep, Hold, HoldKind, State, Task, TaskLink } from "../model.js";
+import type {
+  Dep,
+  Hold,
+  HoldKind,
+  Resolution,
+  State,
+  Task,
+  TaskLink,
+} from "../model.js";
 import { HOLD_KINDS } from "../model.js";
 import {
   PUBLIC_FOLLOWUP_KIND,
@@ -116,8 +124,10 @@ const TAIL_REPO = /\s*\((?:[^()]*\+\s*)?repo:\s*([^)]+)\)\s*$/;
 const TAIL_KIND = /\s*\(kind:\s*([^)]+)\)\s*$/;
 const TAIL_PRIORITY = /\s*\(priority:\s*([0-4])\)\s*$/;
 const TAIL_SINCE = new RegExp(`\\s*\\(since\\s+(${DATE})\\)\\s*$`);
+// The `closed` verb marks a deliberately dropped task (resolution: dropped);
+// `merged`/`reported`/`done` are completed-work verbs chosen from the links.
 const TAIL_CLOSED = new RegExp(
-  `\\s*\\((?:merged|reported|done|closed)\\s+(${DATE})\\)\\s*$`,
+  `\\s*\\((merged|reported|done|closed)\\s+(${DATE})\\)\\s*$`,
 );
 const TAIL_HOLD = /\s*\(hold:\s*([^()]+)\)\s*$/;
 const TAIL_HOLD_KIND = new RegExp(
@@ -177,6 +187,7 @@ export interface ExtractedTags {
   deps: Dep[];
   created?: string;
   closed?: string;
+  resolution?: Resolution;
   priority?: number;
   hold?: Hold;
   links: TaskLink[];
@@ -194,6 +205,7 @@ export function extractTags(rest: string): ExtractedTags {
   let kindTag: string | undefined;
   let created: string | undefined;
   let closed: string | undefined;
+  let resolution: Resolution | undefined;
   let priority: number | undefined;
   let holdReason: string | undefined;
   let holdKind: HoldKind | undefined;
@@ -243,7 +255,10 @@ export function extractTags(rest: string): ExtractedTags {
     }
     m = title.match(TAIL_CLOSED);
     if (m) {
-      if (closed === undefined) closed = m[1];
+      if (closed === undefined) {
+        closed = m[2];
+        if (m[1] === "closed") resolution = "dropped";
+      }
       title = title.slice(0, m.index);
       stripping = true;
       continue;
@@ -283,7 +298,18 @@ export function extractTags(rest: string): ExtractedTags {
         }
       : undefined;
 
-  return { title, kind, repo, deps, created, closed, priority, hold, links };
+  return {
+    title,
+    kind,
+    repo,
+    deps,
+    created,
+    closed,
+    resolution,
+    priority,
+    hold,
+    links,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -291,6 +317,7 @@ export function extractTags(rest: string): ExtractedTags {
 // ---------------------------------------------------------------------------
 
 function closureVerb(task: Task): string {
+  if (task.resolution === "dropped") return "closed";
   if (task.links.some((l) => l.kind === "pr")) return "merged";
   if (task.links.some((l) => l.kind === "report")) return "reported";
   return "done";
@@ -476,6 +503,7 @@ function buildTask(
   if (body !== undefined) task.body = body;
   if (tags.created) task.created = tags.created;
   if (tags.closed) task.closed = tags.closed;
+  if (tags.resolution) task.resolution = tags.resolution;
   if (tags.priority !== undefined) task.priority = tags.priority;
   if (tags.hold) task.hold = tags.hold;
   return task;

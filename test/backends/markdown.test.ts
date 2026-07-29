@@ -47,6 +47,49 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("rejects resolution on non-done task input", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.create({
+            id: "active-drop-q1",
+            title: "active dropped task",
+            state: "queued",
+            resolution: "dropped",
+          }),
+        ).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: "resolution applies only to Done tasks",
+        });
+        expect(await b.store.get("active-drop-q1")).toBeNull();
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("stamps and round-trips undated done task input with resolution", async () => {
+      const b = makeBacklog();
+      try {
+        const created = await b.store.create({
+          id: "imported-drop-d1",
+          title: "imported dropped task",
+          state: "done",
+          resolution: "dropped",
+        });
+        expect(created.closed).toBe("2026-07-01");
+        expect(created.resolution).toBe("dropped");
+        expect(b.read()).toContain(
+          "- [x] imported-drop-d1 - imported dropped task (closed 2026-07-01)",
+        );
+
+        const persisted = await b.store.get("imported-drop-d1");
+        expect(persisted?.closed).toBe("2026-07-01");
+        expect(persisted?.resolution).toBe("dropped");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects a duplicate id with CONFLICT", async () => {
       const b = makeBacklog();
       try {
@@ -656,6 +699,29 @@ describe("MarkdownStore", () => {
         // In-flight renders in firstmate's `- [ ]` checkbox form (same bullet as
         // Queued); the In flight section header is what marks the state.
         expect(read).toMatch(/## In flight[\s\S]*- \[ \] cert-cleanup/);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("records a dropped resolution on done and clears it on reopen", async () => {
+      const b = makeBacklog();
+      try {
+        const dropped = await b.store.transition("cert-cleanup", "done", {
+          dropped: true,
+        });
+        expect(dropped.resolution).toBe("dropped");
+        expect(b.read()).toContain("(closed 2026-07-01)");
+
+        const reopened = await b.store.transition("cert-cleanup", "queued");
+        expect(reopened.resolution).toBeUndefined();
+        expect(reopened.closed).toBeUndefined();
+        expect(b.read()).not.toContain("(closed 2026-07-01)");
+
+        // A later plain done is a normal completion, not a lingering drop.
+        const redone = await b.store.transition("cert-cleanup", "done");
+        expect(redone.resolution).toBeUndefined();
+        expect(b.read()).toContain("(done 2026-07-01)");
       } finally {
         b.cleanup();
       }
