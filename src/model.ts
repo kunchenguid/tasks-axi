@@ -19,7 +19,7 @@ export type DerivedState = State | "blocked" | "held";
  * How a Done task ended: finished (`completed`) or deliberately abandoned
  * (`dropped`). Meaningful only when `state = "done"`; absent means completed,
  * so plain `done` output is unchanged. `dropped` still counts as terminal
- * everywhere - derivation, sections, and transitions are untouched.
+ * everywhere; derivation, sections, and transitions are untouched.
  */
 export const RESOLUTIONS = ["completed", "dropped"] as const;
 export type Resolution = (typeof RESOLUTIONS)[number];
@@ -90,7 +90,7 @@ export interface Task {
   /** Maps to `(since ...)`. */
   created?: string;
   updated?: string;
-  /** Maps to `(merged ...)` / `(reported ...)` / `(done ...)` on render. */
+  /** Maps to a terminal closure tag, using `(closed ...)` when dropped. */
   closed?: string;
   /** Done-only closure kind; `dropped` renders as `(closed ...)`. Absent = completed. */
   resolution?: Resolution;
