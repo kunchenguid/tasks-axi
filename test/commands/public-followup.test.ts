@@ -214,6 +214,9 @@ describe("public-followup commands", () => {
       await expect(publicFollowupCommand(["bogus"], b.ctx)).rejects.toMatchObject(
         { code: "VALIDATION_ERROR" },
       );
+      await expect(
+        publicFollowupCommand(["toString"], b.ctx),
+      ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
     } finally {
       b.cleanup();
     }
