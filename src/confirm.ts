@@ -89,6 +89,7 @@ export function taskToJson(task: Task, all?: Task[]): Record<string, unknown> {
     priority: task.priority ?? null,
     created: task.created ?? null,
     closed: task.closed ?? null,
+    resolution: task.state === "done" ? (task.resolution ?? "completed") : null,
     deps: task.deps.map((d) => ({
       type: d.type,
       id: d.id,

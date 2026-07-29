@@ -661,6 +661,29 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("records a dropped resolution on done and clears it on reopen", async () => {
+      const b = makeBacklog();
+      try {
+        const dropped = await b.store.transition("cert-cleanup", "done", {
+          dropped: true,
+        });
+        expect(dropped.resolution).toBe("dropped");
+        expect(b.read()).toContain("(closed 2026-07-01)");
+
+        const reopened = await b.store.transition("cert-cleanup", "queued");
+        expect(reopened.resolution).toBeUndefined();
+        expect(reopened.closed).toBeUndefined();
+        expect(b.read()).not.toContain("(closed 2026-07-01)");
+
+        // A later plain done is a normal completion, not a lingering drop.
+        const redone = await b.store.transition("cert-cleanup", "done");
+        expect(redone.resolution).toBeUndefined();
+        expect(b.read()).toContain("(done 2026-07-01)");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("carries a multi-paragraph body through start (queued -> in_flight)", async () => {
       const b = makeBacklog(multiParaQueued);
       try {
