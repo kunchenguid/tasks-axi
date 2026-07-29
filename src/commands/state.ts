@@ -164,8 +164,12 @@ export async function doneCommand(
   const current = await store.get(id);
   if (!current) throw notFound(id, { globals: context?.suggestionGlobals });
 
-  const opts: { pr?: string; report?: string; note?: string; dropped?: boolean } =
-    {};
+  const opts: {
+    pr?: string;
+    report?: string;
+    note?: string;
+    dropped?: boolean;
+  } = {};
   if (pr !== undefined) opts.pr = pr;
   if (report !== undefined) opts.report = report;
   if (note !== undefined) opts.note = note;

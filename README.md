@@ -126,8 +126,9 @@ The long task body is truncated by default — the whole point is that `list` st
 Every write leads with a terse `ok:` line confirming the write result, including the resulting task state when the command changes one (e.g. `ok: start lavish-share -> In flight`, `ok: done grok-harness-g7 -> Done (pr <url>)`, `ok: render -> normalized 3`), followed by state-aware next-step hints that never suggest an action the command just performed.
 Mutations are idempotent and report what changed (`already: true` on a no-op), so re-running one is safe.
 Running `done` again on an already Done task can still backfill a new `--pr`, `--report`, or `--note` without changing the original close date.
-`done <id> --dropped` records the close as deliberately abandoned rather than finished (`resolution: dropped`), so the record stays honest about done-and-shipped versus dropped work; plain `done` is an unchanged, implicit `completed`.
-The resolution shows in `show`, `--json`, and the opt-in `list --fields resolution` column, and `reopen` clears it.
+`done <id> --dropped` records the close as deliberately abandoned rather than completed (`resolution: dropped`); plain `done` retains the implicit `completed` default and writes no resolution tag.
+`show` and the opt-in `list --fields resolution` column report `completed` or `dropped` for Done tasks and `-` otherwise; JSON task objects use the same Done values and `null` otherwise.
+`reopen` clears the resolution, so a later plain `done` records a normal completion.
 `hold <id> --reason "<text>"` records an intentional pause without turning it into prose, and `unhold <id>` clears it.
 The reason must be single-line text without parentheses because parentheses are reserved for canonical markdown tags.
 Active holds are excluded from `ready`; a hold with `--until YYYY-MM-DD` becomes inactive on and after that date, so the task can surface as ready again if nothing else blocks it.
