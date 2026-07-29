@@ -10,6 +10,8 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 - `src/cli.ts` — `runAxiCli` wiring: `DESCRIPTION`, `TOP_HELP`, the verb→handler map (with aliases create/view/edit/delete/close), the optional `task` noun prefix, and the global `--backend` / `--file` flags (stripped before handlers, parsed for `resolveContext`).
 - `src/context.ts` — `resolveTasksContext` builds the backend `Store` + `ResolvedConfig`; every command receives this `TasksContext`.
 - `src/store.ts` - the `Store` interface and `Capabilities`. Core contract: `create/get/update/remove/list/transition/addDep/removeDep/updatePublicFollowup`. `prune`/`render` are optional and capability-gated.
+  Declared capability booleans are enforced at the command layer with `requireCapability` (`src/errors.ts`) - gate any new capability-dependent command there, never inside a backend.
+  `mv` refuses a non-markdown source outright (`src/commands/state.ts`): a cross-backend move would copy-then-delete and lose backend-specific state.
 - `src/model.ts` — the `Task` data model (report §5).
 - `src/derive.ts` - worker `blocked` / `ready` / active `held` and public delivery readiness are derived in the CLI from `list` + the dep graph + hold date gates, never Store methods, so every backend gets them for free.
 - `src/backends/markdown*.ts` — the only P1 backend.

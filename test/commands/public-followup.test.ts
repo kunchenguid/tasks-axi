@@ -19,7 +19,11 @@ import {
   clonePublicFollowup,
   encodePublicFollowup,
 } from "../../src/public-followup.js";
-import { makeBacklog, type TempBacklog } from "../helpers.js";
+import {
+  makeBacklog,
+  makeFakeBackendBacklog,
+  type TempBacklog,
+} from "../helpers.js";
 
 const EMPTY =
   "# Backlog\n\n## In flight\n\n## Queued\n- [ ] ordinary-q1 - ordinary work\n\n## Done\n";
@@ -197,6 +201,24 @@ async function begin(b: TempBacklog): Promise<Record<string, any>> {
 }
 
 describe("public-followup commands", () => {
+  it("refuses every subcommand when the backend declares publicFollowups unsupported", async () => {
+    const b = makeFakeBackendBacklog({ publicFollowups: false }, EMPTY);
+    try {
+      await expect(publicFollowupCommand(["ready"], b.ctx)).rejects.toMatchObject(
+        {
+          code: "UNSUPPORTED",
+          message: "The fake backend does not support public-followup",
+        },
+      );
+      // An unknown subcommand still reads as a usage error, not a capability one.
+      await expect(publicFollowupCommand(["bogus"], b.ctx)).rejects.toMatchObject(
+        { code: "VALIDATION_ERROR" },
+      );
+    } finally {
+      b.cleanup();
+    }
+  });
+
   it("round-trips canonical typed metadata through render, task update, and move", async () => {
     const b = makeBacklog(EMPTY);
     const target = makeBacklog(
