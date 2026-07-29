@@ -15,6 +15,15 @@ export type State = (typeof STATES)[number];
 /** Explicit state plus derived `blocked`/`held` projections used in display/filters. */
 export type DerivedState = State | "blocked" | "held";
 
+/**
+ * How a Done task ended: finished (`completed`) or deliberately abandoned
+ * (`dropped`). Meaningful only when `state = "done"`; absent means completed,
+ * so plain `done` output is unchanged. `dropped` still counts as terminal
+ * everywhere - derivation, sections, and transitions are untouched.
+ */
+export const RESOLUTIONS = ["completed", "dropped"] as const;
+export type Resolution = (typeof RESOLUTIONS)[number];
+
 export const HOLD_KINDS = [
   "captain",
   "external",
@@ -83,6 +92,8 @@ export interface Task {
   updated?: string;
   /** Maps to `(merged ...)` / `(reported ...)` / `(done ...)` on render. */
   closed?: string;
+  /** Done-only closure kind; `dropped` renders as `(closed ...)`. Absent = completed. */
+  resolution?: Resolution;
   /** Versioned durable public obligation data for kind=public-followup only. */
   public_followup?: PublicFollowup;
   /** Home, harness, external-tracker id/url, and other exotica. */
@@ -103,6 +114,7 @@ export interface TaskInput {
   priority?: number;
   created?: string | null;
   closed?: string;
+  resolution?: Resolution;
   /** Accepted only with kind=public-followup through the dedicated command path. */
   public_followup?: PublicFollowup;
   meta?: Record<string, unknown>;
@@ -124,6 +136,8 @@ export interface TaskPatch {
   /** Set a structured hold, or clear it with null. */
   hold?: Hold | null;
   priority?: number;
+  /** Done-only closure kind; `completed` clears back to the absent default. */
+  resolution?: Resolution;
   meta?: Record<string, unknown>;
 }
 
@@ -136,6 +150,7 @@ export type TaskUpdateChange =
   | "priority"
   | "links"
   | "hold"
+  | "resolution"
   | "meta";
 
 export interface TaskUpdateResult {
@@ -153,6 +168,8 @@ export interface TransitionOpts {
   report?: string;
   /** A note to append to the body. */
   note?: string;
+  /** Record the done as deliberately abandoned (`resolution: dropped`). */
+  dropped?: boolean;
   /** ISO-ish date stamp; defaults to today. */
   date?: string;
 }

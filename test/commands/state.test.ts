@@ -282,6 +282,99 @@ describe("state commands", () => {
       }
     });
 
+    it("records a dropped close with --dropped", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await doneCommand(
+          ["cert-cleanup", "--dropped", "--no-prune"],
+          b.ctx,
+        );
+        expect(out).toContain("done cert-cleanup -> Done (dropped)");
+        expect(b.read()).toContain("(closed 2026-07-01)");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("reports the resolution in --json, defaulting to completed", async () => {
+      const b = makeBacklog();
+      try {
+        const droppedOut = JSON.parse(
+          await doneCommand(
+            ["cert-cleanup", "--dropped", "--no-prune", "--json"],
+            b.ctx,
+          ),
+        ) as { task: { resolution: string } };
+        expect(droppedOut.task.resolution).toBe("dropped");
+
+        const plainOut = JSON.parse(
+          await doneCommand(
+            ["release-validation", "--no-prune", "--json"],
+            b.ctx,
+          ),
+        ) as { task: { resolution: string } };
+        expect(plainOut.task.resolution).toBe("completed");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("is idempotent when re-running --dropped on a dropped task", async () => {
+      const b = makeBacklog();
+      try {
+        await doneCommand(["cert-cleanup", "--dropped", "--no-prune"], b.ctx);
+        const out = JSON.parse(
+          await doneCommand(
+            ["cert-cleanup", "--dropped", "--no-prune", "--json"],
+            b.ctx,
+          ),
+        ) as { already?: boolean; task: { resolution: string } };
+        expect(out.already).toBe(true);
+        expect(out.task.resolution).toBe("dropped");
+        expect(b.read().match(/\(closed 2026-07-01\)/g)).toHaveLength(1);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("backfills --dropped on an already done task without moving the close date", async () => {
+      const b = makeBacklog();
+      try {
+        const out = JSON.parse(
+          await doneCommand(
+            ["lease-core-t4", "--dropped", "--no-prune", "--json"],
+            b.ctx,
+          ),
+        ) as { already?: boolean; task: { resolution: string } };
+        expect(out.already).toBe(true);
+        expect(out.task.resolution).toBe("dropped");
+        const line = b
+          .read()
+          .split("\n")
+          .find((l) => l.startsWith("- [x] lease-core-t4"))!;
+        expect(line).toContain("(closed 2026-06-22)");
+        expect(line).not.toContain("(merged");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("exposes resolution as an opt-in list column", async () => {
+      const b = makeBacklog();
+      try {
+        await doneCommand(["cert-cleanup", "--dropped", "--no-prune"], b.ctx);
+        const out = await listCommand(
+          ["--state", "done", "--fields", "resolution"],
+          b.ctx,
+        );
+        expect(out).toContain("resolution");
+        expect(out).toContain("dropped");
+        expect(out).toContain("completed");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("backfills metadata on an already done task without pruning", async () => {
       const b = makeBacklog();
       try {
@@ -407,6 +500,23 @@ describe("state commands", () => {
           reopenCommand(["lease-core-t4", "extra"], b.ctx),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         expect(b.read()).toContain("- [x] lease-core-t4");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("clears a dropped resolution so re-completion is a plain done", async () => {
+      const b = makeBacklog();
+      try {
+        await doneCommand(["cert-cleanup", "--dropped", "--no-prune"], b.ctx);
+        const reopened = JSON.parse(
+          await reopenCommand(["cert-cleanup", "--json"], b.ctx),
+        ) as { task: { resolution: string | null } };
+        expect(reopened.task.resolution).toBeNull();
+        expect(b.read()).not.toContain("(closed 2026-07-01)");
+
+        await doneCommand(["cert-cleanup", "--no-prune"], b.ctx);
+        expect(b.read()).toContain("(done 2026-07-01)");
       } finally {
         b.cleanup();
       }
