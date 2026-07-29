@@ -628,6 +628,22 @@ describe("public-followup commands", () => {
           delivery: { state: "posted", receipt: { state: "posted" } },
         },
       });
+      const completedSource = b.read();
+      await expect(
+        doneCommand(
+          ["public-final-ab", "--dropped", "--no-prune", "--json"],
+          b.ctx,
+        ),
+      ).rejects.toMatchObject({
+        code: "VALIDATION_ERROR",
+        message: expect.stringContaining(
+          "resolution cannot change through generic update",
+        ),
+      });
+      expect(b.read()).toBe(completedSource);
+      expect(
+        (await b.store.get("public-final-ab"))?.resolution,
+      ).toBeUndefined();
       const duplicate = JSON.parse(
         await run(b, "record-delivery", args),
       ) as Record<string, any>;

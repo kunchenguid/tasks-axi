@@ -580,8 +580,19 @@ export class MarkdownStore implements Store {
     if (input.closed !== undefined) {
       task.closed = normalizeDate(input.closed, "closed date");
     }
-    if (input.resolution !== undefined && input.resolution !== "completed") {
-      task.resolution = input.resolution;
+    if (input.resolution !== undefined) {
+      if (state !== "done") {
+        throw new AxiError(
+          "resolution applies only to Done tasks",
+          "VALIDATION_ERROR",
+        );
+      }
+      if (!task.closed) {
+        task.closed = normalizeDate(this.now(), "closed date");
+      }
+      if (input.resolution !== "completed") {
+        task.resolution = input.resolution;
+      }
     }
     return task;
   }
@@ -647,10 +658,11 @@ export class MarkdownStore implements Store {
           patch.archiveBody ||
           (patch.addBodyLines?.length ?? 0) > 0 ||
           (patch.addLinks?.length ?? 0) > 0 ||
-          patch.hold !== undefined)
+          patch.hold !== undefined ||
+          patch.resolution !== undefined)
       ) {
         throw new AxiError(
-          "Public-followup content and holds cannot change through generic update",
+          "Public-followup content, holds, and resolution cannot change through generic update",
           "VALIDATION_ERROR",
           ["Create a successor obligation when the public promise changes"],
         );
