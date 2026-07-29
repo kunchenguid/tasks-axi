@@ -291,6 +291,7 @@ function taskToInput(task: Task): TaskInput {
   if (task.priority !== undefined) input.priority = task.priority;
   input.created = task.created ?? null;
   if (task.closed) input.closed = task.closed;
+  if (task.resolution) input.resolution = task.resolution;
   if (task.public_followup) {
     input.public_followup = clonePublicFollowup(task.public_followup);
   }
@@ -579,6 +580,9 @@ export class MarkdownStore implements Store {
     if (input.closed !== undefined) {
       task.closed = normalizeDate(input.closed, "closed date");
     }
+    if (input.resolution !== undefined && input.resolution !== "completed") {
+      task.resolution = input.resolution;
+    }
     return task;
   }
 
@@ -736,6 +740,24 @@ export class MarkdownStore implements Store {
         if (task.priority !== priority) {
           task.priority = priority;
           markChanged("priority");
+        }
+      }
+      if (patch.resolution !== undefined) {
+        if (task.state !== "done") {
+          throw new AxiError(
+            "resolution applies only to Done tasks",
+            "VALIDATION_ERROR",
+          );
+        }
+        const resolution =
+          patch.resolution === "completed" ? undefined : patch.resolution;
+        if (task.resolution !== resolution) {
+          if (resolution) {
+            task.resolution = resolution;
+          } else {
+            delete task.resolution;
+          }
+          markChanged("resolution");
         }
       }
       if (patch.meta) {
@@ -993,11 +1015,16 @@ export class MarkdownStore implements Store {
       task.state = to;
       if (to === "done") {
         task.closed = date;
+        // A fresh `done` records the resolution outright; reopen (below)
+        // cleared any previous drop, so plain completions stay tag-free.
+        task.resolution = opts.dropped ? "dropped" : undefined;
       } else if (to === "in_flight") {
         if (!task.created) task.created = date;
         task.closed = undefined;
+        task.resolution = undefined;
       } else {
         task.closed = undefined;
+        task.resolution = undefined;
       }
       task.updated = this.now();
 

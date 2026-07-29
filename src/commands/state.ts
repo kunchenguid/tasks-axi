@@ -42,6 +42,7 @@ aliases: close
 Re-running on an already Done task backfills links/notes without changing the close date.
 flags:
   --pr <url>, --report <path>, --note "<text>"
+  --dropped   record the close as deliberately abandoned (resolution: dropped)
   --keep <n> (default from config), --no-prune
   --json   print the resulting task as a JSON object
 examples:
@@ -153,6 +154,7 @@ export async function doneCommand(
     takeFlag(args, "--report"),
   );
   const note = requireNonEmptyFlagValue("--note", takeFlag(args, "--note"));
+  const dropped = takeBoolFlag(args, "--dropped");
   const keepRaw = takeFlag(args, "--keep");
   const noPrune = takeBoolFlag(args, "--no-prune");
   const positionals = requirePositionals(args, 1, 1, DONE_HELP.split("\n")[0]);
@@ -162,13 +164,15 @@ export async function doneCommand(
   const current = await store.get(id);
   if (!current) throw notFound(id, { globals: context?.suggestionGlobals });
 
-  const opts: { pr?: string; report?: string; note?: string } = {};
+  const opts: { pr?: string; report?: string; note?: string; dropped?: boolean } =
+    {};
   if (pr !== undefined) opts.pr = pr;
   if (report !== undefined) opts.report = report;
   if (note !== undefined) opts.note = note;
+  if (dropped) opts.dropped = true;
 
   if (current.state === "done") {
-    const patch = doneMetadataPatch(pr, report, note);
+    const patch = doneMetadataPatch(pr, report, note, dropped);
     const hasPatch = Object.keys(patch).length > 0;
     let task = current;
     let changed = false;
@@ -181,7 +185,7 @@ export async function doneCommand(
     const all = (await store.list({})).items;
     return renderMutation({
       json,
-      confirm: `done ${id} already -> ${stateLabel(task.state)}${doneExtras(pr, report)}${prunedNote(pruned)}`,
+      confirm: `done ${id} already -> ${stateLabel(task.state)}${doneExtras(pr, report, dropped)}${prunedNote(pruned)}`,
       already: true,
       jsonPayload: {
         ok: true,
@@ -208,7 +212,7 @@ export async function doneCommand(
 
   return renderMutation({
     json,
-    confirm: `done ${id} -> ${stateLabel(task.state)}${doneExtras(pr, report)}${prunedNote(pruned)}`,
+    confirm: `done ${id} -> ${stateLabel(task.state)}${doneExtras(pr, report, dropped)}${prunedNote(pruned)}`,
     jsonPayload: {
       ok: true,
       action: "done",
@@ -224,12 +228,14 @@ export async function doneCommand(
   });
 }
 
-/** The `(pr X, report Y)` parenthetical for a done confirmation, omitted when bare. */
+/** The `(dropped, pr X, report Y)` parenthetical for a done confirmation, omitted when bare. */
 function doneExtras(
   pr: string | undefined,
   report: string | undefined,
+  dropped: boolean,
 ): string {
   const parts: string[] = [];
+  if (dropped) parts.push("dropped");
   if (pr !== undefined) parts.push(`pr ${pr}`);
   if (report !== undefined) parts.push(`report ${report}`);
   return parts.length > 0 ? ` (${parts.join(", ")})` : "";
@@ -258,6 +264,7 @@ function doneMetadataPatch(
   pr: string | undefined,
   report: string | undefined,
   note: string | undefined,
+  dropped: boolean,
 ): TaskPatch {
   const patch: TaskPatch = {};
   const addLinks: TaskLink[] = [];
@@ -265,6 +272,7 @@ function doneMetadataPatch(
   if (report !== undefined) addLinks.push({ kind: "report", url: report });
   if (addLinks.length > 0) patch.addLinks = addLinks;
   if (note !== undefined) patch.addBodyLines = [note];
+  if (dropped) patch.resolution = "dropped";
   return patch;
 }
 
