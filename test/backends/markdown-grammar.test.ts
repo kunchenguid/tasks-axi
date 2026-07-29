@@ -130,6 +130,24 @@ describe("markdown grammar", () => {
       expect(task.title).toContain("report.md (reported 2026-06-22):");
     });
 
+    it("reads a trailing `(closed DATE)` tag as a dropped resolution", () => {
+      const doc = parseBacklog(
+        "# Backlog\n\n## Done\n- [x] drop-d1 - superseded by the v2 plan (closed 2026-06-20)\n",
+      );
+      const task = tasksOf(doc)[0];
+      expect(task.title).toBe("superseded by the v2 plan");
+      expect(task.closed).toBe("2026-06-20");
+      expect(task.resolution).toBe("dropped");
+    });
+
+    it("leaves resolution absent for the completed closure verbs", () => {
+      const done = tasksOf(parseBacklog(FIXTURE)).filter(
+        (t) => t.state === "done",
+      );
+      expect(done.length).toBeGreaterThan(0);
+      for (const task of done) expect(task.resolution).toBeUndefined();
+    });
+
     it("extracts a trailing priority tag", () => {
       const doc = parseBacklog(
         "# Backlog\n\n## Queued\n- [ ] prio-q1 - important work (priority: 2) (since 2026-07-01)\n",
@@ -370,6 +388,29 @@ describe("markdown grammar", () => {
       expect(renderTaskLines(task)).toEqual([
         "- [x] x-q1 - shipped it https://github.com/o/r/pull/9 (merged 2026-07-01)",
       ]);
+    });
+
+    it("renders a dropped task with the `closed` verb, over any link verb", () => {
+      const task: Task = {
+        id: "drop-d1",
+        title: "abandoned despite https://github.com/o/r/pull/9",
+        state: "done",
+        links: [{ kind: "pr", url: "https://github.com/o/r/pull/9" }],
+        deps: [],
+        closed: "2026-07-01",
+        resolution: "dropped",
+      };
+      expect(renderTaskLines(task)).toEqual([
+        "- [x] drop-d1 - abandoned despite https://github.com/o/r/pull/9 (closed 2026-07-01)",
+      ]);
+    });
+
+    it("normalizes a hand-written `(closed DATE)` line byte-stably", () => {
+      const src =
+        "# Backlog\n\n## Done\n- [x] drop-d1 - superseded by the v2 plan (closed 2026-06-20)\n";
+      const doc = parseBacklog(src);
+      markAllDirty(doc);
+      expect(renderBacklog(doc)).toBe(src);
     });
 
     it("renders the body as indented continuation lines", () => {
