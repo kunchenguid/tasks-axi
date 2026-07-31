@@ -16,6 +16,14 @@ import { AxiError } from "./errors.js";
  * additions invisible to the CLI layer.
  */
 
+export interface ResolvedGithubConfig {
+  /** "owner/name"; required when the github backend is active. */
+  repo?: string;
+  inFlightLabel: string;
+  blockedLabel: string;
+  heldLabel: string;
+}
+
 export interface ResolvedConfig {
   backend: string;
   /** Markdown backlog path (resolved to an absolute path). */
@@ -23,6 +31,8 @@ export interface ResolvedConfig {
   /** Optional archive path for pruned tasks (resolved to an absolute path). */
   archivePath?: string;
   doneKeep: number;
+  /** Present when a [github] table exists or the github backend is active. */
+  github?: ResolvedGithubConfig;
 }
 
 export interface ConfigOverrides {
@@ -40,16 +50,23 @@ interface TomlConfig {
     archive?: string;
     done_keep?: number;
   };
+  github?: {
+    repo?: string;
+    in_flight_label?: string;
+    blocked_label?: string;
+    held_label?: string;
+  };
 }
 
 const DEFAULT_KEEP = 10;
 const PATH_CANDIDATES = ["backlog.md", "data/backlog.md"];
-type ConfigTable = "root" | "markdown" | "unsupported";
+type ConfigTable = "root" | "markdown" | "github" | "unsupported";
 
 /**
  * Minimal TOML reader for the tiny config surface we need: a top-level
- * `backend` key and a `[markdown]` table with `path` / `archive` / `done_keep`.
- * `archive` points at the file that receives pruned tasks.
+ * `backend` key, a `[markdown]` table with `path` / `archive` / `done_keep`
+ * (`archive` points at the file that receives pruned tasks), and a `[github]`
+ * table with `repo` plus the projection label names.
  * Intentionally not a general TOML parser.
  */
 export function parseConfigToml(src: string): TomlConfig {
@@ -62,7 +79,9 @@ export function parseConfigToml(src: string): TomlConfig {
 
     const section = line.match(/^\[([^\]]+)\]$/);
     if (section) {
-      table = section[1].trim() === "markdown" ? "markdown" : "unsupported";
+      const name = section[1].trim();
+      table =
+        name === "markdown" || name === "github" ? name : "unsupported";
       continue;
     }
 
@@ -83,6 +102,15 @@ export function parseConfigToml(src: string): TomlConfig {
 
     if (table === "root") {
       config.backend = requireTomlString(value, source);
+      continue;
+    }
+    if (table === "github") {
+      config.github ??= {};
+      const text = requireTomlString(value, source);
+      if (key === "repo") config.github.repo = text;
+      if (key === "in_flight_label") config.github.in_flight_label = text;
+      if (key === "blocked_label") config.github.blocked_label = text;
+      if (key === "held_label") config.github.held_label = text;
       continue;
     }
     config.markdown ??= {};
@@ -131,6 +159,15 @@ function configKeySource(
     (key === "path" || key === "archive" || key === "done_keep")
   ) {
     return `markdown.${key}`;
+  }
+  if (
+    table === "github" &&
+    (key === "repo" ||
+      key === "in_flight_label" ||
+      key === "blocked_label" ||
+      key === "held_label")
+  ) {
+    return `github.${key}`;
   }
   return undefined;
 }
@@ -189,6 +226,56 @@ function validatePathValue(
   return value;
 }
 
+const GITHUB_REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+
+function validateGithubRepo(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  if (!GITHUB_REPO_RE.test(value)) {
+    throw new AxiError(
+      'github.repo must be "owner/name"',
+      "VALIDATION_ERROR",
+      ['Set `[github] repo = "owner/name"` in .tasks.toml'],
+    );
+  }
+  return value;
+}
+
+function validateGithubLabel(value: string | undefined, source: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (value.trim() === "" || /[\r\n]/.test(value)) {
+    throw new AxiError(
+      `${source} must be a non-empty single-line label name`,
+      "VALIDATION_ERROR",
+    );
+  }
+  return value;
+}
+
+function resolveGithubConfig(
+  projectToml: TomlConfig,
+  homeToml: TomlConfig,
+  backend: string,
+): ResolvedGithubConfig | undefined {
+  if (!projectToml.github && !homeToml.github && backend !== "github") {
+    return undefined;
+  }
+  const pick = <K extends keyof NonNullable<TomlConfig["github"]>>(key: K) =>
+    projectToml.github?.[key] ?? homeToml.github?.[key];
+  const repo = validateGithubRepo(pick("repo"));
+  const config: ResolvedGithubConfig = {
+    inFlightLabel:
+      validateGithubLabel(pick("in_flight_label"), "github.in_flight_label") ??
+      "in-flight",
+    blockedLabel:
+      validateGithubLabel(pick("blocked_label"), "github.blocked_label") ??
+      "blocked",
+    heldLabel:
+      validateGithubLabel(pick("held_label"), "github.held_label") ?? "held",
+  };
+  if (repo !== undefined) config.repo = repo;
+  return config;
+}
+
 function validateDoneKeep(value: number): number {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new AxiError(
@@ -244,5 +331,7 @@ export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
   if (archive) {
     config.archivePath = isAbsolute(archive) ? archive : resolve(cwd, archive);
   }
+  const github = resolveGithubConfig(projectToml, homeToml, backend);
+  if (github) config.github = github;
   return config;
 }

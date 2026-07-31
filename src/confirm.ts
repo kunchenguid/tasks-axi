@@ -109,6 +109,7 @@ export function taskToJson(task: Task, all?: Task[]): Record<string, unknown> {
       : task.links.map((l) => ({ kind: l.kind, url: l.url })),
     body: task.public_followup ? null : (task.body ?? null),
   };
+  if (task.meta) json.meta = { ...task.meta };
   if (task.public_followup) {
     json.public_followup = clonePublicFollowup(task.public_followup);
   }
