@@ -261,13 +261,16 @@ The CLI surface is unchanged; the backend needs the [GitHub CLI](https://cli.git
 How state is stored (block-authoritative):
 
 - GitHub's native open/closed state owns the terminal boundary.
-  Closing an issue in the UI is a valid, artifact-less `done`; closing it as *not planned* (or *duplicate*) records `resolution: dropped`; reopening lands the task back in Queued.
+  Closing an issue in the UI is a valid, artifact-less `done`; closing it as _not planned_ (or _duplicate_) records `resolution: dropped`; reopening lands the task back in Queued.
   A later `done --pr ...` backfills the artifact idempotently.
 - Everything else lives in one visible, versioned block at the foot of the issue body (`<!-- tasks-axi:v1 -->` ... `<!-- /tasks-axi -->`): the task id, the queued/in-flight state tag, kind, repo, priority, holds, and dependency edges, in the same tag grammar the markdown backend uses.
   The id lives only in the block, so retitling an issue can never orphan a task.
   Maintainers may correct block fields by hand; a mangled block is a loud validation error naming the issue, and deleting the whole block orphans the task (the same way deleting a markdown line does).
 - Every label the backend touches (`in-flight`, `blocked`, `held`; names configurable) is a **write-time projection of derived truth, never read back**.
   Labels are a rendered dashboard, not controls: toggling a chip changes nothing, and any write (or `render`, the manual resync verb) heals all label drift.
+  Missing projection labels are created lazily.
+  GitHub assigns their colors unless maintainers pre-create them.
+  A label projection failure leaves the task mutation successful and surfaces `meta_label_projection_degraded: true`.
   `show` reports `meta_label_drift: true` when the chips disagree with derived truth.
 
 Differences from the markdown backend, stated plainly:
@@ -275,7 +278,7 @@ Differences from the markdown backend, stated plainly:
 - Issues that carry no tasks-axi block are invisible to the CLI, so the backlog coexists with human-filed issues; a dedicated backlog repository keeps reads fast.
 - Each command pays roughly one to one and a half seconds for one GraphQL read; there is no offline mode.
 - There is no lock: GitHub offers no write precondition on issues, so two writers racing on the same issue body can lose one write (a small, accepted TOCTOU window).
-- `rm` de-manages rather than deletes: it strips the block, closes the issue as *not planned*, and leaves title and prose as ordinary issue history.
+- `rm` de-manages rather than deletes: it strips the block, closes the issue as _not planned_, and leaves title and prose as ordinary issue history.
 - `mv`, `prune`, and the `public-followup` namespace are not supported (`prune` is meaningless when closed issues are already the archive; public follow-ups are privacy-sensitive by design and assume a lock GitHub cannot provide).
 - `update --archive-body` posts the superseded body as an issue comment.
 
@@ -283,12 +286,12 @@ Differences from the markdown backend, stated plainly:
 
 The **markdown** and **github** backends ship behind a narrow `Store` interface, so additional backends slot in without touching the CLI layer.
 
-| Backend        | Status  |
-| -------------- | ------- |
-| markdown       | shipped |
-| github         | shipped |
-| sqlite         | planned |
-| jira / linear  | planned |
+| Backend       | Status  |
+| ------------- | ------- |
+| markdown      | shipped |
+| github        | shipped |
+| sqlite        | planned |
+| jira / linear | planned |
 
 ## Development
 

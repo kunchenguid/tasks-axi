@@ -168,6 +168,9 @@ export function parseIssueBody(body: string, ref: string): ParsedIssueBody {
     if (body.includes(BLOCK_START)) {
       throw blockError(ref, "the start marker is not on its own line");
     }
+    if (endIdxs.length > 0 || body.includes(BLOCK_END)) {
+      throw blockError(ref, "end marker without a start marker");
+    }
     return { prose: trimBoundaryBlankLines(lines).join("\n") };
   }
   if (startIdxs.length > 1) {

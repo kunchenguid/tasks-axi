@@ -68,7 +68,10 @@ describe("parseIssueBody", () => {
   });
 
   it("reads a bare tag line as a queued task (state tag absent means queued)", () => {
-    const parsed = parseIssueBody(`${BLOCK_START}\n(id: q-1)\n${BLOCK_END}`, REF);
+    const parsed = parseIssueBody(
+      `${BLOCK_START}\n(id: q-1)\n${BLOCK_END}`,
+      REF,
+    );
     expect(parsed.managed?.inFlight).toBe(false);
   });
 
@@ -87,21 +90,82 @@ describe("parseIssueBody", () => {
   });
 
   const mangled: Array<[string, string, string]> = [
-    ["missing id", `${BLOCK_START}\n(state: in-flight)\n${BLOCK_END}`, "missing (id:) tag"],
-    ["empty block", `${BLOCK_START}\n${BLOCK_END}`, "missing the (id:) tag line"],
-    ["invalid id", `${BLOCK_START}\n(id: bad id)\n${BLOCK_END}`, 'invalid task id "bad id"'],
-    ["duplicate id tags", `${BLOCK_START}\n(id: a-1) (id: b-2)\n${BLOCK_END}`, "duplicate (id:) tag"],
-    ["unknown state", `${BLOCK_START}\n(id: a-1) (state: queued)\n${BLOCK_END}`, 'unknown (state:) value "queued"'],
-    ["leftover content", `${BLOCK_START}\n(id: a-1) stray words\n${BLOCK_END}`, 'unrecognized content "stray words"'],
-    ["bad priority", `${BLOCK_START}\n(id: a-1) (priority: 9)\n${BLOCK_END}`, 'unrecognized content "(priority: 9)"'],
-    ["unknown hold-kind", `${BLOCK_START}\n(id: a-1) (hold-kind: bogus)\n${BLOCK_END}`, 'unrecognized content "(hold-kind: bogus)"'],
-    ["closure tag", `${BLOCK_START}\n(id: a-1) (done 2026-07-01)\n${BLOCK_END}`, "closure tags do not belong in the block"],
-    ["public-followup kind", `${BLOCK_START}\n(id: a-1) (kind: public-followup)\n${BLOCK_END}`, "public-followup obligations are not supported"],
-    ["garbage dep line", `${BLOCK_START}\n(id: a-1)\nnot a dep\n${BLOCK_END}`, 'unrecognized dependency line "not a dep"'],
-    ["tagged dep line", `${BLOCK_START}\n(id: a-1)\nblocked-by: b-2 (repo: x)\n${BLOCK_END}`, "unrecognized dependency line"],
-    ["duplicate start markers", `${BLOCK_START}\n(id: a-1)\n${BLOCK_END}\n${BLOCK_START}\n(id: b-2)\n${BLOCK_END}`, "duplicate start markers"],
+    [
+      "missing id",
+      `${BLOCK_START}\n(state: in-flight)\n${BLOCK_END}`,
+      "missing (id:) tag",
+    ],
+    [
+      "empty block",
+      `${BLOCK_START}\n${BLOCK_END}`,
+      "missing the (id:) tag line",
+    ],
+    [
+      "invalid id",
+      `${BLOCK_START}\n(id: bad id)\n${BLOCK_END}`,
+      'invalid task id "bad id"',
+    ],
+    [
+      "duplicate id tags",
+      `${BLOCK_START}\n(id: a-1) (id: b-2)\n${BLOCK_END}`,
+      "duplicate (id:) tag",
+    ],
+    [
+      "unknown state",
+      `${BLOCK_START}\n(id: a-1) (state: queued)\n${BLOCK_END}`,
+      'unknown (state:) value "queued"',
+    ],
+    [
+      "leftover content",
+      `${BLOCK_START}\n(id: a-1) stray words\n${BLOCK_END}`,
+      'unrecognized content "stray words"',
+    ],
+    [
+      "bad priority",
+      `${BLOCK_START}\n(id: a-1) (priority: 9)\n${BLOCK_END}`,
+      'unrecognized content "(priority: 9)"',
+    ],
+    [
+      "unknown hold-kind",
+      `${BLOCK_START}\n(id: a-1) (hold-kind: bogus)\n${BLOCK_END}`,
+      'unrecognized content "(hold-kind: bogus)"',
+    ],
+    [
+      "closure tag",
+      `${BLOCK_START}\n(id: a-1) (done 2026-07-01)\n${BLOCK_END}`,
+      "closure tags do not belong in the block",
+    ],
+    [
+      "public-followup kind",
+      `${BLOCK_START}\n(id: a-1) (kind: public-followup)\n${BLOCK_END}`,
+      "public-followup obligations are not supported",
+    ],
+    [
+      "garbage dep line",
+      `${BLOCK_START}\n(id: a-1)\nnot a dep\n${BLOCK_END}`,
+      'unrecognized dependency line "not a dep"',
+    ],
+    [
+      "tagged dep line",
+      `${BLOCK_START}\n(id: a-1)\nblocked-by: b-2 (repo: x)\n${BLOCK_END}`,
+      "unrecognized dependency line",
+    ],
+    [
+      "duplicate start markers",
+      `${BLOCK_START}\n(id: a-1)\n${BLOCK_END}\n${BLOCK_START}\n(id: b-2)\n${BLOCK_END}`,
+      "duplicate start markers",
+    ],
     ["missing end marker", `${BLOCK_START}\n(id: a-1)`, "missing end marker"],
-    ["inline start marker", `prose ${BLOCK_START}\n(id: a-1)\n${BLOCK_END}`, "not on its own line"],
+    [
+      "orphaned end marker",
+      `prose\n${BLOCK_END}`,
+      "end marker without a start marker",
+    ],
+    [
+      "inline start marker",
+      `prose ${BLOCK_START}\n(id: a-1)\n${BLOCK_END}`,
+      "not on its own line",
+    ],
   ];
 
   for (const [name, body, detail] of mangled) {

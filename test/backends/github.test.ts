@@ -6,10 +6,7 @@ import type {
   LabelPatch,
 } from "../../src/backends/gh.js";
 import { GithubStore } from "../../src/backends/github.js";
-import {
-  BLOCK_END,
-  BLOCK_START,
-} from "../../src/backends/github-body.js";
+import { BLOCK_END, BLOCK_START } from "../../src/backends/github-body.js";
 import { showCommand } from "../../src/commands/crud.js";
 import type { TasksContext } from "../../src/context.js";
 
@@ -28,6 +25,7 @@ class FakeGh implements GhIssuesClient {
   comments = new Map<number, string[]>();
   calls: string[] = [];
   listCalls = 0;
+  failLabelUpdates = false;
   private next = 1;
 
   seed(partial: Partial<IssueData> & { body: string }): IssueData {
@@ -89,6 +87,9 @@ class FakeGh implements GhIssuesClient {
     this.calls.push(
       `labels #${number} +[${add.join(" ")}] -[${remove.join(" ")}]`,
     );
+    if (this.failLabelUpdates) {
+      return Promise.reject(new Error("label projection unavailable"));
+    }
     const issue = this.find(number);
     issue.labels = [
       ...issue.labels.filter((label) => !remove.includes(label)),
@@ -104,7 +105,10 @@ class FakeGh implements GhIssuesClient {
 }
 
 function makeStore(gh = new FakeGh()): { store: GithubStore; gh: FakeGh } {
-  return { store: new GithubStore({ repo: gh.repo, client: gh, now: () => NOW }), gh };
+  return {
+    store: new GithubStore({ repo: gh.repo, client: gh, now: () => NOW }),
+    gh,
+  };
 }
 
 describe("GithubStore reads", () => {
@@ -112,7 +116,9 @@ describe("GithubStore reads", () => {
     const gh = new FakeGh();
     gh.seed({
       title: "flying",
-      body: managedBody("notes", ["(id: fly-1) (state: in-flight) (repo: app) (kind: ship) (priority: 2)"]),
+      body: managedBody("notes", [
+        "(id: fly-1) (state: in-flight) (repo: app) (kind: ship) (priority: 2)",
+      ]),
       labels: ["in-flight"],
     });
     gh.seed({ title: "waiting", body: managedBody("", ["(id: wait-2)"]) });
@@ -245,7 +251,11 @@ describe("GithubStore create", () => {
 
   it("writes a (since) override only when created differs from today", async () => {
     const { store, gh } = makeStore();
-    await store.create({ id: "old-1", title: "imported", created: "2026-01-05" });
+    await store.create({
+      id: "old-1",
+      title: "imported",
+      created: "2026-01-05",
+    });
     await store.create({ id: "new-2", title: "fresh", created: NOW });
     expect(gh.find(1).body).toContain("(id: old-1) (since 2026-01-05)");
     expect(gh.find(2).body).not.toContain("since");
@@ -273,13 +283,21 @@ describe("GithubStore create", () => {
       store.create({ id: "a-1", title: "again" }),
     ).rejects.toMatchObject({ code: "CONFLICT" });
     await expect(
-      store.create({ id: "b-2", title: "x", deps: [{ type: "blocked-by", id: "nope" }] }),
+      store.create({
+        id: "b-2",
+        title: "x",
+        deps: [{ type: "blocked-by", id: "nope" }],
+      }),
     ).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
       message: 'blocker "nope" not found',
     });
     await expect(
-      store.create({ id: "b-2", title: "x", deps: [{ type: "blocked-by", id: "b-2" }] }),
+      store.create({
+        id: "b-2",
+        title: "x",
+        deps: [{ type: "blocked-by", id: "b-2" }],
+      }),
     ).rejects.toMatchObject({ message: "A task cannot block itself" });
     await expect(
       store.create({ id: "bad id", title: "x" }),
@@ -334,7 +352,9 @@ describe("GithubStore transitions", () => {
     const issue = gh.find(1);
     expect(issue).toMatchObject({ state: "closed", stateReason: "completed" });
     expect(issue.body).toBe(
-      managedBody("https://github.com/o/r/pull/42\nlanded cleanly", ["(id: blk-1)"]),
+      managedBody("https://github.com/o/r/pull/42\nlanded cleanly", [
+        "(id: blk-1)",
+      ]),
     );
     expect(issue.labels).toEqual([]);
     // Completing the blocker clears the dependent's blocked chip in the same command.
@@ -447,6 +467,23 @@ describe("GithubStore hand-edit round-trips (design §5)", () => {
     expect(gh.find(1).labels.sort()).toEqual(["bug", "in-flight", "triage"]);
     expect((await store.get("fly-1"))?.meta?.label_drift).toBeUndefined();
   });
+
+  it("keeps task mutations successful when label projection fails", async () => {
+    const gh = new FakeGh();
+    gh.seed({ body: managedBody("", ["(id: a-1)"]) });
+    gh.failLabelUpdates = true;
+    const { store } = makeStore(gh);
+
+    const task = await store.transition("a-1", "in_flight");
+    expect(task).toMatchObject({
+      state: "in_flight",
+      meta: {
+        label_drift: true,
+        label_projection_degraded: true,
+      },
+    });
+    expect(gh.find(1).body).toContain("(state: in-flight)");
+  });
 });
 
 describe("GithubStore update and rm", () => {
@@ -479,7 +516,11 @@ describe("GithubStore update and rm", () => {
     gh.seed({ body: managedBody("", ["(id: a-1)"]) });
     const { store } = makeStore(gh);
     await store.update("a-1", {
-      hold: { reason: "captain decision pending", kind: "captain", until: "2026-08-09" },
+      hold: {
+        reason: "captain decision pending",
+        kind: "captain",
+        until: "2026-08-09",
+      },
     });
     expect(gh.find(1).body).toContain(
       "(hold: captain decision pending) (hold-kind: captain) (hold-until: 2026-08-09)",
@@ -533,6 +574,19 @@ describe("GithubStore update and rm", () => {
     });
     expect(issue.labels).toEqual(["keeper"]);
     expect(await store.get("blk-1")).toBeNull();
+  });
+
+  it("rm refreshes projections for the remaining backlog", async () => {
+    const gh = new FakeGh();
+    gh.seed({ body: managedBody("", ["(id: gone-1)"]) });
+    gh.seed({
+      body: managedBody("", ["(id: fly-2) (state: in-flight)"]),
+      labels: [],
+    });
+    const { store } = makeStore(gh);
+
+    await store.remove("gone-1");
+    expect(gh.find(2).labels).toEqual(["in-flight"]);
   });
 
   it("dependency edges with reasons round-trip through the block", async () => {
