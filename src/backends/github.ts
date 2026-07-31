@@ -333,21 +333,20 @@ export class GithubStore implements Store {
     }
   }
 
-  /**
-   * Global projection refresh after every write: recompute the display set for
-   * the whole backlog and replace the label set only on issues whose managed
-   * subset changed, preserving human-owned labels. This is the heal-on-write
-   * behavior E1 leg 3 measured.
-   */
+  /** Global projection refresh after every write. */
   private async refreshProjections(records: GithubRecord[]): Promise<void> {
     const managedNames = this.managedLabelNames();
     for (const { record, want } of this.driftedRecords(records)) {
-      const next = [
-        ...record.issue.labels.filter((label) => !managedNames.includes(label)),
-        ...want,
+      const have = record.issue.labels.filter((label) =>
+        managedNames.includes(label),
+      );
+      const add = want.filter((label) => !have.includes(label));
+      const remove = have.filter((label) => !want.includes(label));
+      await this.client.updateLabels(record.issue.number, { add, remove });
+      record.issue.labels = [
+        ...record.issue.labels.filter((label) => !remove.includes(label)),
+        ...add,
       ];
-      await this.client.setLabels(record.issue.number, next);
-      record.issue.labels = next;
       if (record.task.meta?.label_drift) delete record.task.meta.label_drift;
     }
   }
@@ -665,12 +664,11 @@ export class GithubStore implements Store {
       state: "closed",
       state_reason: "not_planned",
     });
-    const managedNames = this.managedLabelNames();
-    const remaining = record.issue.labels.filter(
-      (label) => !managedNames.includes(label),
+    const remove = record.issue.labels.filter((label) =>
+      this.managedLabelNames().includes(label),
     );
-    if (remaining.length !== record.issue.labels.length) {
-      await this.client.setLabels(record.issue.number, remaining);
+    if (remove.length > 0) {
+      await this.client.updateLabels(record.issue.number, { add: [], remove });
     }
     records.splice(records.indexOf(record), 1);
     return record.task;
