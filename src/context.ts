@@ -1,6 +1,10 @@
 import { GithubStore } from "./backends/github.js";
 import { MarkdownStore } from "./backends/markdown.js";
-import { type ConfigOverrides, type ResolvedConfig, resolveConfig } from "./config.js";
+import {
+  type ConfigOverrides,
+  type ResolvedConfig,
+  resolveConfig,
+} from "./config.js";
 import { AxiError } from "./errors.js";
 import type { Store } from "./store.js";
 import type { SuggestionGlobals } from "./suggestions.js";
@@ -8,7 +12,7 @@ import type { SuggestionGlobals } from "./suggestions.js";
 /**
  * The resolved CLI context: the active backend Store plus the config that
  * selected it. The command layer only ever talks to `Store`, so swapping in
- * sqlite/remote backends (P2/P3) never touches arg parsing or rendering.
+ * another backend never touches arg parsing or rendering.
  */
 export interface TasksContext {
   store: Store;
