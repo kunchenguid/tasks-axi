@@ -270,7 +270,7 @@ How state is stored (block-authoritative):
   Labels are a rendered dashboard, not controls: toggling a chip changes nothing, and any write (or `render`, the manual resync verb) heals all label drift.
   Missing projection labels are created lazily.
   GitHub assigns their colors unless maintainers pre-create them.
-  A label projection failure leaves the task mutation successful and surfaces `meta_label_projection_degraded: true`.
+  A label projection failure leaves the task mutation successful, writes a warning to stderr, and surfaces `meta_label_projection_degraded: true`.
   `show` reports `meta_label_drift: true` when the chips disagree with derived truth.
 
 Differences from the markdown backend, stated plainly:

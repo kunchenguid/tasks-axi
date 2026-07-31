@@ -104,10 +104,21 @@ class FakeGh implements GhIssuesClient {
   }
 }
 
-function makeStore(gh = new FakeGh()): { store: GithubStore; gh: FakeGh } {
+function makeStore(gh = new FakeGh()): {
+  store: GithubStore;
+  gh: FakeGh;
+  warnings: string[];
+} {
+  const warnings: string[] = [];
   return {
-    store: new GithubStore({ repo: gh.repo, client: gh, now: () => NOW }),
+    store: new GithubStore({
+      repo: gh.repo,
+      client: gh,
+      now: () => NOW,
+      warn: (message) => warnings.push(message),
+    }),
     gh,
+    warnings,
   };
 }
 
@@ -471,8 +482,12 @@ describe("GithubStore hand-edit round-trips (design §5)", () => {
   it("keeps task mutations successful when label projection fails", async () => {
     const gh = new FakeGh();
     gh.seed({ body: managedBody("", ["(id: a-1)"]) });
+    gh.seed({
+      body: managedBody("", ["(id: fly-2) (state: in-flight)"]),
+      labels: [],
+    });
     gh.failLabelUpdates = true;
-    const { store } = makeStore(gh);
+    const { store, warnings } = makeStore(gh);
 
     const task = await store.transition("a-1", "in_flight");
     expect(task).toMatchObject({
@@ -483,6 +498,10 @@ describe("GithubStore hand-edit round-trips (design §5)", () => {
       },
     });
     expect(gh.find(1).body).toContain("(state: in-flight)");
+    expect(warnings).toEqual([
+      "warning: projection labels degraded on issue #1: label projection unavailable; run tasks-axi render to resync",
+      "warning: projection labels degraded on issue #2: label projection unavailable; run tasks-axi render to resync",
+    ]);
   });
 });
 
@@ -587,6 +606,31 @@ describe("GithubStore update and rm", () => {
 
     await store.remove("gone-1");
     expect(gh.find(2).labels).toEqual(["in-flight"]);
+  });
+
+  it("rm warns without failing when projection cleanup degrades", async () => {
+    const gh = new FakeGh();
+    gh.seed({
+      body: managedBody("", ["(id: gone-1)"]),
+      labels: ["held"],
+    });
+    gh.seed({
+      body: managedBody("", ["(id: fly-2) (state: in-flight)"]),
+      labels: [],
+    });
+    gh.failLabelUpdates = true;
+    const { store, warnings } = makeStore(gh);
+
+    const removed = await store.remove("gone-1");
+    expect(removed.meta).toMatchObject({
+      label_drift: true,
+      label_projection_degraded: true,
+    });
+    expect(gh.find(1).state).toBe("closed");
+    expect(warnings).toEqual([
+      "warning: projection labels degraded on issue #1: label projection unavailable; run tasks-axi render to resync",
+      "warning: projection labels degraded on issue #2: label projection unavailable; run tasks-axi render to resync",
+    ]);
   });
 
   it("dependency edges with reasons round-trip through the block", async () => {
