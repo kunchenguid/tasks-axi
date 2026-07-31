@@ -78,40 +78,58 @@ export const execGh: GhExec = (args, stdin) =>
     child.stdin.end(stdin ?? "");
   });
 
+const ghErrorStderr = new WeakMap<Error, string>();
+
+function withGhStderr(error: AxiError, stderr: string): AxiError {
+  ghErrorStderr.set(error, stderr);
+  return error;
+}
+
 function ghFailure(repo: string, stderr: string): AxiError {
   const detail = stderr.trim().split("\n")[0] ?? "";
   if (/HTTP 401|not logged in|gh auth login/i.test(stderr)) {
-    return new AxiError(
-      "GitHub authentication failed for the github backend",
-      "UNKNOWN",
-      ["Run `gh auth login`, then retry"],
+    return withGhStderr(
+      new AxiError(
+        "GitHub authentication failed for the github backend",
+        "UNKNOWN",
+        ["Run `gh auth login`, then retry"],
+      ),
+      stderr,
     );
   }
   if (/HTTP 404|Could not resolve to a Repository/i.test(stderr)) {
-    return new AxiError(
-      `GitHub repository or resource not found (repo "${repo}")${detail ? `: ${detail}` : ""}`,
-      "NOT_FOUND",
-      ['Check `[github] repo = "owner/name"` in .tasks.toml and your access'],
+    return withGhStderr(
+      new AxiError(
+        `GitHub repository or resource not found (repo "${repo}")${detail ? `: ${detail}` : ""}`,
+        "NOT_FOUND",
+        ['Check `[github] repo = "owner/name"` in .tasks.toml and your access'],
+      ),
+      stderr,
     );
   }
-  return new AxiError(
-    `GitHub CLI call failed${detail ? `: ${detail}` : ""}`,
-    "UNKNOWN",
-    ["Retry, or run the failing `gh` call manually to inspect the error"],
+  return withGhStderr(
+    new AxiError(
+      `GitHub CLI call failed${detail ? `: ${detail}` : ""}`,
+      "UNKNOWN",
+      ["Retry, or run the failing `gh` call manually to inspect the error"],
+    ),
+    stderr,
   );
 }
 
+function ghErrorText(error: unknown): string {
+  if (!(error instanceof Error)) return "";
+  return `${error.message}\n${ghErrorStderr.get(error) ?? ""}`;
+}
+
 function isMissingLabelError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    /label.*(?:does not exist|not found|missing|invalid)|(?:does not exist|not found|missing).*label/i.test(
-      error.message,
-    )
+  return /label.*(?:does not exist|not found|missing|invalid)|(?:does not exist|not found|missing).*label/i.test(
+    ghErrorText(error),
   );
 }
 
 function isExistingLabelError(error: unknown): boolean {
-  return error instanceof Error && /label.*already exists/i.test(error.message);
+  return /already[_ ]exists/i.test(ghErrorText(error));
 }
 
 const LIST_ISSUES_QUERY = `query($owner: String!, $name: String!, $cursor: String) {

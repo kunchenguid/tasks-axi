@@ -207,6 +207,17 @@ describe("createGhIssuesClient", () => {
             code: 1,
           };
         }
+        if (
+          path === "repos/o/r/labels" &&
+          JSON.parse(call.stdin ?? "{}").name === "in-flight"
+        ) {
+          return {
+            stdout: "",
+            stderr:
+              'gh: Validation Failed (HTTP 422)\n{"errors":[{"resource":"Label","code":"already_exists"}]}',
+            code: 1,
+          };
+        }
         return ok("{}");
       }, calls),
     );
