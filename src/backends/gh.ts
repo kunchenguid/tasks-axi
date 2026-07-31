@@ -271,10 +271,16 @@ export function createGhIssuesClient(
         });
       }
       for (const label of patch.remove) {
-        await rest(
-          "DELETE",
-          `repos/${repo}/issues/${number}/labels/${encodeURIComponent(label)}`,
-        );
+        try {
+          await rest(
+            "DELETE",
+            `repos/${repo}/issues/${number}/labels/${encodeURIComponent(label)}`,
+          );
+        } catch (error) {
+          if (!(error instanceof AxiError) || error.code !== "NOT_FOUND") {
+            throw error;
+          }
+        }
       }
     },
 

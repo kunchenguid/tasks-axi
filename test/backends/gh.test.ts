@@ -159,6 +159,25 @@ describe("createGhIssuesClient", () => {
     expect(calls[2].stdin).toBeUndefined();
   });
 
+  it("treats removal of an absent label as an idempotent success", async () => {
+    const client = createGhIssuesClient(
+      "o/r",
+      fakeExec((call) =>
+        call.args.includes("DELETE")
+          ? {
+              stdout: "",
+              stderr: "gh: Label does not exist (HTTP 404)",
+              code: 1,
+            }
+          : ok("{}"),
+      ),
+    );
+
+    await expect(
+      client.updateLabels(3, { add: [], remove: ["blocked"] }),
+    ).resolves.toBeUndefined();
+  });
+
   it("maps a missing gh binary to a structured install hint", async () => {
     const enoent = Object.assign(new Error("spawn gh ENOENT"), {
       code: "ENOENT",
