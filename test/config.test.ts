@@ -175,3 +175,83 @@ describe("resolveConfig", () => {
     },
   );
 });
+
+describe("github config", () => {
+  it("parses the [github] table", () => {
+    const cfg = parseConfigToml(
+      [
+        'backend = "github"',
+        "[github]",
+        'repo = "owner/name"',
+        'in_flight_label = "wip"',
+        'blocked_label = "stuck"',
+        'held_label = "paused"',
+      ].join("\n"),
+    );
+    expect(cfg.backend).toBe("github");
+    expect(cfg.github).toEqual({
+      repo: "owner/name",
+      in_flight_label: "wip",
+      blocked_label: "stuck",
+      held_label: "paused",
+    });
+  });
+
+  it("resolves defaults for the label names and requires no repo for markdown homes", () => {
+    const cfg = resolveConfig({ cwd: dir, home, env: {} });
+    expect(cfg.github).toBeUndefined();
+
+    writeFileSync(
+      join(dir, ".tasks.toml"),
+      'backend = "github"\n[github]\nrepo = "owner/name"\n',
+    );
+    const github = resolveConfig({ cwd: dir, home, env: {} });
+    expect(github.github).toEqual({
+      repo: "owner/name",
+      inFlightLabel: "in-flight",
+      blockedLabel: "blocked",
+      heldLabel: "held",
+    });
+  });
+
+  it("attaches the github table even when the backend override comes later", () => {
+    const cfg = resolveConfig({ cwd: dir, home, env: {}, backend: "github" });
+    expect(cfg.backend).toBe("github");
+    expect(cfg.github).toEqual({
+      inFlightLabel: "in-flight",
+      blockedLabel: "blocked",
+      heldLabel: "held",
+    });
+  });
+
+  it("merges project over home github settings per key", () => {
+    mkdirSync(join(home, ".tasks-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".tasks-axi", "config.toml"),
+      '[github]\nrepo = "home/repo"\nin_flight_label = "wip"\n',
+    );
+    writeFileSync(join(dir, ".tasks.toml"), '[github]\nrepo = "project/repo"\n');
+    const cfg = resolveConfig({ cwd: dir, home, env: {} });
+    expect(cfg.github).toMatchObject({
+      repo: "project/repo",
+      inFlightLabel: "wip",
+    });
+  });
+
+  it("rejects a malformed github repo", () => {
+    writeFileSync(join(dir, ".tasks.toml"), '[github]\nrepo = "not-a-repo"\n');
+    expect(() => resolveConfig({ cwd: dir, home, env: {} })).toThrow(
+      /github\.repo must be "owner\/name"/,
+    );
+  });
+
+  it("rejects an empty label name", () => {
+    writeFileSync(
+      join(dir, ".tasks.toml"),
+      '[github]\nrepo = "o/r"\nheld_label = " "\n',
+    );
+    expect(() => resolveConfig({ cwd: dir, home, env: {} })).toThrow(
+      /github\.held_label/,
+    );
+  });
+});
