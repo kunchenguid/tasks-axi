@@ -89,7 +89,7 @@ function ghFailure(repo: string, stderr: string): AxiError {
   }
   if (/HTTP 404|Could not resolve to a Repository/i.test(stderr)) {
     return new AxiError(
-      `GitHub repository or resource not found (repo "${repo}")`,
+      `GitHub repository or resource not found (repo "${repo}")${detail ? `: ${detail}` : ""}`,
       "NOT_FOUND",
       ['Check `[github] repo = "owner/name"` in .tasks.toml and your access'],
     );
@@ -99,6 +99,19 @@ function ghFailure(repo: string, stderr: string): AxiError {
     "UNKNOWN",
     ["Retry, or run the failing `gh` call manually to inspect the error"],
   );
+}
+
+function isMissingLabelError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /label.*(?:does not exist|not found|missing|invalid)|(?:does not exist|not found|missing).*label/i.test(
+      error.message,
+    )
+  );
+}
+
+function isExistingLabelError(error: unknown): boolean {
+  return error instanceof Error && /label.*already exists/i.test(error.message);
 }
 
 const LIST_ISSUES_QUERY = `query($owner: String!, $name: String!, $cursor: String) {
@@ -196,7 +209,9 @@ export function createGhIssuesClient(
         throw new AxiError(
           "GitHub CLI (gh) not found; the github backend requires it",
           "UNKNOWN",
-          ["Install the GitHub CLI (https://cli.github.com), then `gh auth login`"],
+          [
+            "Install the GitHub CLI (https://cli.github.com), then `gh auth login`",
+          ],
         );
       }
       throw error;
@@ -243,7 +258,9 @@ export function createGhIssuesClient(
           throw new AxiError(
             `GitHub repository "${repo}" not found or not accessible`,
             "NOT_FOUND",
-            ['Check `[github] repo = "owner/name"` in .tasks.toml and your access'],
+            [
+              'Check `[github] repo = "owner/name"` in .tasks.toml and your access',
+            ],
           );
         }
         issues.push(...repository.issues.nodes.map(fromGraphqlNode));
@@ -266,9 +283,23 @@ export function createGhIssuesClient(
 
     async updateLabels(number: number, patch: LabelPatch): Promise<void> {
       if (patch.add.length > 0) {
-        await rest("POST", `repos/${repo}/issues/${number}/labels`, {
-          labels: patch.add,
-        });
+        const applyLabels = () =>
+          rest("POST", `repos/${repo}/issues/${number}/labels`, {
+            labels: patch.add,
+          });
+        try {
+          await applyLabels();
+        } catch (error) {
+          if (!isMissingLabelError(error)) throw error;
+          for (const label of patch.add) {
+            try {
+              await rest("POST", `repos/${repo}/labels`, { name: label });
+            } catch (createError) {
+              if (!isExistingLabelError(createError)) throw createError;
+            }
+          }
+          await applyLabels();
+        }
       }
       for (const label of patch.remove) {
         try {

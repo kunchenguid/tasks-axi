@@ -16,7 +16,10 @@ function fakeExec(
   calls: RecordedCall[] = [],
 ): GhExec {
   return (args, stdin) => {
-    const call: RecordedCall = { args, ...(stdin !== undefined ? { stdin } : {}) };
+    const call: RecordedCall = {
+      args,
+      ...(stdin !== undefined ? { stdin } : {}),
+    };
     calls.push(call);
     return Promise.resolve(respond(call));
   };
@@ -59,7 +62,13 @@ describe("createGhIssuesClient", () => {
       fakeExec(
         (call) =>
           call.args.some((a) => a.startsWith("cursor="))
-            ? ok(graphqlPage([{ ...NODE, number: 8, state: "OPEN", stateReason: null }], false, null))
+            ? ok(
+                graphqlPage(
+                  [{ ...NODE, number: 8, state: "OPEN", stateReason: null }],
+                  false,
+                  null,
+                ),
+              )
             : ok(graphqlPage([NODE], true, "CUR")),
         calls,
       ),
@@ -129,12 +138,18 @@ describe("createGhIssuesClient", () => {
     ]);
     // The payload travels over stdin so body bytes (incl. the trailing
     // newline) are never mangled by shell substitution (E1 leg 3 caveat).
-    expect(JSON.parse(calls[0].stdin ?? "")).toEqual({ title: "t", body: "b\n" });
+    expect(JSON.parse(calls[0].stdin ?? "")).toEqual({
+      title: "t",
+      body: "b\n",
+    });
   });
 
   it("patches issues and mutates only requested labels through REST", async () => {
     const calls: RecordedCall[] = [];
-    const client = createGhIssuesClient("o/r", fakeExec(() => ok("{}"), calls));
+    const client = createGhIssuesClient(
+      "o/r",
+      fakeExec(() => ok("{}"), calls),
+    );
 
     await client.updateIssue(3, { state: "closed", state_reason: "completed" });
     await client.updateLabels(3, {
@@ -146,11 +161,7 @@ describe("createGhIssuesClient", () => {
     expect(calls.map((c) => c.args.slice(1, 4))).toEqual([
       ["--method", "PATCH", "repos/o/r/issues/3"],
       ["--method", "POST", "repos/o/r/issues/3/labels"],
-      [
-        "--method",
-        "DELETE",
-        "repos/o/r/issues/3/labels/blocked%20state",
-      ],
+      ["--method", "DELETE", "repos/o/r/issues/3/labels/blocked%20state"],
       ["--method", "POST", "repos/o/r/issues/3/comments"],
     ]);
     expect(JSON.parse(calls[1].stdin ?? "")).toEqual({
@@ -176,6 +187,43 @@ describe("createGhIssuesClient", () => {
     await expect(
       client.updateLabels(3, { add: [], remove: ["blocked"] }),
     ).resolves.toBeUndefined();
+  });
+
+  it("creates missing projection labels and retries once", async () => {
+    const calls: RecordedCall[] = [];
+    let applyAttempts = 0;
+    const client = createGhIssuesClient(
+      "o/r",
+      fakeExec((call) => {
+        const path = call.args[3];
+        if (
+          call.args.includes("POST") &&
+          path === "repos/o/r/issues/3/labels" &&
+          applyAttempts++ === 0
+        ) {
+          return {
+            stdout: "",
+            stderr: "gh: Label does not exist (HTTP 422)",
+            code: 1,
+          };
+        }
+        return ok("{}");
+      }, calls),
+    );
+
+    await client.updateLabels(3, {
+      add: ["in-flight", "held"],
+      remove: [],
+    });
+
+    expect(calls.map((call) => call.args[3])).toEqual([
+      "repos/o/r/issues/3/labels",
+      "repos/o/r/labels",
+      "repos/o/r/labels",
+      "repos/o/r/issues/3/labels",
+    ]);
+    expect(JSON.parse(calls[1].stdin ?? "")).toEqual({ name: "in-flight" });
+    expect(JSON.parse(calls[2].stdin ?? "")).toEqual({ name: "held" });
   });
 
   it("maps a missing gh binary to a structured install hint", async () => {
@@ -205,7 +253,9 @@ describe("createGhIssuesClient", () => {
     const missingClient = createGhIssuesClient("o/r", () =>
       Promise.resolve({ stdout: "", stderr: "HTTP 404: Not Found", code: 1 }),
     );
-    await expect(missingClient.updateIssue(1, { state: "open" })).rejects.toMatchObject({
+    await expect(
+      missingClient.updateIssue(1, { state: "open" }),
+    ).rejects.toMatchObject({
       code: "NOT_FOUND",
     });
 

@@ -260,10 +260,7 @@ export class GithubStore implements Store {
     }
   }
 
-  private requireNoActiveDependents(
-    records: GithubRecord[],
-    id: string,
-  ): void {
+  private requireNoActiveDependents(records: GithubRecord[], id: string): void {
     const dependents = records
       .filter(
         (r) =>
@@ -333,6 +330,14 @@ export class GithubStore implements Store {
     }
   }
 
+  private markProjectionDegraded(record: GithubRecord): void {
+    record.task.meta = {
+      ...record.task.meta,
+      label_drift: true,
+      label_projection_degraded: true,
+    };
+  }
+
   /** Global projection refresh after every write. */
   private async refreshProjections(records: GithubRecord[]): Promise<void> {
     const managedNames = this.managedLabelNames();
@@ -342,12 +347,20 @@ export class GithubStore implements Store {
       );
       const add = want.filter((label) => !have.includes(label));
       const remove = have.filter((label) => !want.includes(label));
-      await this.client.updateLabels(record.issue.number, { add, remove });
+      try {
+        await this.client.updateLabels(record.issue.number, { add, remove });
+      } catch {
+        this.markProjectionDegraded(record);
+        continue;
+      }
       record.issue.labels = [
         ...record.issue.labels.filter((label) => !remove.includes(label)),
         ...add,
       ];
       if (record.task.meta?.label_drift) delete record.task.meta.label_drift;
+      if (record.task.meta?.label_projection_degraded) {
+        delete record.task.meta.label_projection_degraded;
+      }
     }
   }
 
@@ -668,9 +681,17 @@ export class GithubStore implements Store {
       this.managedLabelNames().includes(label),
     );
     if (remove.length > 0) {
-      await this.client.updateLabels(record.issue.number, { add: [], remove });
+      try {
+        await this.client.updateLabels(record.issue.number, {
+          add: [],
+          remove,
+        });
+      } catch {
+        this.markProjectionDegraded(record);
+      }
     }
     records.splice(records.indexOf(record), 1);
+    await this.refreshProjections(records);
     return record.task;
   }
 
@@ -689,7 +710,8 @@ export class GithubStore implements Store {
     const date = normalizeDate(opts.date ?? this.now(), "transition date");
 
     const transitionLinks: TaskLink[] = [];
-    if (opts.pr !== undefined) transitionLinks.push({ kind: "pr", url: opts.pr });
+    if (opts.pr !== undefined)
+      transitionLinks.push({ kind: "pr", url: opts.pr });
     if (opts.report !== undefined) {
       transitionLinks.push({ kind: "report", url: opts.report });
     }
