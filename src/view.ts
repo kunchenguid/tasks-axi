@@ -134,5 +134,13 @@ export function renderTaskDetail(
   truncationHint?: string,
 ): string {
   const row = toRow(task, { all, full, truncationHint });
-  return renderDetail("task", row, DETAIL_SCHEMA);
+  const schema = [...DETAIL_SCHEMA];
+  // Backend-derived meta (e.g. the github backend's issue number, url,
+  // state_reason, and label_drift note) surfaces in the detail view.
+  for (const [key, value] of Object.entries(task.meta ?? {})) {
+    const column = `meta_${key}`;
+    row[column] = value;
+    schema.push(field(column));
+  }
+  return renderDetail("task", row, schema);
 }
