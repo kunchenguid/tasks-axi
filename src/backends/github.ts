@@ -76,6 +76,7 @@ export interface GithubStoreOptions {
   labels?: Partial<GithubLabels>;
   /** Injectable clock returning a YYYY-MM-DD stamp (for tests). */
   now?: () => string;
+  warn?: (message: string) => void;
 }
 
 interface GithubRecord {
@@ -116,6 +117,7 @@ export class GithubStore implements Store {
   private readonly client: GhIssuesClient;
   private readonly labels: GithubLabels;
   private readonly now: () => string;
+  private readonly warn: (message: string) => void;
   private cache?: Promise<GithubRecord[]>;
 
   constructor(options: GithubStoreOptions) {
@@ -134,6 +136,8 @@ export class GithubStore implements Store {
       );
     }
     this.now = options.now ?? currentLocalDate;
+    this.warn =
+      options.warn ?? ((message) => process.stderr.write(`${message}\n`));
   }
 
   capabilities(): Capabilities {
@@ -330,12 +334,18 @@ export class GithubStore implements Store {
     }
   }
 
-  private markProjectionDegraded(record: GithubRecord): void {
+  private markProjectionDegraded(record: GithubRecord, error: unknown): void {
     record.task.meta = {
       ...record.task.meta,
       label_drift: true,
       label_projection_degraded: true,
     };
+    const rawReason =
+      error instanceof Error ? error.message : "unknown projection error";
+    const reason = rawReason.replace(/\s+/g, " ").trim().slice(0, 240);
+    this.warn(
+      `warning: projection labels degraded on issue #${record.issue.number}: ${reason}; run tasks-axi render to resync`,
+    );
   }
 
   /** Global projection refresh after every write. */
@@ -349,8 +359,8 @@ export class GithubStore implements Store {
       const remove = have.filter((label) => !want.includes(label));
       try {
         await this.client.updateLabels(record.issue.number, { add, remove });
-      } catch {
-        this.markProjectionDegraded(record);
+      } catch (error) {
+        this.markProjectionDegraded(record, error);
         continue;
       }
       record.issue.labels = [
@@ -686,8 +696,8 @@ export class GithubStore implements Store {
           add: [],
           remove,
         });
-      } catch {
-        this.markProjectionDegraded(record);
+      } catch (error) {
+        this.markProjectionDegraded(record, error);
       }
     }
     records.splice(records.indexOf(record), 1);
