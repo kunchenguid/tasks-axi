@@ -3,6 +3,7 @@ import type {
   GhIssuesClient,
   IssueData,
   IssuePatch,
+  LabelPatch,
 } from "../../src/backends/gh.js";
 import { GithubStore } from "../../src/backends/github.js";
 import {
@@ -82,9 +83,17 @@ class FakeGh implements GhIssuesClient {
     return Promise.resolve();
   }
 
-  setLabels(number: number, labels: string[]): Promise<void> {
-    this.calls.push(`labels #${number} [${[...labels].sort().join(" ")}]`);
-    this.find(number).labels = labels;
+  updateLabels(number: number, patch: LabelPatch): Promise<void> {
+    const add = [...patch.add].sort();
+    const remove = [...patch.remove].sort();
+    this.calls.push(
+      `labels #${number} +[${add.join(" ")}] -[${remove.join(" ")}]`,
+    );
+    const issue = this.find(number);
+    issue.labels = [
+      ...issue.labels.filter((label) => !remove.includes(label)),
+      ...add.filter((label) => !issue.labels.includes(label)),
+    ];
     return Promise.resolve();
   }
 
@@ -231,7 +240,7 @@ describe("GithubStore create", () => {
     const { store, gh } = makeStore();
     await store.create({ id: "hot-1", title: "start now", state: "in_flight" });
     expect(gh.find(1).body).toContain("(id: hot-1) (state: in-flight)");
-    expect(gh.calls).toContain("labels #1 [in-flight]");
+    expect(gh.calls).toContain("labels #1 +[in-flight] -[]");
   });
 
   it("writes a (since) override only when created differs from today", async () => {
@@ -432,9 +441,10 @@ describe("GithubStore hand-edit round-trips (design §5)", () => {
     expect((await store.get("fly-1"))?.meta).toMatchObject({
       label_drift: true,
     });
+    gh.find(1).labels.push("triage");
 
     await store.update("fly-1", { priority: 3 });
-    expect(gh.find(1).labels.sort()).toEqual(["bug", "in-flight"]);
+    expect(gh.find(1).labels.sort()).toEqual(["bug", "in-flight", "triage"]);
     expect((await store.get("fly-1"))?.meta?.label_drift).toBeUndefined();
   });
 });
