@@ -42,6 +42,11 @@ export interface IssuePatch {
   state_reason?: "completed" | "not_planned";
 }
 
+export interface LabelPatch {
+  add: string[];
+  remove: string[];
+}
+
 /** The typed GitHub surface the store consumes; faked wholesale in tests. */
 export interface GhIssuesClient {
   readonly repo: string;
@@ -49,8 +54,7 @@ export interface GhIssuesClient {
   listIssues(): Promise<IssueData[]>;
   createIssue(title: string, body: string): Promise<IssueData>;
   updateIssue(number: number, patch: IssuePatch): Promise<void>;
-  /** Replace the issue's full label set (the projection-heal write from E1 leg 3). */
-  setLabels(number: number, labels: string[]): Promise<void>;
+  updateLabels(number: number, patch: LabelPatch): Promise<void>;
   addComment(number: number, body: string): Promise<void>;
 }
 
@@ -260,8 +264,18 @@ export function createGhIssuesClient(
       await rest("PATCH", `repos/${repo}/issues/${number}`, { ...patch });
     },
 
-    async setLabels(number: number, labels: string[]): Promise<void> {
-      await rest("PUT", `repos/${repo}/issues/${number}/labels`, { labels });
+    async updateLabels(number: number, patch: LabelPatch): Promise<void> {
+      if (patch.add.length > 0) {
+        await rest("POST", `repos/${repo}/issues/${number}/labels`, {
+          labels: patch.add,
+        });
+      }
+      for (const label of patch.remove) {
+        await rest(
+          "DELETE",
+          `repos/${repo}/issues/${number}/labels/${encodeURIComponent(label)}`,
+        );
+      }
     },
 
     async addComment(number: number, body: string): Promise<void> {

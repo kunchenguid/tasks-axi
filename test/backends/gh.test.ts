@@ -132,22 +132,31 @@ describe("createGhIssuesClient", () => {
     expect(JSON.parse(calls[0].stdin ?? "")).toEqual({ title: "t", body: "b\n" });
   });
 
-  it("patches issues and replaces label sets through REST", async () => {
+  it("patches issues and mutates only requested labels through REST", async () => {
     const calls: RecordedCall[] = [];
     const client = createGhIssuesClient("o/r", fakeExec(() => ok("{}"), calls));
 
     await client.updateIssue(3, { state: "closed", state_reason: "completed" });
-    await client.setLabels(3, ["in-flight", "held"]);
+    await client.updateLabels(3, {
+      add: ["in-flight", "held"],
+      remove: ["blocked state"],
+    });
     await client.addComment(3, "archived body");
 
     expect(calls.map((c) => c.args.slice(1, 4))).toEqual([
       ["--method", "PATCH", "repos/o/r/issues/3"],
-      ["--method", "PUT", "repos/o/r/issues/3/labels"],
+      ["--method", "POST", "repos/o/r/issues/3/labels"],
+      [
+        "--method",
+        "DELETE",
+        "repos/o/r/issues/3/labels/blocked%20state",
+      ],
       ["--method", "POST", "repos/o/r/issues/3/comments"],
     ]);
     expect(JSON.parse(calls[1].stdin ?? "")).toEqual({
       labels: ["in-flight", "held"],
     });
+    expect(calls[2].stdin).toBeUndefined();
   });
 
   it("maps a missing gh binary to a structured install hint", async () => {
