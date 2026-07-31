@@ -12,8 +12,8 @@ import { AxiError } from "./errors.js";
  *   ~/.tasks-axi/config.toml > defaults (markdown, first existing
  *   backlog.md/data/backlog.md, otherwise backlog.md).
  *
- * P1 ships only the markdown backend; the Store seam keeps sqlite/remote
- * additions invisible to the CLI layer.
+ * Markdown and GitHub Issues ship behind the Store seam, which keeps backend
+ * selection invisible to the command layer.
  */
 
 export interface ResolvedGithubConfig {
@@ -80,8 +80,7 @@ export function parseConfigToml(src: string): TomlConfig {
     const section = line.match(/^\[([^\]]+)\]$/);
     if (section) {
       const name = section[1].trim();
-      table =
-        name === "markdown" || name === "github" ? name : "unsupported";
+      table = name === "markdown" || name === "github" ? name : "unsupported";
       continue;
     }
 
@@ -149,10 +148,7 @@ function stripTomlComment(raw: string): string {
   return raw;
 }
 
-function configKeySource(
-  table: ConfigTable,
-  key: string,
-): string | undefined {
+function configKeySource(table: ConfigTable, key: string): string | undefined {
   if (table === "root" && key === "backend") return "backend";
   if (
     table === "markdown" &&
@@ -231,16 +227,17 @@ const GITHUB_REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 function validateGithubRepo(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
   if (!GITHUB_REPO_RE.test(value)) {
-    throw new AxiError(
-      'github.repo must be "owner/name"',
-      "VALIDATION_ERROR",
-      ['Set `[github] repo = "owner/name"` in .tasks.toml'],
-    );
+    throw new AxiError('github.repo must be "owner/name"', "VALIDATION_ERROR", [
+      'Set `[github] repo = "owner/name"` in .tasks.toml',
+    ]);
   }
   return value;
 }
 
-function validateGithubLabel(value: string | undefined, source: string): string | undefined {
+function validateGithubLabel(
+  value: string | undefined,
+  source: string,
+): string | undefined {
   if (value === undefined) return undefined;
   if (value.trim() === "" || /[\r\n]/.test(value)) {
     throw new AxiError(

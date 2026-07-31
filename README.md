@@ -9,8 +9,8 @@
 
 Task and backlog manager for agents — designed with [AXI](https://github.com/kunchenguid/axi) (Agent eXperience Interface).
 
-tasks-axi makes a tiny structured change to a human-readable backlog at near-zero output-token cost.
-It edits a hand-editable `backlog.md` in place with a byte-exact round-trip, so the markdown stays the source of truth while long task bodies never bloat a `list`.
+tasks-axi makes tiny structured backlog changes at near-zero output-token cost.
+A backlog can use a hand-editable Markdown file with a byte-exact round-trip or GitHub Issues with the same CLI surface, while long task bodies never bloat a `list`.
 It borrows the dependency-graph and ready-query model from [beads](https://github.com/gastownhall/beads), adds structured dispatch holds, and keeps the house style from its `*-axi` siblings - token-efficient TOON output, contextual next-step suggestions, idempotent mutations, and structured errors.
 
 ## Why
@@ -19,7 +19,7 @@ Every backlog mutation today regenerates markdown through the model, which is ex
 tasks-axi reduces that to the length of one short command plus a compact confirmation read back as cheap input.
 The long status line that the model used to rewrite on every status change is now a `body`.
 Note writes are inspect-then-update: read the current body with `show <id> --full`, then replace it deliberately with `update --body` or `update --body-file`.
-Pass `--archive-body` with a body replacement when the superseded body should be moved to cold history in `note-archive.md`.
+Pass `--archive-body` with a body replacement when the superseded body should be preserved in backend-native history.
 
 ## Quick Start
 
@@ -122,7 +122,7 @@ tasks-axi mv blocker-b1 dependent-d2 --to ../homemux/data/backlog.md
 Output is [TOON](https://toonformat.dev)-encoded and token-efficient.
 The long task body is truncated by default — the whole point is that `list` stays cheap; use `--full` only when you need the complete notes.
 `update --body` and `update --body-file` replace the body wholesale, so agents should inspect the current body first and write back the curated current state rather than appending a journal entry.
-`--archive-body` preserves the replaced body in `note-archive.md` using the same dated markdown archive block style as done pruning.
+`--archive-body` preserves the replaced body in backend-native history: `note-archive.md` for Markdown or an issue comment for GitHub.
 Every write leads with a terse `ok:` line confirming the write result, including the resulting task state when the command changes one (e.g. `ok: start lavish-share -> In flight`, `ok: done grok-harness-g7 -> Done (pr <url>)`, `ok: render -> normalized 3`), followed by state-aware next-step hints that never suggest an action the command just performed.
 Mutations are idempotent and report what changed (`already: true` on a no-op), so re-running one is safe.
 Running `done` again on an already Done task can still backfill a new `--pr`, `--report`, or `--note` without changing the original close date.
@@ -242,16 +242,22 @@ backend = "markdown"
 path = "data/backlog.md"
 archive = "data/done-archive.md"
 done_keep = 10
-
-# or, for a GitHub-issues-backed backlog:
-# backend = "github"
-# [github]
-# repo = "owner/name"
-# in_flight_label = "in-flight"   # optional; blocked_label / held_label likewise
 ```
 
-`archive` is optional; when omitted, pruned tasks are appended to `done-archive.md` next to the active backlog.
-Body replacements with `--archive-body` append superseded bodies to `note-archive.md` next to the active backlog.
+For a GitHub Issues backlog, use:
+
+```toml
+# .tasks.toml in the project root
+backend = "github"
+
+[github]
+repo = "owner/name"
+in_flight_label = "in-flight" # optional; blocked_label / held_label likewise
+```
+
+For the Markdown backend, `archive` is optional; when omitted, pruned tasks are appended to `done-archive.md` next to the active backlog.
+Markdown body replacements with `--archive-body` append superseded bodies to `note-archive.md` next to the active backlog.
+GitHub projection label names default to `in-flight`, `blocked`, and `held`; configured names must be non-empty and distinct.
 
 ## The GitHub backend
 
@@ -272,6 +278,7 @@ How state is stored (block-authoritative):
   GitHub assigns their colors unless maintainers pre-create them.
   A label projection failure leaves the task mutation successful, writes a warning to stderr, and surfaces `meta_label_projection_degraded: true`.
   `show` reports `meta_label_drift: true` when the chips disagree with derived truth.
+  GitHub-backed task details also expose `meta_issue`, `meta_url`, and the exact native `meta_state_reason`; JSON task objects carry the same values in `meta`.
 
 Differences from the markdown backend, stated plainly:
 

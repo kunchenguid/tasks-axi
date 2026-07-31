@@ -20,8 +20,8 @@ examples:
   tasks-axi prune --keep 10`;
 
 export const RENDER_HELP = `usage: tasks-axi render
-Normalize the backlog file: rewrite every id'd task in canonical form.
-Free-form lines are left untouched.
+Normalize or resynchronize the active backend.
+Markdown tasks are rewritten canonically; GitHub managed blocks and projection labels are resynchronized.
 flags:
   --json   print the result as a JSON object`;
 

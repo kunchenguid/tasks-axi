@@ -8,7 +8,7 @@
 
 import type { PublicFollowup } from "./public-followup.js";
 
-/** The three explicit states (= the three markdown sections). */
+/** The three explicit workflow states (also the three Markdown sections). */
 export const STATES = ["queued", "in_flight", "done"] as const;
 export type State = (typeof STATES)[number];
 
@@ -71,7 +71,7 @@ export interface Task {
   id: string;
   /** One-line summary (the prose before the long notes). */
   title: string;
-  /** Which markdown section the task lives in. */
+  /** The task's workflow state. */
   state: State;
   /** ship | scout | docs | status | roadmap | secondmate | task | ... */
   kind?: string;
@@ -87,16 +87,16 @@ export interface Task {
   hold?: Hold;
   /** 0-4, optional (borrowed from beads; firstmate orders by list position). */
   priority?: number;
-  /** Maps to `(since ...)`. */
+  /** Creation date, from `(since ...)` or the backend's native metadata. */
   created?: string;
   updated?: string;
-  /** Maps to a terminal closure tag, using `(closed ...)` when dropped. */
+  /** Terminal closure date, from a closure tag or native backend metadata. */
   closed?: string;
   /** Done-only closure kind; `dropped` renders as `(closed ...)`. Absent = completed. */
   resolution?: Resolution;
   /** Versioned durable public obligation data for kind=public-followup only. */
   public_followup?: PublicFollowup;
-  /** Home, harness, external-tracker id/url, and other exotica. */
+  /** Backend-native identifiers, projection status, and other extensible metadata. */
   meta?: Record<string, unknown>;
 }
 
