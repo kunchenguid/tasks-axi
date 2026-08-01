@@ -58,8 +58,8 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 ## Conventions
 
 - **Ids are caller-supplied join keys (D6)** validated by `ID_RE` (slug-shaped); `add --mint [--prefix]` generates a `slug-xx` id.
-- **prune archives, never deletes (D4)** - surplus Done tasks are appended to `markdown.archive` or default `done-archive.md`. It keeps N _recognized_ tasks; free-form Done lines are preserved and not counted.
-- **`done` auto-prunes** to `config.doneKeep` (default 10) and archives, unless `--no-prune`.
+- **Markdown `prune` archives, never deletes (D4)** - surplus Done tasks are appended to `markdown.archive` or default `done-archive.md`. It keeps N _recognized_ tasks; free-form Done lines are preserved and not counted.
+- **Markdown `done` auto-prunes** to `config.doneKeep` (default 10) and archives, unless `--no-prune`; backends without `prune` skip that step.
 - **`done` on an already-Done task** stays idempotent but backfills supplied `--pr`, `--report`, and non-duplicate `--note` metadata without replacing the original closed date.
 - **`done --dropped` records `resolution: dropped`** (absent = completed; done-only and terminal everywhere like plain done).
   Markdown renders it with the `(closed DATE)` closure verb, which is no longer parse-only; `reopen` clears it, `show` and `--json` expose it, and `list --fields resolution` adds it as an opt-in column.

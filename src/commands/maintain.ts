@@ -12,6 +12,7 @@ import { getSuggestions } from "../suggestions.js";
 
 export const PRUNE_HELP = `usage: tasks-axi prune [--keep <n>] [--state done]
 Trim a section to the N most recent tasks, archiving the rest (never deletes).
+The active backend must be markdown.
 flags:
   --keep <n>   tasks to retain (default from config, usually 10)
   --state <queued|in_flight|done>   section to prune (default done)

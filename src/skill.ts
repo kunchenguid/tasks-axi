@@ -58,7 +58,7 @@ If tasks-axi output shows a follow-up command starting with \`tasks-axi\`, run i
 
 tasks-axi operates on the backlog configured for the current workspace.
 The Markdown backend edits a hand-editable \`backlog.md\` in place with a byte-exact round-trip.
-The GitHub backend stores tasks as repository issues while keeping the CLI surface unchanged.
+The GitHub backend stores tasks as repository issues while keeping the core task commands unchanged.
 
 ## When to use
 
