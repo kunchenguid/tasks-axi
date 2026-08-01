@@ -350,6 +350,14 @@ describe("GithubStore create", () => {
     ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
   });
 
+  it("rejects reserved marker lines before creating an issue", async () => {
+    const { store, gh } = makeStore();
+    await expect(
+      store.create({ id: "bad-1", title: "x", body: BLOCK_START }),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(gh.calls).toEqual([]);
+  });
+
   it("refuses public-followup work outright", async () => {
     const { store } = makeStore();
     await expect(

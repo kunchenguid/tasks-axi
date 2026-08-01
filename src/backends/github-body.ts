@@ -95,6 +95,12 @@ function parseTagLine(
   }
 
   const tags = extractTags(stateTag.rest);
+  if (tags.duplicateSingletons.length > 0) {
+    throw blockError(
+      ref,
+      `duplicate (${tags.duplicateSingletons[0]}:) tag`,
+    );
+  }
   if (tags.title !== "") {
     throw blockError(ref, `unrecognized content "${tags.title}"`);
   }
@@ -249,5 +255,23 @@ export function renderManagedBlock(fields: ManagedFields): string {
 
 /** Strip-and-regenerate composition: prose above, one blank line, block at the foot. */
 export function composeIssueBody(prose: string, block: string): string {
+  validateIssueProse(prose);
   return prose === "" ? block : `${prose}\n\n${block}`;
+}
+
+export function validateIssueProse(prose: string): void {
+  const reserved = prose
+    .split("\n")
+    .map(semantic)
+    .find((line) => {
+      const trimmed = line.trim();
+      return trimmed === BLOCK_START || trimmed === BLOCK_END;
+    });
+  if (reserved !== undefined) {
+    throw new AxiError(
+      "Issue prose cannot contain reserved tasks-axi marker lines",
+      "VALIDATION_ERROR",
+      ["Remove or rewrite the marker line before retrying"],
+    );
+  }
 }

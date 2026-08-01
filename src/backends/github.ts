@@ -25,6 +25,7 @@ import {
   composeIssueBody,
   parseIssueBody,
   renderManagedBlock,
+  validateIssueProse,
   type ManagedFields,
 } from "./github-body.js";
 import { deriveLinks } from "./markdown-grammar.js";
@@ -101,6 +102,7 @@ function dateOf(iso: string): string {
 }
 
 function setProse(record: GithubRecord, prose: string): void {
+  validateIssueProse(prose);
   record.prose = prose;
   if (prose === "") {
     delete record.task.body;
