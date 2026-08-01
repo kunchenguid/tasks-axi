@@ -43,6 +43,8 @@ function graphqlPage(
 
 const NODE = {
   number: 7,
+  databaseId: 5001,
+  parent: null,
   title: "probe",
   body: "prose",
   state: "CLOSED",
@@ -64,7 +66,16 @@ describe("createGhIssuesClient", () => {
           call.args.some((a) => a.startsWith("cursor="))
             ? ok(
                 graphqlPage(
-                  [{ ...NODE, number: 8, state: "OPEN", stateReason: null }],
+                  [
+                    {
+                      ...NODE,
+                      number: 8,
+                      databaseId: 5002,
+                      parent: { number: 7 },
+                      state: "OPEN",
+                      stateReason: null,
+                    },
+                  ],
                   false,
                   null,
                 ),
@@ -77,12 +88,19 @@ describe("createGhIssuesClient", () => {
     const issues = await client.listIssues();
     expect(issues.map((i) => i.number)).toEqual([7, 8]);
     expect(issues[0]).toMatchObject({
+      id: 5001,
       state: "closed",
       stateReason: "not_planned",
       labels: ["held"],
+      parentNumber: null,
       closedAt: "2026-07-02T10:00:00Z",
     });
-    expect(issues[1]).toMatchObject({ state: "open", stateReason: null });
+    expect(issues[1]).toMatchObject({
+      id: 5002,
+      state: "open",
+      stateReason: null,
+      parentNumber: 7,
+    });
 
     expect(calls).toHaveLength(2);
     expect(calls[0].args.slice(0, 2)).toEqual(["api", "graphql"]);
@@ -111,6 +129,7 @@ describe("createGhIssuesClient", () => {
           ok(
             JSON.stringify({
               number: 12,
+              id: 5012,
               title: "t",
               body: "b\n",
               state: "open",
@@ -127,7 +146,13 @@ describe("createGhIssuesClient", () => {
     );
 
     const issue = await client.createIssue("t", "b\n");
-    expect(issue).toMatchObject({ number: 12, body: "b\n", state: "open" });
+    expect(issue).toMatchObject({
+      number: 12,
+      id: 5012,
+      body: "b\n",
+      state: "open",
+      parentNumber: null,
+    });
     expect(calls[0].args).toEqual([
       "api",
       "--method",
@@ -235,6 +260,27 @@ describe("createGhIssuesClient", () => {
     ]);
     expect(JSON.parse(calls[1].stdin ?? "")).toEqual({ name: "in-flight" });
     expect(JSON.parse(calls[2].stdin ?? "")).toEqual({ name: "held" });
+  });
+
+  it("links and unlinks native sub-issues by global id", async () => {
+    const calls: RecordedCall[] = [];
+    const client = createGhIssuesClient("o/r", fakeExec(() => ok("{}"), calls));
+
+    await client.addSubIssue(7, 5002);
+    await client.addSubIssue(9, 5002, true);
+    await client.removeSubIssue(9, 5002);
+
+    expect(calls.map((c) => c.args.slice(1, 4))).toEqual([
+      ["--method", "POST", "repos/o/r/issues/7/sub_issues"],
+      ["--method", "POST", "repos/o/r/issues/9/sub_issues"],
+      ["--method", "DELETE", "repos/o/r/issues/9/sub_issue"],
+    ]);
+    expect(JSON.parse(calls[0].stdin ?? "")).toEqual({ sub_issue_id: 5002 });
+    expect(JSON.parse(calls[1].stdin ?? "")).toEqual({
+      sub_issue_id: 5002,
+      replace_parent: true,
+    });
+    expect(JSON.parse(calls[2].stdin ?? "")).toEqual({ sub_issue_id: 5002 });
   });
 
   it("maps a missing gh binary to a structured install hint", async () => {
