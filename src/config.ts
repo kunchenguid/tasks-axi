@@ -262,12 +262,13 @@ function resolveGithubConfig(
   const config: ResolvedGithubConfig = {
     inFlightLabel:
       validateGithubLabel(pick("in_flight_label"), "github.in_flight_label") ??
-      "in-flight",
+      "tasks-axi:in-flight",
     blockedLabel:
       validateGithubLabel(pick("blocked_label"), "github.blocked_label") ??
-      "blocked",
+      "tasks-axi:blocked",
     heldLabel:
-      validateGithubLabel(pick("held_label"), "github.held_label") ?? "held",
+      validateGithubLabel(pick("held_label"), "github.held_label") ??
+      "tasks-axi:held",
   };
   if (repo !== undefined) config.repo = repo;
   return config;

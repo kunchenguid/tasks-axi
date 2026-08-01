@@ -252,12 +252,12 @@ backend = "github"
 
 [github]
 repo = "owner/name"
-in_flight_label = "in-flight" # optional; blocked_label / held_label likewise
+in_flight_label = "tasks-axi:in-flight" # optional; blocked_label / held_label likewise
 ```
 
 For the Markdown backend, `archive` is optional; when omitted, pruned tasks are appended to `done-archive.md` next to the active backlog.
 Markdown body replacements with `--archive-body` append superseded bodies to `note-archive.md` next to the active backlog.
-GitHub projection label names default to `in-flight`, `blocked`, and `held`; configured names must be non-empty and distinct.
+GitHub projection label names default to `tasks-axi:in-flight`, `tasks-axi:blocked`, and `tasks-axi:held`; configured names must be non-empty, distinct, and carry the `tasks-axi:` prefix, which keeps every projected label in one durable, collision-free, bulk-manageable namespace.
 
 ## The GitHub backend
 
@@ -272,13 +272,17 @@ How state is stored (block-authoritative):
 - Everything else lives in one visible, versioned block at the foot of the issue body (`<!-- tasks-axi:v1 -->` ... `<!-- /tasks-axi -->`): the task id, the queued/in-flight state tag, kind, repo, priority, holds, and dependency edges, in the same tag grammar the markdown backend uses.
   The id lives only in the block, so retitling an issue can never orphan a task.
   Maintainers may correct block fields by hand; a mangled block is a loud validation error naming the issue, and deleting the whole block orphans the task (the same way deleting a markdown line does).
-- Every label the backend touches (`in-flight`, `blocked`, `held`; names configurable) is a **write-time projection of derived truth, never read back**.
+- Every label the backend touches (`tasks-axi:in-flight`, `tasks-axi:blocked`, `tasks-axi:held`; names configurable within the `tasks-axi:` namespace) is a **write-time projection of derived truth, never read back**.
   Labels are a rendered dashboard, not controls: toggling a chip changes nothing, and any write (or `render`, the manual resync verb) heals all label drift.
   Missing projection labels are created lazily.
   GitHub assigns their colors unless maintainers pre-create them.
   A label projection failure leaves the task mutation successful, writes a warning to stderr, and surfaces `meta_label_projection_degraded: true`.
   `show` reports `meta_label_drift: true` when the chips disagree with derived truth.
   GitHub-backed task details also expose `meta_issue`, `meta_url`, and the exact native `meta_state_reason`; JSON task objects carry the same values in `meta`.
+- GitHub's **native sub-issue links** are the same kind of projection, for `parent:` edges.
+  The first `parent:` edge of each task is mirrored as a native sub-issue link (by global issue id), so the hierarchy shows up in GitHub's own tracking UI; further parent edges stay block-only, and `blocked-by:` edges are never projected because GitHub has no native blocking relation.
+  The block remains the source of truth: hand-relinking a sub-issue changes nothing durable, any write heals the link (`meta_parent_drift` flags read-side disagreement, `meta_parent_projection_degraded` a failed heal), and a native parent pointing at an issue outside the managed backlog is a human link that is left alone.
+  `rm` (de-manage) retracts the issue's own projected link and its managed children's links.
 
 Differences from the markdown backend, stated plainly:
 

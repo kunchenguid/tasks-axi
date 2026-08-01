@@ -26,23 +26,34 @@ class FakeGh implements GhIssuesClient {
   calls: string[] = [];
   listCalls = 0;
   failLabelUpdates = false;
+  failSubIssueUpdates = false;
   private next = 1;
 
   seed(partial: Partial<IssueData> & { body: string }): IssueData {
     const issue: IssueData = {
       number: this.next++,
+      id: 0,
       title: "a task",
       state: "open",
       stateReason: null,
       labels: [],
+      parentNumber: null,
       createdAt: "2026-07-01T00:00:00Z",
       closedAt: null,
       updatedAt: "2026-07-02T00:00:00Z",
       url: "",
       ...partial,
     };
+    // Global ids are distinct from issue numbers, as on real GitHub.
+    if (issue.id === 0) issue.id = 5000 + issue.number;
     issue.url = `https://github.com/o/r/issues/${issue.number}`;
     this.issues.push(issue);
+    return issue;
+  }
+
+  findByGlobalId(id: number): IssueData {
+    const issue = this.issues.find((i) => i.id === id);
+    if (!issue) throw new Error(`no issue with global id ${id}`);
     return issue;
   }
 
@@ -102,6 +113,30 @@ class FakeGh implements GhIssuesClient {
     this.comments.set(number, [...(this.comments.get(number) ?? []), body]);
     return Promise.resolve();
   }
+
+  addSubIssue(
+    number: number,
+    subIssueId: number,
+    replaceParent = false,
+  ): Promise<void> {
+    this.calls.push(
+      `subissue #${number} +${subIssueId}${replaceParent ? " replace" : ""}`,
+    );
+    if (this.failSubIssueUpdates) {
+      return Promise.reject(new Error("sub-issue projection unavailable"));
+    }
+    this.findByGlobalId(subIssueId).parentNumber = number;
+    return Promise.resolve();
+  }
+
+  removeSubIssue(number: number, subIssueId: number): Promise<void> {
+    this.calls.push(`subissue #${number} -${subIssueId}`);
+    if (this.failSubIssueUpdates) {
+      return Promise.reject(new Error("sub-issue projection unavailable"));
+    }
+    this.findByGlobalId(subIssueId).parentNumber = null;
+    return Promise.resolve();
+  }
 }
 
 function makeStore(gh = new FakeGh()): {
@@ -130,7 +165,7 @@ describe("GithubStore reads", () => {
       body: managedBody("notes", [
         "(id: fly-1) (state: in-flight) (repo: app) (kind: ship) (priority: 2)",
       ]),
-      labels: ["in-flight"],
+      labels: ["tasks-axi:in-flight"],
     });
     gh.seed({ title: "waiting", body: managedBody("", ["(id: wait-2)"]) });
     gh.seed({
@@ -257,7 +292,7 @@ describe("GithubStore create", () => {
     const { store, gh } = makeStore();
     await store.create({ id: "hot-1", title: "start now", state: "in_flight" });
     expect(gh.find(1).body).toContain("(id: hot-1) (state: in-flight)");
-    expect(gh.calls).toContain("labels #1 +[in-flight] -[]");
+    expect(gh.calls).toContain("labels #1 +[tasks-axi:in-flight] -[]");
   });
 
   it("writes a (since) override only when created differs from today", async () => {
@@ -334,7 +369,7 @@ describe("GithubStore transitions", () => {
     const task = await store.transition("a-1", "in_flight");
     expect(task.state).toBe("in_flight");
     expect(gh.find(1).body).toContain("(id: a-1) (state: in-flight)");
-    expect(gh.find(1).labels).toEqual(["in-flight"]);
+    expect(gh.find(1).labels).toEqual(["tasks-axi:in-flight"]);
   });
 
   it("done closes natively, appends the PR to the prose, and normalizes the state tag away", async () => {
@@ -342,11 +377,11 @@ describe("GithubStore transitions", () => {
     gh.seed({
       title: "blocker work",
       body: managedBody("", ["(id: blk-1) (state: in-flight)"]),
-      labels: ["in-flight"],
+      labels: ["tasks-axi:in-flight"],
     });
     gh.seed({
       body: managedBody("", ["(id: dep-2)", "blocked-by: blk-1 - waits on it"]),
-      labels: ["blocked"],
+      labels: ["tasks-axi:blocked"],
     });
     const { store } = makeStore(gh);
 
@@ -405,7 +440,7 @@ describe("GithubStore hand-edit round-trips (design §5)", () => {
       state: "closed",
       stateReason: "completed",
       closedAt: "2026-07-20T00:00:00Z",
-      labels: ["in-flight"],
+      labels: ["tasks-axi:in-flight"],
     });
     const { store } = makeStore(gh);
     const before = await store.get("a-1");
@@ -466,7 +501,7 @@ describe("GithubStore hand-edit round-trips (design §5)", () => {
     const gh = new FakeGh();
     gh.seed({
       body: managedBody("", ["(id: fly-1) (state: in-flight)"]),
-      labels: ["blocked", "bug"], // human tidied in-flight away, added blocked
+      labels: ["tasks-axi:blocked", "bug"], // human tidied in-flight away, added blocked
     });
     const { store } = makeStore(gh);
     expect((await store.get("fly-1"))?.meta).toMatchObject({
@@ -475,7 +510,7 @@ describe("GithubStore hand-edit round-trips (design §5)", () => {
     gh.find(1).labels.push("triage");
 
     await store.update("fly-1", { priority: 3 });
-    expect(gh.find(1).labels.sort()).toEqual(["bug", "in-flight", "triage"]);
+    expect(gh.find(1).labels.sort()).toEqual(["bug", "tasks-axi:in-flight", "triage"]);
     expect((await store.get("fly-1"))?.meta?.label_drift).toBeUndefined();
   });
 
@@ -544,7 +579,7 @@ describe("GithubStore update and rm", () => {
     expect(gh.find(1).body).toContain(
       "(hold: captain decision pending) (hold-kind: captain) (hold-until: 2026-08-09)",
     );
-    expect(gh.find(1).labels).toEqual(["held"]);
+    expect(gh.find(1).labels).toEqual(["tasks-axi:held"]);
 
     await store.update("a-1", { hold: null });
     expect(gh.find(1).labels).toEqual([]);
@@ -568,7 +603,7 @@ describe("GithubStore update and rm", () => {
     gh.seed({
       title: "the blocker",
       body: managedBody("history prose", ["(id: blk-1) (state: in-flight)"]),
-      labels: ["in-flight", "keeper"],
+      labels: ["tasks-axi:in-flight", "keeper"],
     });
     gh.seed({ body: managedBody("", ["(id: dep-2)", "blocked-by: blk-1"]) });
     const { store } = makeStore(gh);
@@ -605,14 +640,14 @@ describe("GithubStore update and rm", () => {
     const { store } = makeStore(gh);
 
     await store.remove("gone-1");
-    expect(gh.find(2).labels).toEqual(["in-flight"]);
+    expect(gh.find(2).labels).toEqual(["tasks-axi:in-flight"]);
   });
 
   it("rm warns without failing when projection cleanup degrades", async () => {
     const gh = new FakeGh();
     gh.seed({
       body: managedBody("", ["(id: gone-1)"]),
-      labels: ["held"],
+      labels: ["tasks-axi:held"],
     });
     gh.seed({
       body: managedBody("", ["(id: fly-2) (state: in-flight)"]),
@@ -646,7 +681,7 @@ describe("GithubStore update and rm", () => {
     expect(gh.find(2).body).toContain(
       "blocked-by: a-1 - waits on the login refactor",
     );
-    expect(gh.find(2).labels).toEqual(["blocked"]);
+    expect(gh.find(2).labels).toEqual(["tasks-axi:blocked"]);
 
     const again = await store.addDep("b-2", { type: "blocked-by", id: "a-1" });
     expect(again).toBe(false);
@@ -662,7 +697,7 @@ describe("GithubStore render", () => {
     gh.seed({
       // Hand-reordered tags and drifted labels.
       body: managedBody("prose", ["(kind: ship) (id: a-1) (state: in-flight)"]),
-      labels: ["held"],
+      labels: ["tasks-axi:held"],
     });
     gh.seed({ body: managedBody("", ["(id: b-2)"]) });
     const { store } = makeStore(gh);
@@ -672,7 +707,7 @@ describe("GithubStore render", () => {
     expect(gh.find(1).body).toBe(
       managedBody("prose", ["(id: a-1) (state: in-flight) (kind: ship)"]),
     );
-    expect(gh.find(1).labels).toEqual(["in-flight"]);
+    expect(gh.find(1).labels).toEqual(["tasks-axi:in-flight"]);
     // The already-canonical issue is not rewritten.
     expect(gh.calls.filter((c) => c.startsWith("patch #2"))).toEqual([]);
   });
@@ -694,5 +729,128 @@ describe("github tasks in the CLI detail view", () => {
     expect(output).toContain("meta_issue: 1");
     expect(output).toContain('meta_url: "https://github.com/o/r/issues/1"');
     expect(output).toContain("meta_label_drift: true");
+  });
+});
+
+describe("GithubStore label prefix", () => {
+  it("rejects projection label names outside the tasks-axi: namespace", () => {
+    const gh = new FakeGh();
+    expect(
+      () =>
+        new GithubStore({
+          repo: gh.repo,
+          client: gh,
+          labels: { inFlight: "wip" },
+        }),
+    ).toThrow('must carry the "tasks-axi:" prefix');
+  });
+});
+
+describe("GithubStore native sub-issue projection", () => {
+  it("links a created child under its parent by global id", async () => {
+    const gh = new FakeGh();
+    gh.seed({ body: managedBody("", ["(id: parent-p1)"]) });
+    const { store } = makeStore(gh);
+
+    await store.create({
+      id: "child-c1",
+      title: "child work",
+      deps: [{ type: "parent", id: "parent-p1" }],
+    });
+
+    const child = gh.find(2);
+    expect(gh.calls).toContain(`subissue #1 +${child.id}`);
+    expect(child.parentNumber).toBe(1);
+    // The block stays the source of truth for the edge.
+    expect(child.body).toContain("parent: parent-p1");
+  });
+
+  it("reparents with replace when the native link points elsewhere", async () => {
+    const gh = new FakeGh();
+    gh.seed({ body: managedBody("", ["(id: parent-p1)"]) });
+    gh.seed({ body: managedBody("", ["(id: parent-p2)"]) });
+    const child = gh.seed({
+      body: managedBody("", ["(id: child-c1)\nparent: parent-p2"]),
+      parentNumber: 1,
+    });
+    const { store } = makeStore(gh);
+
+    // Any write heals projection drift; a plain metadata update suffices.
+    await store.update("child-c1", { priority: 1 });
+
+    expect(gh.calls).toContain(`subissue #2 +${child.id} replace`);
+    expect(gh.find(3).parentNumber).toBe(2);
+  });
+
+  it("unlinks when the parent edge is gone but preserves links to unmanaged issues", async () => {
+    const gh = new FakeGh();
+    gh.seed({ body: managedBody("", ["(id: parent-p1)"]) });
+    const orphan = gh.seed({
+      body: managedBody("", ["(id: orphan-o1)"]),
+      parentNumber: 1,
+    });
+    // A human linked this managed task under an unmanaged tracking issue.
+    gh.seed({ body: "no block: not a task", parentNumber: undefined });
+    const human = gh.seed({
+      body: managedBody("", ["(id: human-h1)"]),
+      parentNumber: 3,
+    });
+    const { store } = makeStore(gh);
+
+    await store.update("orphan-o1", { priority: 2 });
+
+    expect(gh.calls).toContain(`subissue #1 -${orphan.id}`);
+    expect(gh.find(2).parentNumber).toBeNull();
+    expect(human.parentNumber).toBe(3);
+    expect(gh.calls).not.toContain(`subissue #3 -${human.id}`);
+  });
+
+  it("reports parent drift in meta without acting on a read", async () => {
+    const gh = new FakeGh();
+    gh.seed({ body: managedBody("", ["(id: parent-p1)"]) });
+    gh.seed({
+      body: managedBody("", ["(id: child-c1)\nparent: parent-p1"]),
+    });
+    const { store } = makeStore(gh);
+
+    const task = await store.get("child-c1");
+    expect(task?.meta?.parent_drift).toBe(true);
+    expect(gh.calls).toEqual([]);
+  });
+
+  it("de-manage retracts its own link and its children's links", async () => {
+    const gh = new FakeGh();
+    gh.seed({ body: managedBody("", ["(id: grand-g1)"]) });
+    const parent = gh.seed({
+      body: managedBody("", ["(id: parent-p1)\nparent: grand-g1"]),
+      parentNumber: 1,
+    });
+    const child = gh.seed({
+      body: managedBody("", ["(id: child-c1)\nparent: parent-p1"]),
+      parentNumber: 2,
+    });
+    const { store } = makeStore(gh);
+
+    await store.remove("parent-p1");
+
+    expect(gh.calls).toContain(`subissue #1 -${parent.id}`);
+    expect(gh.calls).toContain(`subissue #2 -${child.id}`);
+    expect(gh.find(3).parentNumber).toBeNull();
+  });
+
+  it("degrades with a warning when the sub-issue write fails", async () => {
+    const gh = new FakeGh();
+    gh.seed({ body: managedBody("", ["(id: parent-p1)"]) });
+    gh.seed({
+      body: managedBody("", ["(id: child-c1)\nparent: parent-p1"]),
+    });
+    gh.failSubIssueUpdates = true;
+    const { store, warnings } = makeStore(gh);
+
+    const result = await store.update("child-c1", { priority: 3 });
+    expect(result.task.meta?.parent_projection_degraded).toBe(true);
+    expect(
+      warnings.some((w) => w.includes("sub-issue projection degraded")),
+    ).toBe(true);
   });
 });

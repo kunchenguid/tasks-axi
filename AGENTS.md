@@ -46,7 +46,8 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 
 - **Two authoritative stores, and labels are never one of them.**
   Native `state`/`state_reason` own the terminal boundary (closed = done; not_planned/duplicate = `resolution: dropped`); the visible `<!-- tasks-axi:v1 -->` block at the body foot owns everything else, including the `(state: in-flight)` tag (absent = queued) and the task id.
-  Every label (`in-flight`/`blocked`/`held`, names configurable via `[github]`) is a write-time projection of derived truth, refreshed globally on every write and NEVER read back; `render` is the manual resync verb, and `show` reports `meta_label_drift`.
+  Every label (`tasks-axi:in-flight`/`tasks-axi:blocked`/`tasks-axi:held`; configurable via `[github]` but always validated to carry the `tasks-axi:` prefix) is a write-time projection of derived truth, refreshed globally on every write and NEVER read back; `render` is the manual resync verb, and `show` reports `meta_label_drift`.
+  Native sub-issue links are the same kind of projection for the first `parent:` edge (by global issue id - `sub_issue_id` takes the id, never the number); `blocked-by:` is never projected (GitHub has no native blocking relation); links to unmanaged issues are left alone; `rm` retracts its own and its children's projected links.
 - **The block reuses the one tag grammar** (`extractTags`/`buildProse` from `markdown-grammar.ts`); `(id:)`/`(state:)` are the only block-only tags.
   Parse is strict: a mangled block is a loud `VALIDATION_ERROR` naming the issue, a deleted block orphans the task, and duplicate ids across issues fail loud naming both numbers.
 - **Hand-edits are valid state edits**: a UI close is an artifact-less done (idempotent `done` backfills the artifact), a reopen lands queued (done normalizes the state tag away), and a retitle can never orphan a task because the id lives only in the block.
