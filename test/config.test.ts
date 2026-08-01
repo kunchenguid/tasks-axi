@@ -205,9 +205,9 @@ describe("github config", () => {
     const github = resolveConfig({ cwd: dir, home, env: {} });
     expect(github.github).toEqual({
       repo: "owner/name",
-      inFlightLabel: "in-flight",
-      blockedLabel: "blocked",
-      heldLabel: "held",
+      inFlightLabel: "tasks-axi:in-flight",
+      blockedLabel: "tasks-axi:blocked",
+      heldLabel: "tasks-axi:held",
     });
   });
 
@@ -215,9 +215,9 @@ describe("github config", () => {
     const cfg = resolveConfig({ cwd: dir, home, env: {}, backend: "github" });
     expect(cfg.backend).toBe("github");
     expect(cfg.github).toEqual({
-      inFlightLabel: "in-flight",
-      blockedLabel: "blocked",
-      heldLabel: "held",
+      inFlightLabel: "tasks-axi:in-flight",
+      blockedLabel: "tasks-axi:blocked",
+      heldLabel: "tasks-axi:held",
     });
   });
 
