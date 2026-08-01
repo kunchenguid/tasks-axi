@@ -27,6 +27,8 @@ class FakeGh implements GhIssuesClient {
   listCalls = 0;
   failLabelUpdates = false;
   failSubIssueUpdates = false;
+  failSubIssueRemovalAtCall: number | undefined;
+  subIssueRemovalCalls = 0;
   private next = 1;
 
   seed(partial: Partial<IssueData> & { body: string }): IssueData {
@@ -131,7 +133,11 @@ class FakeGh implements GhIssuesClient {
 
   removeSubIssue(number: number, subIssueId: number): Promise<void> {
     this.calls.push(`subissue #${number} -${subIssueId}`);
-    if (this.failSubIssueUpdates) {
+    this.subIssueRemovalCalls++;
+    if (
+      this.failSubIssueUpdates ||
+      this.subIssueRemovalCalls === this.failSubIssueRemovalAtCall
+    ) {
       return Promise.reject(new Error("sub-issue projection unavailable"));
     }
     this.findByGlobalId(subIssueId).parentNumber = null;
@@ -875,8 +881,11 @@ describe("GithubStore native sub-issue projection", () => {
 
     await expect(store.remove("parent-p1")).rejects.toMatchObject({
       code: "UNKNOWN",
-      message: 'Could not retract native sub-issue links for task "parent-p1"',
-      suggestions: ["Run `tasks-axi rm parent-p1` again to retry"],
+      message:
+        'Sub-issue retraction for task "parent-p1" is incomplete but resumable',
+      suggestions: [
+        "Run `tasks-axi rm parent-p1` again to resume retraction",
+      ],
     });
 
     expect(gh.find(1)).toMatchObject({ state: "open" });
@@ -890,6 +899,39 @@ describe("GithubStore native sub-issue projection", () => {
     expect(gh.find(1)).toMatchObject({ state: "closed" });
     expect(gh.find(1).body).not.toContain("(id: parent-p1)");
     expect(child.parentNumber).toBeNull();
+  });
+
+  it("resumes rm after a mid-retraction failure", async () => {
+    const gh = new FakeGh();
+    gh.seed({ body: managedBody("", ["(id: grand-g1)"]) });
+    const parent = gh.seed({
+      body: managedBody("", ["(id: parent-p1)\nparent: grand-g1"]),
+      parentNumber: 1,
+    });
+    const child = gh.seed({
+      body: managedBody("", ["(id: child-c1)\nparent: parent-p1"]),
+      parentNumber: 2,
+    });
+    gh.failSubIssueRemovalAtCall = 2;
+    const { store } = makeStore(gh);
+
+    await expect(store.remove("parent-p1")).rejects.toMatchObject({
+      code: "UNKNOWN",
+      message: expect.stringContaining("incomplete but resumable"),
+    });
+
+    expect(parent.parentNumber).toBeNull();
+    expect(child.parentNumber).toBe(2);
+    expect(parent.state).toBe("open");
+    expect(parent.body).toContain("(id: parent-p1)");
+
+    gh.failSubIssueRemovalAtCall = undefined;
+    await store.remove("parent-p1");
+
+    expect(gh.subIssueRemovalCalls).toBe(3);
+    expect(child.parentNumber).toBeNull();
+    expect(parent.state).toBe("closed");
+    expect(parent.body).not.toContain("(id: parent-p1)");
   });
 
   it("degrades with a warning when the sub-issue write fails", async () => {

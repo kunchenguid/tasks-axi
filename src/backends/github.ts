@@ -792,10 +792,12 @@ export class GithubStore implements Store {
     const managedNumbers = new Set(records.map((r) => r.issue.number));
     const failRemoval = (): AxiError =>
       new AxiError(
-        `Could not retract native sub-issue links for task "${id}"`,
+        `Sub-issue retraction for task "${id}" is incomplete but resumable`,
         "UNKNOWN",
-        [`Run \`tasks-axi rm ${id}\` again to retry`],
+        [`Run \`tasks-axi rm ${id}\` again to resume retraction`],
       );
+    // Link retraction is resumable, while managed state changes atomically only
+    // after every required projection has been removed.
     if (record.issue.parentNumber !== null) {
       const parentNumber = record.issue.parentNumber;
       if (managedNumbers.has(parentNumber)) {
