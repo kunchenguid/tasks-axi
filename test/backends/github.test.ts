@@ -790,6 +790,23 @@ describe("GithubStore native sub-issue projection", () => {
     expect(gh.find(3).parentNumber).toBe(2);
   });
 
+  it("preserves an unmanaged native parent and reports drift", async () => {
+    const gh = new FakeGh();
+    gh.seed({ body: managedBody("", ["(id: parent-p1)"]) });
+    gh.seed({ body: "human tracking issue" });
+    const child = gh.seed({
+      body: managedBody("", ["(id: child-c1)\nparent: parent-p1"]),
+      parentNumber: 2,
+    });
+    const { store } = makeStore(gh);
+
+    const result = await store.update("child-c1", { priority: 1 });
+
+    expect(child.parentNumber).toBe(2);
+    expect(result.task.meta?.parent_drift).toBe(true);
+    expect(gh.calls.some((call) => call.startsWith("subissue "))).toBe(false);
+  });
+
   it("unlinks when the parent edge is gone but preserves links to unmanaged issues", async () => {
     const gh = new FakeGh();
     gh.seed({ body: managedBody("", ["(id: parent-p1)"]) });
@@ -844,6 +861,35 @@ describe("GithubStore native sub-issue projection", () => {
     expect(gh.calls).toContain(`subissue #1 -${parent.id}`);
     expect(gh.calls).toContain(`subissue #2 -${child.id}`);
     expect(gh.find(3).parentNumber).toBeNull();
+  });
+
+  it("keeps the task managed when required unlinking fails", async () => {
+    const gh = new FakeGh();
+    gh.seed({ body: managedBody("", ["(id: parent-p1)"]) });
+    const child = gh.seed({
+      body: managedBody("", ["(id: child-c1)\nparent: parent-p1"]),
+      parentNumber: 1,
+    });
+    gh.failSubIssueUpdates = true;
+    const { store, warnings } = makeStore(gh);
+
+    await expect(store.remove("parent-p1")).rejects.toMatchObject({
+      code: "UNKNOWN",
+      message: 'Could not retract native sub-issue links for task "parent-p1"',
+      suggestions: ["Run `tasks-axi rm parent-p1` again to retry"],
+    });
+
+    expect(gh.find(1)).toMatchObject({ state: "open" });
+    expect(gh.find(1).body).toContain("(id: parent-p1)");
+    expect(child.parentNumber).toBe(1);
+    expect(gh.calls.some((call) => call.startsWith("patch #1"))).toBe(false);
+    expect(warnings).toEqual([]);
+
+    gh.failSubIssueUpdates = false;
+    await store.remove("parent-p1");
+    expect(gh.find(1)).toMatchObject({ state: "closed" });
+    expect(gh.find(1).body).not.toContain("(id: parent-p1)");
+    expect(child.parentNumber).toBeNull();
   });
 
   it("degrades with a warning when the sub-issue write fails", async () => {
