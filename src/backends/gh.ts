@@ -23,12 +23,19 @@ export type GhExec = (args: string[], stdin?: string) => Promise<GhExecResult>;
 /** One issue as the store consumes it, normalized across GraphQL and REST. */
 export interface IssueData {
   number: number;
+  /**
+   * The global issue id (GraphQL `databaseId`, REST `id`). Sub-issue write
+   * endpoints take this id in `sub_issue_id`, never the issue number.
+   */
+  id: number;
   title: string;
   body: string;
   state: "open" | "closed";
   /** Lowercase close reason (completed | not_planned | duplicate | reopened), or null. */
   stateReason: string | null;
   labels: string[];
+  /** The native sub-issue parent's issue number, or null when top-level. */
+  parentNumber: number | null;
   createdAt: string;
   closedAt: string | null;
   updatedAt: string;
@@ -56,6 +63,17 @@ export interface GhIssuesClient {
   updateIssue(number: number, patch: IssuePatch): Promise<void>;
   updateLabels(number: number, patch: LabelPatch): Promise<void>;
   addComment(number: number, body: string): Promise<void>;
+  /**
+   * Link `subIssueId` (a global issue id) under parent `number` via the native
+   * sub-issues API. `replaceParent` reparents an already-linked sub-issue.
+   */
+  addSubIssue(
+    number: number,
+    subIssueId: number,
+    replaceParent?: boolean,
+  ): Promise<void>;
+  /** Unlink `subIssueId` (a global issue id) from parent `number`. */
+  removeSubIssue(number: number, subIssueId: number): Promise<void>;
 }
 
 export const execGh: GhExec = (args, stdin) =>
@@ -137,9 +155,10 @@ const LIST_ISSUES_QUERY = `query($owner: String!, $name: String!, $cursor: Strin
     issues(first: 100, after: $cursor, states: [OPEN, CLOSED]) {
       pageInfo { hasNextPage endCursor }
       nodes {
-        number title body state stateReason
+        number databaseId title body state stateReason
         createdAt closedAt updatedAt url
         labels(first: 100) { nodes { name } }
+        parent { number }
       }
     }
   }
@@ -147,6 +166,8 @@ const LIST_ISSUES_QUERY = `query($owner: String!, $name: String!, $cursor: Strin
 
 interface GraphqlIssueNode {
   number: number;
+  databaseId: number;
+  parent: { number: number } | null;
   title: string;
   body: string;
   state: "OPEN" | "CLOSED";
@@ -171,6 +192,7 @@ interface GraphqlIssuesPage {
 
 interface RestIssue {
   number: number;
+  id: number;
   title: string;
   body: string | null;
   state: "open" | "closed";
@@ -185,11 +207,13 @@ interface RestIssue {
 function fromGraphqlNode(node: GraphqlIssueNode): IssueData {
   return {
     number: node.number,
+    id: node.databaseId,
     title: node.title,
     body: node.body,
     state: node.state === "CLOSED" ? "closed" : "open",
     stateReason: node.stateReason ? node.stateReason.toLowerCase() : null,
     labels: node.labels.nodes.map((label) => label.name),
+    parentNumber: node.parent?.number ?? null,
     createdAt: node.createdAt,
     closedAt: node.closedAt,
     updatedAt: node.updatedAt,
@@ -200,6 +224,7 @@ function fromGraphqlNode(node: GraphqlIssueNode): IssueData {
 function fromRestIssue(issue: RestIssue): IssueData {
   return {
     number: issue.number,
+    id: issue.id,
     title: issue.title,
     body: issue.body ?? "",
     state: issue.state,
@@ -207,6 +232,10 @@ function fromRestIssue(issue: RestIssue): IssueData {
     labels: issue.labels.map((label) =>
       typeof label === "string" ? label : label.name,
     ),
+    // The REST issue payload carries no parent; only the GraphQL read does.
+    // REST responses are consumed for freshly created issues, which start
+    // top-level, so null is exact here.
+    parentNumber: null,
     createdAt: issue.created_at,
     closedAt: issue.closed_at,
     updatedAt: issue.updated_at,
@@ -335,6 +364,25 @@ export function createGhIssuesClient(
 
     async addComment(number: number, body: string): Promise<void> {
       await rest("POST", `repos/${repo}/issues/${number}/comments`, { body });
+    },
+
+    async addSubIssue(
+      number: number,
+      subIssueId: number,
+      replaceParent = false,
+    ): Promise<void> {
+      await rest("POST", `repos/${repo}/issues/${number}/sub_issues`, {
+        sub_issue_id: subIssueId,
+        ...(replaceParent ? { replace_parent: true } : {}),
+      });
+    },
+
+    async removeSubIssue(number: number, subIssueId: number): Promise<void> {
+      // Singular path per the sub-issues API: DELETE .../sub_issue with the
+      // global id in the body.
+      await rest("DELETE", `repos/${repo}/issues/${number}/sub_issue`, {
+        sub_issue_id: subIssueId,
+      });
     },
   };
 }
