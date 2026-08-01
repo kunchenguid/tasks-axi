@@ -191,6 +191,7 @@ export interface ExtractedTags {
   priority?: number;
   hold?: Hold;
   links: TaskLink[];
+  duplicateSingletons: string[];
 }
 
 /**
@@ -201,6 +202,7 @@ export interface ExtractedTags {
  */
 export function extractTags(rest: string): ExtractedTags {
   const deps: Dep[] = [];
+  const duplicateSingletons: string[] = [];
   let repo: string | undefined;
   let kindTag: string | undefined;
   let created: string | undefined;
@@ -228,6 +230,7 @@ export function extractTags(rest: string): ExtractedTags {
     m = title.match(TAIL_REPO);
     if (m) {
       if (repo === undefined) repo = m[1].trim();
+      else duplicateSingletons.push("repo");
       title = title.slice(0, m.index);
       stripping = true;
       continue;
@@ -235,6 +238,7 @@ export function extractTags(rest: string): ExtractedTags {
     m = title.match(TAIL_KIND);
     if (m) {
       if (kindTag === undefined) kindTag = m[1].trim();
+      else duplicateSingletons.push("kind");
       title = title.slice(0, m.index);
       stripping = true;
       continue;
@@ -242,6 +246,7 @@ export function extractTags(rest: string): ExtractedTags {
     m = title.match(TAIL_PRIORITY);
     if (m) {
       if (priority === undefined) priority = Number(m[1]);
+      else duplicateSingletons.push("priority");
       title = title.slice(0, m.index);
       stripping = true;
       continue;
@@ -249,6 +254,7 @@ export function extractTags(rest: string): ExtractedTags {
     m = title.match(TAIL_SINCE);
     if (m) {
       if (created === undefined) created = m[1];
+      else duplicateSingletons.push("since");
       title = title.slice(0, m.index);
       stripping = true;
       continue;
@@ -258,7 +264,7 @@ export function extractTags(rest: string): ExtractedTags {
       if (closed === undefined) {
         closed = m[2];
         if (m[1] === "closed") resolution = "dropped";
-      }
+      } else duplicateSingletons.push("closure");
       title = title.slice(0, m.index);
       stripping = true;
       continue;
@@ -266,6 +272,7 @@ export function extractTags(rest: string): ExtractedTags {
     m = title.match(TAIL_HOLD_UNTIL);
     if (m) {
       if (holdUntil === undefined) holdUntil = m[1];
+      else duplicateSingletons.push("hold-until");
       title = title.slice(0, m.index);
       stripping = true;
       continue;
@@ -273,6 +280,7 @@ export function extractTags(rest: string): ExtractedTags {
     m = title.match(TAIL_HOLD_KIND);
     if (m) {
       if (holdKind === undefined) holdKind = m[1] as HoldKind;
+      else duplicateSingletons.push("hold-kind");
       title = title.slice(0, m.index);
       stripping = true;
       continue;
@@ -280,6 +288,7 @@ export function extractTags(rest: string): ExtractedTags {
     m = title.match(TAIL_HOLD);
     if (m) {
       if (holdReason === undefined) holdReason = m[1].trim();
+      else duplicateSingletons.push("hold");
       title = title.slice(0, m.index);
       stripping = true;
       continue;
@@ -309,6 +318,7 @@ export function extractTags(rest: string): ExtractedTags {
     priority,
     hold,
     links,
+    duplicateSingletons,
   };
 }
 
