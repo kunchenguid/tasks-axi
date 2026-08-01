@@ -406,7 +406,15 @@ export class GithubStore implements Store {
   }
 
   private async refreshParentLinks(records: GithubRecord[]): Promise<void> {
+    const managedNumbers = new Set(records.map((r) => r.issue.number));
     for (const { record, want } of this.parentDrifted(records)) {
+      if (
+        record.issue.parentNumber !== null &&
+        !managedNumbers.has(record.issue.parentNumber)
+      ) {
+        record.task.meta = { ...record.task.meta, parent_drift: true };
+        continue;
+      }
       try {
         if (want === null) {
           await this.client.removeSubIssue(
@@ -781,6 +789,38 @@ export class GithubStore implements Store {
     const records = await this.loadAll();
     const record = this.findRecord(records, id);
     this.requireNoActiveDependents(records, id);
+    const managedNumbers = new Set(records.map((r) => r.issue.number));
+    const failRemoval = (): AxiError =>
+      new AxiError(
+        `Could not retract native sub-issue links for task "${id}"`,
+        "UNKNOWN",
+        [`Run \`tasks-axi rm ${id}\` again to retry`],
+      );
+    if (record.issue.parentNumber !== null) {
+      const parentNumber = record.issue.parentNumber;
+      if (managedNumbers.has(parentNumber)) {
+        try {
+          await this.client.removeSubIssue(parentNumber, record.issue.id);
+        } catch {
+          throw failRemoval();
+        }
+        record.issue.parentNumber = null;
+      }
+    }
+    for (const child of records) {
+      if (child === record) continue;
+      if (child.issue.parentNumber !== record.issue.number) continue;
+      try {
+        await this.client.removeSubIssue(
+          record.issue.number,
+          child.issue.id,
+        );
+      } catch {
+        throw failRemoval();
+      }
+      child.issue.parentNumber = null;
+    }
+
     await this.client.updateIssue(record.issue.number, {
       body: record.prose,
       state: "closed",
@@ -797,33 +837,6 @@ export class GithubStore implements Store {
         });
       } catch (error) {
         this.markProjectionDegraded(record, error);
-      }
-    }
-    // De-manage also retracts the native sub-issue projections: the issue's
-    // own managed parent link, and the links of managed children that pointed
-    // at it (their `parent:` edges go dangling-resolved, markdown-style).
-    const managedNumbers = new Set(records.map((r) => r.issue.number));
-    if (
-      record.issue.parentNumber !== null &&
-      managedNumbers.has(record.issue.parentNumber)
-    ) {
-      try {
-        await this.client.removeSubIssue(
-          record.issue.parentNumber,
-          record.issue.id,
-        );
-      } catch (error) {
-        this.markParentProjectionDegraded(record, error);
-      }
-    }
-    for (const child of records) {
-      if (child === record) continue;
-      if (child.issue.parentNumber !== record.issue.number) continue;
-      try {
-        await this.client.removeSubIssue(record.issue.number, child.issue.id);
-        child.issue.parentNumber = null;
-      } catch (error) {
-        this.markParentProjectionDegraded(child, error);
       }
     }
     records.splice(records.indexOf(record), 1);
