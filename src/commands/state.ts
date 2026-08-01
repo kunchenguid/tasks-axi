@@ -43,7 +43,7 @@ Re-running on an already Done task backfills links/notes without changing the cl
 flags:
   --pr <url>, --report <path>, --note "<text>"
   --dropped   record the close as deliberately abandoned (resolution: dropped)
-  --keep <n> (default from config), --no-prune
+  --keep <n> (default from config), --no-prune   Markdown auto-pruning only
   --json   print the resulting task as a JSON object
 examples:
   tasks-axi done sm-idle-handoff-q8 --pr https://github.com/o/r/pull/42

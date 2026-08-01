@@ -10,7 +10,7 @@
 Task and backlog manager for agents — designed with [AXI](https://github.com/kunchenguid/axi) (Agent eXperience Interface).
 
 tasks-axi makes tiny structured backlog changes at near-zero output-token cost.
-A backlog can use a hand-editable Markdown file with a byte-exact round-trip or GitHub Issues with the same CLI surface, while long task bodies never bloat a `list`.
+A backlog can use a hand-editable Markdown file with a byte-exact round-trip or GitHub Issues with the same core task commands, while long task bodies never bloat a `list`.
 It borrows the dependency-graph and ready-query model from [beads](https://github.com/gastownhall/beads), adds structured dispatch holds, and keeps the house style from its `*-axi` siblings - token-efficient TOON output, contextual next-step suggestions, idempotent mutations, and structured errors.
 
 ## Why
@@ -112,9 +112,9 @@ tasks-axi update nm-release-validation --title "clearer title"
 tasks-axi show homemux-h7 --full
 
 # maintenance
-tasks-axi prune --keep 10        # archives the surplus, never deletes
-tasks-axi render                 # normalize the markdown in place
-tasks-axi mv hibit-cert-cleanup --to ../homemux/data/backlog.md
+tasks-axi prune --keep 10        # Markdown only: archives the surplus, never deletes
+tasks-axi render                 # normalize Markdown or resync GitHub projections
+tasks-axi mv hibit-cert-cleanup --to ../homemux/data/backlog.md # Markdown only
 # move a linked blocker/dependent set together
 tasks-axi mv blocker-b1 dependent-d2 --to ../homemux/data/backlog.md
 ```
@@ -262,7 +262,7 @@ GitHub projection label names default to `tasks-axi:in-flight`, `tasks-axi:block
 ## The GitHub backend
 
 `backend = "github"` stores the backlog as issues in one repository, so anyone with repo access sees the backlog in a UI they already live in.
-The CLI surface is unchanged; the backend needs the [GitHub CLI](https://cli.github.com) installed and authenticated (`gh auth login`), and `[github] repo` configured.
+The core task commands are unchanged; the backend needs the [GitHub CLI](https://cli.github.com) installed and authenticated (`gh auth login`), and `[github] repo` configured.
 
 How state is stored (block-authoritative):
 
