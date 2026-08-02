@@ -657,7 +657,7 @@ describe("GithubStore update and rm", () => {
     expect(gh.find(2).labels).toEqual(["tasks-axi:in-flight"]);
   });
 
-  it("rm warns without failing when projection cleanup degrades", async () => {
+  it("keeps the task managed when label retraction fails", async () => {
     const gh = new FakeGh();
     gh.seed({
       body: managedBody("", ["(id: gone-1)"]),
@@ -670,16 +670,25 @@ describe("GithubStore update and rm", () => {
     gh.failLabelUpdates = true;
     const { store, warnings } = makeStore(gh);
 
-    const removed = await store.remove("gone-1");
-    expect(removed.meta).toMatchObject({
-      label_drift: true,
-      label_projection_degraded: true,
+    await expect(store.remove("gone-1")).rejects.toMatchObject({
+      code: "UNKNOWN",
+      message:
+        'Label retraction for task "gone-1" is incomplete but resumable',
+      suggestions: ["Run `tasks-axi rm gone-1` again to resume retraction"],
     });
-    expect(gh.find(1).state).toBe("closed");
-    expect(warnings).toEqual([
-      "warning: projection labels degraded on issue #1: label projection unavailable; run tasks-axi render to resync",
-      "warning: projection labels degraded on issue #2: label projection unavailable; run tasks-axi render to resync",
-    ]);
+
+    expect(gh.find(1)).toMatchObject({
+      state: "open",
+      labels: ["tasks-axi:held"],
+    });
+    expect(gh.find(1).body).toContain("(id: gone-1)");
+    expect(gh.calls.some((call) => call.startsWith("patch #1"))).toBe(false);
+    expect(warnings).toEqual([]);
+
+    gh.failLabelUpdates = false;
+    await store.remove("gone-1");
+    expect(gh.find(1)).toMatchObject({ state: "closed", labels: [] });
+    expect(gh.find(1).body).not.toContain("(id: gone-1)");
   });
 
   it("dependency edges with reasons round-trip through the block", async () => {

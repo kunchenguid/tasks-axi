@@ -823,11 +823,6 @@ export class GithubStore implements Store {
       child.issue.parentNumber = null;
     }
 
-    await this.client.updateIssue(record.issue.number, {
-      body: record.prose,
-      state: "closed",
-      state_reason: "not_planned",
-    });
     const remove = record.issue.labels.filter((label) =>
       this.managedLabelNames().includes(label),
     );
@@ -837,10 +832,23 @@ export class GithubStore implements Store {
           add: [],
           remove,
         });
-      } catch (error) {
-        this.markProjectionDegraded(record, error);
+      } catch {
+        throw new AxiError(
+          `Label retraction for task "${id}" is incomplete but resumable`,
+          "UNKNOWN",
+          [`Run \`tasks-axi rm ${id}\` again to resume retraction`],
+        );
       }
+      record.issue.labels = record.issue.labels.filter(
+        (label) => !remove.includes(label),
+      );
     }
+
+    await this.client.updateIssue(record.issue.number, {
+      body: record.prose,
+      state: "closed",
+      state_reason: "not_planned",
+    });
     records.splice(records.indexOf(record), 1);
     await this.refreshProjections(records);
     return record.task;
