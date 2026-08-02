@@ -96,10 +96,7 @@ function parseTagLine(
 
   const tags = extractTags(stateTag.rest);
   if (tags.duplicateSingletons.length > 0) {
-    throw blockError(
-      ref,
-      `duplicate (${tags.duplicateSingletons[0]}:) tag`,
-    );
+    throw blockError(ref, `duplicate (${tags.duplicateSingletons[0]}:) tag`);
   }
   if (tags.title !== "") {
     throw blockError(ref, `unrecognized content "${tags.title}"`);

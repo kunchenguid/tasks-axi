@@ -271,25 +271,28 @@ How state is stored (block-authoritative):
   A later `done --pr ...` backfills the artifact idempotently.
 - Everything else lives in one visible, versioned block at the foot of the issue body (`<!-- tasks-axi:v1 -->` ... `<!-- /tasks-axi -->`): the task id, the queued/in-flight state tag, kind, repo, priority, holds, and dependency edges, in the same tag grammar the markdown backend uses.
   The id lives only in the block, so retitling an issue can never orphan a task.
-  Maintainers may correct block fields by hand; a mangled block is a loud validation error naming the issue, and deleting the whole block orphans the task (the same way deleting a markdown line does).
+  Maintainers may correct block fields by hand; duplicate singleton tags and other malformed block content are loud validation errors naming the issue, and deleting the whole block orphans the task (the same way deleting a markdown line does).
+  The marker lines are reserved for the managed block and cannot appear in issue prose.
 - Every label the backend touches (`tasks-axi:in-flight`, `tasks-axi:blocked`, `tasks-axi:held`; names configurable within the `tasks-axi:` namespace) is a **write-time projection of derived truth, never read back**.
   Labels are a rendered dashboard, not controls: toggling a chip changes nothing, and any write (or `render`, the manual resync verb) heals all label drift.
   Missing projection labels are created lazily.
   GitHub assigns their colors unless maintainers pre-create them.
-  A label projection failure leaves the task mutation successful, writes a warning to stderr, and surfaces `meta_label_projection_degraded: true`.
+  During ordinary writes, a label projection failure leaves the task mutation successful, writes a warning to stderr, and surfaces `meta_label_projection_degraded: true`.
   `show` reports `meta_label_drift: true` when the chips disagree with derived truth.
   GitHub-backed task details also expose `meta_issue`, `meta_url`, and the exact native `meta_state_reason`; JSON task objects carry the same values in `meta`.
 - GitHub's **native sub-issue links** are the same kind of projection, for `parent:` edges.
   The first `parent:` edge of each task is mirrored as a native sub-issue link (by global issue id), so the hierarchy shows up in GitHub's own tracking UI; further parent edges stay block-only, and `blocked-by:` edges are never projected because GitHub has no native blocking relation.
   The block remains the source of truth: hand-relinking a sub-issue changes nothing durable, any write heals the link (`meta_parent_drift` flags read-side disagreement, `meta_parent_projection_degraded` a failed heal), and a native parent pointing at an issue outside the managed backlog is a human link that is left alone.
-  `rm` (de-manage) retracts the issue's own projected link and its managed children's links.
 
 Differences from the markdown backend, stated plainly:
 
 - Issues that carry no tasks-axi block are invisible to the CLI, so the backlog coexists with human-filed issues; a dedicated backlog repository keeps reads fast.
 - Each command pays roughly one to one and a half seconds for one GraphQL read; there is no offline mode.
 - There is no lock: GitHub offers no write precondition on issues, so two writers racing on the same issue body can lose one write (a small, accepted TOCTOU window).
-- `rm` de-manages rather than deletes: it strips the block, closes the issue as _not planned_, and leaves title and prose as ordinary issue history.
+- `rm` de-manages rather than deletes.
+  It first retracts every configured tasks-axi label plus the issue's managed native parent link and its managed children's links, while preserving a native parent outside the managed backlog.
+  Only after cleanup succeeds does it strip the block and close the issue as _not planned_, leaving title and prose as ordinary issue history.
+  If projection cleanup fails, the issue remains managed and rerunning the same command resumes the cleanup safely.
 - `mv`, `prune`, and the `public-followup` namespace are not supported (`prune` is meaningless when closed issues are already the archive; public follow-ups are privacy-sensitive by design and assume a lock GitHub cannot provide).
 - `update --archive-body` posts the superseded body as an issue comment.
 

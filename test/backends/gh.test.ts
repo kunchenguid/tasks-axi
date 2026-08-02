@@ -264,7 +264,10 @@ describe("createGhIssuesClient", () => {
 
   it("links and unlinks native sub-issues by global id", async () => {
     const calls: RecordedCall[] = [];
-    const client = createGhIssuesClient("o/r", fakeExec(() => ok("{}"), calls));
+    const client = createGhIssuesClient(
+      "o/r",
+      fakeExec(() => ok("{}"), calls),
+    );
 
     await client.addSubIssue(7, 5002);
     await client.addSubIssue(9, 5002, true);
