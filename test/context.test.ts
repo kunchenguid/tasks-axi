@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -12,6 +12,8 @@ let cwd: string;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "tasks-axi-ctx-"));
   home = mkdtempSync(join(tmpdir(), "tasks-axi-ctx-home-"));
+  // Mark dir as a repo root so the .tasks.toml walk never escapes the fixture.
+  mkdirSync(join(dir, ".git"));
   cwd = process.cwd();
   process.chdir(dir);
 });

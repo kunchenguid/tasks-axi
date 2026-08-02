@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { DEFAULT_LABEL_COLORS } from "./backends/github.js";
 import { readFileSafe } from "./backends/lock.js";
 import { AxiError } from "./errors.js";
@@ -12,6 +12,12 @@ import { AxiError } from "./errors.js";
  *   --backend / --file flag > TASKS_AXI_* env > project .tasks.toml >
  *   ~/.tasks-axi/config.toml > defaults (markdown, first existing
  *   backlog.md/data/backlog.md, otherwise backlog.md).
+ *
+ * The project .tasks.toml is found by walking up from cwd (git-style),
+ * stopping at the first directory that has one, and never past a git
+ * repository root, $HOME, or the filesystem root. Its directory becomes the
+ * base for relative markdown paths and the default backlog candidates, so a
+ * subdirectory invocation behaves identically to a root invocation.
  *
  * Markdown and GitHub Issues ship behind the Store seam, which keeps backend
  * selection invisible to the command layer.
@@ -208,19 +214,39 @@ function loadToml(path: string): TomlConfig {
   return src ? parseConfigToml(src) : {};
 }
 
+/**
+ * Walk up from cwd looking for `.tasks.toml`, git-style. The walk checks a
+ * git repository root and $HOME themselves, but never climbs past either
+ * (or past the filesystem root). Returns the directory holding the config.
+ */
+function findProjectConfigDir(cwd: string, home: string): string | undefined {
+  let dir = cwd;
+  for (;;) {
+    if (existsSync(join(dir, ".tasks.toml"))) return dir;
+    if (existsSync(join(dir, ".git")) || dir === home) return undefined;
+    const parent = dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
+}
+
 function resolveMarkdownPath(
   explicit: string | undefined,
-  tomlPath: string | undefined,
   cwd: string,
+  tomlPath: string | undefined,
+  tomlBase: string,
+  base: string,
 ): string {
-  const chosen = explicit ?? tomlPath;
-  if (chosen) return isAbsolute(chosen) ? chosen : resolve(cwd, chosen);
+  if (explicit) return isAbsolute(explicit) ? explicit : resolve(cwd, explicit);
+  if (tomlPath) {
+    return isAbsolute(tomlPath) ? tomlPath : resolve(tomlBase, tomlPath);
+  }
 
   for (const candidate of PATH_CANDIDATES) {
-    const full = resolve(cwd, candidate);
+    const full = resolve(base, candidate);
     if (existsSync(full)) return full;
   }
-  return resolve(cwd, PATH_CANDIDATES[0]);
+  return resolve(base, PATH_CANDIDATES[0]);
 }
 
 function validatePathValue(
@@ -327,11 +353,17 @@ function validateDoneKeep(value: number): number {
 
 export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
   const env = overrides.env ?? process.env;
-  const cwd = overrides.cwd ?? process.cwd();
-  const home = overrides.home ?? homedir();
+  const cwd = resolve(overrides.cwd ?? process.cwd());
+  const home = resolve(overrides.home ?? homedir());
 
   const homeToml = loadToml(join(home, ".tasks-axi", "config.toml"));
-  const projectToml = loadToml(resolve(cwd, ".tasks.toml"));
+  const projectDir = findProjectConfigDir(cwd, home);
+  const projectToml = projectDir
+    ? loadToml(join(projectDir, ".tasks.toml"))
+    : {};
+  // Relative paths in a walked-up .tasks.toml resolve against its directory;
+  // everything else (flags, env, home config, no config) stays cwd-based.
+  const base = projectDir ?? cwd;
 
   const explicitPath =
     overrides.file !== undefined
@@ -339,12 +371,16 @@ export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
       : env.TASKS_AXI_FILE !== undefined
         ? validatePathValue(env.TASKS_AXI_FILE, "TASKS_AXI_FILE")
         : undefined;
-  const tomlPath =
-    explicitPath !== undefined
-      ? undefined
-      : projectToml.markdown?.path !== undefined
-        ? validatePathValue(projectToml.markdown.path, "markdown.path")
-        : validatePathValue(homeToml.markdown?.path, "markdown.path");
+  let tomlPath: string | undefined;
+  let tomlBase = base;
+  if (explicitPath === undefined) {
+    if (projectToml.markdown?.path !== undefined) {
+      tomlPath = validatePathValue(projectToml.markdown.path, "markdown.path");
+    } else {
+      tomlPath = validatePathValue(homeToml.markdown?.path, "markdown.path");
+      tomlBase = cwd;
+    }
+  }
 
   const backend =
     overrides.backend ??
@@ -353,12 +389,13 @@ export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
     homeToml.backend ??
     "markdown";
 
-  const path = resolveMarkdownPath(explicitPath, tomlPath, cwd);
+  const path = resolveMarkdownPath(explicitPath, cwd, tomlPath, tomlBase, base);
 
-  const archive =
-    projectToml.markdown?.archive !== undefined
-      ? validatePathValue(projectToml.markdown.archive, "markdown.archive")
-      : validatePathValue(homeToml.markdown?.archive, "markdown.archive");
+  const fromProject = projectToml.markdown?.archive !== undefined;
+  const archive = fromProject
+    ? validatePathValue(projectToml.markdown?.archive, "markdown.archive")
+    : validatePathValue(homeToml.markdown?.archive, "markdown.archive");
+  const archiveBase = fromProject ? base : cwd;
   const doneKeep = validateDoneKeep(
     projectToml.markdown?.done_keep ??
       homeToml.markdown?.done_keep ??
@@ -367,7 +404,9 @@ export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
 
   const config: ResolvedConfig = { backend, path, doneKeep };
   if (archive) {
-    config.archivePath = isAbsolute(archive) ? archive : resolve(cwd, archive);
+    config.archivePath = isAbsolute(archive)
+      ? archive
+      : resolve(archiveBase, archive);
   }
   const github = resolveGithubConfig(projectToml, homeToml, backend);
   if (github) config.github = github;

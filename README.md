@@ -232,6 +232,8 @@ Single-task `mv` has the same protection; use multi-task `mv` to move its active
 ## Configuration
 
 Backend and path are resolved in this order: `--backend` / `--file` flags passed after the command, then `TASKS_AXI_BACKEND` / `TASKS_AXI_FILE` env, then a project `.tasks.toml`, then `~/.tasks-axi/config.toml`, then the defaults.
+The project `.tasks.toml` is found the way git finds its config: starting at the current directory and walking up parent directories, stopping at the first match and never past a git repository root, your home directory, or the filesystem root.
+Relative paths in that file (`path`, `archive`) and the default backlog candidates resolve against the directory holding `.tasks.toml`, so running tasks-axi from any subdirectory of a project behaves exactly like running it from the root.
 Without an explicit path, tasks-axi uses `backlog.md` when present, then `data/backlog.md` when present, and otherwise targets `backlog.md` for future writes.
 
 ```toml

@@ -9,6 +9,8 @@ let home: string;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "tasks-axi-cfg-"));
   home = mkdtempSync(join(tmpdir(), "tasks-axi-home-"));
+  // Mark dir as a repo root so the .tasks.toml walk never escapes the fixture.
+  mkdirSync(join(dir, ".git"));
 });
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
@@ -171,6 +173,90 @@ describe("resolveConfig", () => {
       );
     },
   );
+});
+
+describe("project config discovery", () => {
+  it("walks up from a subdirectory and resolves relative paths against the config directory", () => {
+    writeFileSync(
+      join(dir, ".tasks.toml"),
+      '[markdown]\npath = "data/backlog.md"\narchive = "data/done-archive.md"\n',
+    );
+    const sub = join(dir, "packages", "app");
+    mkdirSync(sub, { recursive: true });
+    const cfg = resolveConfig({ cwd: sub, home, env: {} });
+    expect(cfg.path).toBe(join(dir, "data", "backlog.md"));
+    expect(cfg.archivePath).toBe(join(dir, "data", "done-archive.md"));
+  });
+
+  it("resolves the default backlog candidates against the config directory", () => {
+    writeFileSync(join(dir, ".tasks.toml"), 'backend = "markdown"\n');
+    const sub = join(dir, "sub");
+    mkdirSync(sub);
+    const missing = resolveConfig({ cwd: sub, home, env: {} });
+    expect(missing.path).toBe(join(dir, "backlog.md"));
+
+    const data = join(dir, "data");
+    mkdirSync(data);
+    writeFileSync(join(data, "backlog.md"), "# Backlog\n");
+    const existing = resolveConfig({ cwd: sub, home, env: {} });
+    expect(existing.path).toBe(join(data, "backlog.md"));
+  });
+
+  it("stops the walk at a nested git repository root", () => {
+    writeFileSync(join(dir, ".tasks.toml"), '[markdown]\npath = "decoy.md"\n');
+    const repo = join(dir, "repo");
+    const sub = join(repo, "sub");
+    mkdirSync(join(repo, ".git"), { recursive: true });
+    mkdirSync(sub);
+    const cfg = resolveConfig({ cwd: sub, home, env: {} });
+    expect(cfg.path).toBe(join(sub, "backlog.md"));
+  });
+
+  it("stops the walk at $HOME and ignores a .tasks.toml above it", () => {
+    const above = join(dir, "above");
+    const nestedHome = join(above, "home");
+    const sub = join(nestedHome, "proj", "sub");
+    mkdirSync(sub, { recursive: true });
+    writeFileSync(join(above, ".tasks.toml"), '[markdown]\npath = "decoy.md"\n');
+    const cfg = resolveConfig({ cwd: sub, home: nestedHome, env: {} });
+    expect(cfg.path).toBe(join(sub, "backlog.md"));
+  });
+
+  it("still lets the flag and env override a walked-up .tasks.toml", () => {
+    writeFileSync(
+      join(dir, ".tasks.toml"),
+      '[markdown]\npath = "from-toml.md"\n',
+    );
+    const sub = join(dir, "sub");
+    mkdirSync(sub);
+    const fromEnv = resolveConfig({
+      cwd: sub,
+      home,
+      env: { TASKS_AXI_FILE: "/abs/from-env.md" },
+    });
+    expect(fromEnv.path).toBe("/abs/from-env.md");
+
+    const fromFlag = resolveConfig({
+      cwd: sub,
+      home,
+      env: {},
+      file: "/abs/from-flag.md",
+    });
+    expect(fromFlag.path).toBe("/abs/from-flag.md");
+  });
+
+  it("keeps home config relative paths resolving against cwd", () => {
+    mkdirSync(join(home, ".tasks-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".tasks-axi", "config.toml"),
+      '[markdown]\npath = "home-rel.md"\narchive = "home-archive.md"\n',
+    );
+    const sub = join(dir, "sub");
+    mkdirSync(sub);
+    const cfg = resolveConfig({ cwd: sub, home, env: {} });
+    expect(cfg.path).toBe(join(sub, "home-rel.md"));
+    expect(cfg.archivePath).toBe(join(sub, "home-archive.md"));
+  });
 });
 
 describe("github config", () => {
