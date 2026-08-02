@@ -781,9 +781,9 @@ export class GithubStore implements Store {
   }
 
   /**
-   * `rm` de-manages (design §4.4): strip the managed block and close the issue
-   * as not_planned, leaving an ordinary closed issue whose title and prose
-   * survive as history. Non-destructive; no elevated permission needed.
+   * `rm` de-manages (design §4.4): retract managed projections before stripping
+   * the block and closing as not_planned. Cleanup is resumable, and the issue
+   * stays managed until every required retraction succeeds.
    */
   async remove(id: string): Promise<Task> {
     const records = await this.loadAll();
@@ -813,10 +813,7 @@ export class GithubStore implements Store {
       if (child === record) continue;
       if (child.issue.parentNumber !== record.issue.number) continue;
       try {
-        await this.client.removeSubIssue(
-          record.issue.number,
-          child.issue.id,
-        );
+        await this.client.removeSubIssue(record.issue.number, child.issue.id);
       } catch {
         throw failRemoval();
       }

@@ -147,17 +147,12 @@ describe("parseIssueBody", () => {
       ["since", "(since 2026-01-01) (since 2026-01-02)"],
       ["hold", "(hold: one) (hold: two)"],
       ["hold-kind", "(hold-kind: captain) (hold-kind: external)"],
-      [
-        "hold-until",
-        "(hold-until: 2026-01-01) (hold-until: 2026-01-02)",
-      ],
-    ].map(
-      ([name, tags]): [string, string, string] => [
-        `duplicate ${name} tags`,
-        `${BLOCK_START}\n(id: a-1) ${tags}\n${BLOCK_END}`,
-        `duplicate (${name}:) tag`,
-      ],
-    ),
+      ["hold-until", "(hold-until: 2026-01-01) (hold-until: 2026-01-02)"],
+    ].map(([name, tags]): [string, string, string] => [
+      `duplicate ${name} tags`,
+      `${BLOCK_START}\n(id: a-1) ${tags}\n${BLOCK_END}`,
+      `duplicate (${name}:) tag`,
+    ]),
     [
       "garbage dep line",
       `${BLOCK_START}\n(id: a-1)\nnot a dep\n${BLOCK_END}`,
@@ -282,13 +277,14 @@ describe("composeIssueBody", () => {
   it.each([BLOCK_START, BLOCK_END])(
     "rejects the reserved marker line %s in prose",
     (marker) => {
-      expect(() => composeIssueBody(`before\n${marker}\nafter`, "BLOCK"))
-        .toThrowError(
-          expect.objectContaining({
-            code: "VALIDATION_ERROR",
-            message: expect.stringContaining("reserved tasks-axi marker lines"),
-          }) as Error,
-        );
+      expect(() =>
+        composeIssueBody(`before\n${marker}\nafter`, "BLOCK"),
+      ).toThrowError(
+        expect.objectContaining({
+          code: "VALIDATION_ERROR",
+          message: expect.stringContaining("reserved tasks-axi marker lines"),
+        }) as Error,
+      );
     },
   );
 });

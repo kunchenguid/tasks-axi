@@ -524,7 +524,11 @@ describe("GithubStore hand-edit round-trips (design §5)", () => {
     gh.find(1).labels.push("triage");
 
     await store.update("fly-1", { priority: 3 });
-    expect(gh.find(1).labels.sort()).toEqual(["bug", "tasks-axi:in-flight", "triage"]);
+    expect(gh.find(1).labels.sort()).toEqual([
+      "bug",
+      "tasks-axi:in-flight",
+      "triage",
+    ]);
     expect((await store.get("fly-1"))?.meta?.label_drift).toBeUndefined();
   });
 
@@ -672,8 +676,7 @@ describe("GithubStore update and rm", () => {
 
     await expect(store.remove("gone-1")).rejects.toMatchObject({
       code: "UNKNOWN",
-      message:
-        'Label retraction for task "gone-1" is incomplete but resumable',
+      message: 'Label retraction for task "gone-1" is incomplete but resumable',
       suggestions: ["Run `tasks-axi rm gone-1` again to resume retraction"],
     });
 
@@ -895,9 +898,7 @@ describe("GithubStore native sub-issue projection", () => {
       code: "UNKNOWN",
       message:
         'Sub-issue retraction for task "parent-p1" is incomplete but resumable',
-      suggestions: [
-        "Run `tasks-axi rm parent-p1` again to resume retraction",
-      ],
+      suggestions: ["Run `tasks-axi rm parent-p1` again to resume retraction"],
     });
 
     expect(gh.find(1)).toMatchObject({ state: "open" });
