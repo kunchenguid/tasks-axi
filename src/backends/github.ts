@@ -823,26 +823,22 @@ export class GithubStore implements Store {
       child.issue.parentNumber = null;
     }
 
-    const remove = record.issue.labels.filter((label) =>
-      this.managedLabelNames().includes(label),
-    );
-    if (remove.length > 0) {
-      try {
-        await this.client.updateLabels(record.issue.number, {
-          add: [],
-          remove,
-        });
-      } catch {
-        throw new AxiError(
-          `Label retraction for task "${id}" is incomplete but resumable`,
-          "UNKNOWN",
-          [`Run \`tasks-axi rm ${id}\` again to resume retraction`],
-        );
-      }
-      record.issue.labels = record.issue.labels.filter(
-        (label) => !remove.includes(label),
+    const remove = this.managedLabelNames();
+    try {
+      await this.client.updateLabels(record.issue.number, {
+        add: [],
+        remove,
+      });
+    } catch {
+      throw new AxiError(
+        `Label retraction for task "${id}" is incomplete but resumable`,
+        "UNKNOWN",
+        [`Run \`tasks-axi rm ${id}\` again to resume retraction`],
       );
     }
+    record.issue.labels = record.issue.labels.filter(
+      (label) => !remove.includes(label),
+    );
 
     await this.client.updateIssue(record.issue.number, {
       body: record.prose,

@@ -683,6 +683,9 @@ describe("GithubStore update and rm", () => {
     });
     expect(gh.find(1).body).toContain("(id: gone-1)");
     expect(gh.calls.some((call) => call.startsWith("patch #1"))).toBe(false);
+    expect(gh.calls).toContain(
+      "labels #1 +[] -[tasks-axi:blocked tasks-axi:held tasks-axi:in-flight]",
+    );
     expect(warnings).toEqual([]);
 
     gh.failLabelUpdates = false;
