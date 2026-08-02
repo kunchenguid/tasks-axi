@@ -810,7 +810,7 @@ describe("GithubStore label colors", () => {
     const store = new GithubStore({
       repo: gh.repo,
       client: gh,
-      labelColors: { inFlight: "123abc" },
+      labelColors: { inFlight: "#123abc" },
       now: () => NOW,
     });
     await store.create({ id: "fly-1", title: "t", state: "in_flight" });

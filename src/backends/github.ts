@@ -170,9 +170,16 @@ export class GithubStore implements Store {
       );
     }
     this.labelColors = {
-      inFlight: options.labelColors?.inFlight ?? DEFAULT_LABEL_COLORS.inFlight,
-      blocked: options.labelColors?.blocked ?? DEFAULT_LABEL_COLORS.blocked,
-      held: options.labelColors?.held ?? DEFAULT_LABEL_COLORS.held,
+      inFlight: (
+        options.labelColors?.inFlight ?? DEFAULT_LABEL_COLORS.inFlight
+      ).replace(/^#/, ""),
+      blocked: (
+        options.labelColors?.blocked ?? DEFAULT_LABEL_COLORS.blocked
+      ).replace(/^#/, ""),
+      held: (options.labelColors?.held ?? DEFAULT_LABEL_COLORS.held).replace(
+        /^#/,
+        "",
+      ),
     };
     const colors = [
       this.labelColors.inFlight,
