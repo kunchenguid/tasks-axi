@@ -250,6 +250,7 @@ describe("createGhIssuesClient", () => {
     await client.updateLabels(3, {
       add: ["in-flight", "held"],
       remove: [],
+      colors: { "in-flight": "FF8C00" },
     });
 
     expect(calls.map((call) => call.args[3])).toEqual([
@@ -258,8 +259,57 @@ describe("createGhIssuesClient", () => {
       "repos/o/r/labels",
       "repos/o/r/issues/3/labels",
     ]);
-    expect(JSON.parse(calls[1].stdin ?? "")).toEqual({ name: "in-flight" });
+    // Lazy creation carries the deliberate color; a label with no configured
+    // color is created without one.
+    expect(JSON.parse(calls[1].stdin ?? "")).toEqual({
+      name: "in-flight",
+      color: "FF8C00",
+    });
     expect(JSON.parse(calls[2].stdin ?? "")).toEqual({ name: "held" });
+  });
+
+  it("lists repository labels with colors through GraphQL", async () => {
+    const calls: RecordedCall[] = [];
+    const client = createGhIssuesClient(
+      "o/r",
+      fakeExec(
+        () =>
+          ok(
+            JSON.stringify({
+              data: {
+                repository: {
+                  labels: {
+                    nodes: [{ name: "tasks-axi:held", color: "8250df" }],
+                  },
+                },
+              },
+            }),
+          ),
+        calls,
+      ),
+    );
+
+    await expect(client.listLabels("tasks-axi:")).resolves.toEqual([
+      { name: "tasks-axi:held", color: "8250df" },
+    ]);
+    expect(calls[0].args.slice(0, 2)).toEqual(["api", "graphql"]);
+    expect(calls[0].args).toContain("search=tasks-axi:");
+  });
+
+  it("repaints a label color through REST", async () => {
+    const calls: RecordedCall[] = [];
+    const client = createGhIssuesClient(
+      "o/r",
+      fakeExec(() => ok("{}"), calls),
+    );
+
+    await client.updateLabelColor("tasks-axi:in flight", "FF8C00");
+    expect(calls[0].args.slice(1, 4)).toEqual([
+      "--method",
+      "PATCH",
+      "repos/o/r/labels/tasks-axi%3Ain%20flight",
+    ]);
+    expect(JSON.parse(calls[0].stdin ?? "")).toEqual({ color: "FF8C00" });
   });
 
   it("links and unlinks native sub-issues by global id", async () => {

@@ -253,11 +253,13 @@ backend = "github"
 [github]
 repo = "owner/name"
 in_flight_label = "tasks-axi:in-flight" # optional; blocked_label / held_label likewise
+in_flight_color = "FF8C00" # optional 6-digit hex; blocked_color / held_color likewise
 ```
 
 For the Markdown backend, `archive` is optional; when omitted, pruned tasks are appended to `done-archive.md` next to the active backlog.
 Markdown body replacements with `--archive-body` append superseded bodies to `note-archive.md` next to the active backlog.
 GitHub projection label names default to `tasks-axi:in-flight`, `tasks-axi:blocked`, and `tasks-axi:held`; configured names must be non-empty, distinct, and carry the `tasks-axi:` prefix, which keeps every projected label in one durable, collision-free, bulk-manageable namespace.
+Projection label colors default to orange `FF8C00` (in-flight), red `D73A4A` (blocked), and purple `8250DF` (held); a configured color must be a 6-digit hex value (a leading `#` is accepted and stripped).
 
 ## The GitHub backend
 
@@ -275,8 +277,8 @@ How state is stored (block-authoritative):
   The marker lines are reserved for the managed block and cannot appear in issue prose.
 - Every label the backend touches (`tasks-axi:in-flight`, `tasks-axi:blocked`, `tasks-axi:held`; names configurable within the `tasks-axi:` namespace) is a **write-time projection of derived truth, never read back**.
   Labels are a rendered dashboard, not controls: toggling a chip changes nothing, and any write (or `render`, the manual resync verb) heals all label drift.
-  Missing projection labels are created lazily.
-  GitHub assigns their colors unless maintainers pre-create them.
+  Missing projection labels are created lazily with deliberate default colors (orange in-flight, red blocked, purple held), configurable via `[github] in_flight_color` and friends.
+  Color drift heals exactly like name-projection drift: any write (or `render`) repaints a managed label whose color disagrees with the configured/default value, while human (unprefixed) labels are never touched.
   During ordinary writes, a label projection failure leaves the task mutation successful, writes a warning to stderr, and surfaces `meta_label_projection_degraded: true`.
   `show` reports `meta_label_drift: true` when the chips disagree with derived truth.
   GitHub-backed task details also expose `meta_issue`, `meta_url`, and the exact native `meta_state_reason`; JSON task objects carry the same values in `meta`.

@@ -22,6 +22,8 @@ function managedBody(prose: string, blockLines: string[]): string {
 class FakeGh implements GhIssuesClient {
   readonly repo = "o/r";
   issues: IssueData[] = [];
+  /** Repository label objects: name -> color, as GitHub stores them. */
+  repoLabels = new Map<string, string>();
   comments = new Map<number, string[]>();
   calls: string[] = [];
   listCalls = 0;
@@ -70,6 +72,20 @@ class FakeGh implements GhIssuesClient {
     return Promise.resolve(structuredClone(this.issues));
   }
 
+  listLabels(search: string): Promise<Array<{ name: string; color: string }>> {
+    return Promise.resolve(
+      [...this.repoLabels]
+        .filter(([name]) => name.includes(search))
+        .map(([name, color]) => ({ name, color })),
+    );
+  }
+
+  updateLabelColor(name: string, color: string): Promise<void> {
+    this.calls.push(`label-color ${name} ${color}`);
+    this.repoLabels.set(name, color);
+    return Promise.resolve();
+  }
+
   createIssue(title: string, body: string): Promise<IssueData> {
     const issue = this.seed({ title, body, createdAt: ISO, updatedAt: ISO });
     this.calls.push(`create #${issue.number}`);
@@ -104,6 +120,13 @@ class FakeGh implements GhIssuesClient {
       return Promise.reject(new Error("label projection unavailable"));
     }
     const issue = this.find(number);
+    for (const label of add) {
+      // The real client creates a missing label lazily with the patch color;
+      // attaching an existing label leaves its color untouched.
+      if (!this.repoLabels.has(label)) {
+        this.repoLabels.set(label, patch.colors?.[label] ?? "ededed");
+      }
+    }
     issue.labels = [
       ...issue.labels.filter((label) => !remove.includes(label)),
       ...add.filter((label) => !issue.labels.includes(label)),
@@ -772,6 +795,81 @@ describe("GithubStore label prefix", () => {
           labels: { inFlight: "wip" },
         }),
     ).toThrow('must carry the "tasks-axi:" prefix');
+  });
+});
+
+describe("GithubStore label colors", () => {
+  it("lazily creates projection labels with the deliberate default colors", async () => {
+    const { store, gh } = makeStore();
+    await store.create({ id: "fly-1", title: "t", state: "in_flight" });
+    expect(gh.repoLabels.get("tasks-axi:in-flight")).toBe("FF8C00");
+  });
+
+  it("lazily creates projection labels with configured colors", async () => {
+    const gh = new FakeGh();
+    const store = new GithubStore({
+      repo: gh.repo,
+      client: gh,
+      labelColors: { inFlight: "123abc" },
+      now: () => NOW,
+    });
+    await store.create({ id: "fly-1", title: "t", state: "in_flight" });
+    expect(gh.repoLabels.get("tasks-axi:in-flight")).toBe("123abc");
+  });
+
+  it("render heals drifted colors and never touches human labels", async () => {
+    const gh = new FakeGh();
+    gh.repoLabels.set("tasks-axi:held", "cccccc"); // drifted
+    gh.repoLabels.set("tasks-axi:in-flight", "ff8c00"); // same color, GitHub-lowercased
+    gh.repoLabels.set("bug", "111111"); // human label
+    gh.seed({ body: managedBody("", ["(id: a-1)"]) });
+    const { store } = makeStore(gh);
+
+    await store.render();
+    expect(gh.repoLabels.get("tasks-axi:held")).toBe("8250DF");
+    expect(gh.repoLabels.get("bug")).toBe("111111");
+    // Only the drifted managed label is repainted; a case-only difference is
+    // already in sync and a human label is never listed for healing.
+    expect(gh.calls.filter((c) => c.startsWith("label-color"))).toEqual([
+      "label-color tasks-axi:held 8250DF",
+    ]);
+  });
+
+  it("any write heals a drifted managed color", async () => {
+    const gh = new FakeGh();
+    gh.repoLabels.set("tasks-axi:blocked", "000000");
+    gh.seed({ body: managedBody("", ["(id: a-1)"]) });
+    const { store } = makeStore(gh);
+
+    await store.transition("a-1", "in_flight");
+    expect(gh.repoLabels.get("tasks-axi:blocked")).toBe("D73A4A");
+  });
+
+  it("keeps task mutations successful when color healing fails", async () => {
+    const gh = new FakeGh();
+    gh.repoLabels.set("tasks-axi:held", "cccccc");
+    gh.updateLabelColor = () =>
+      Promise.reject(new Error("color projection unavailable"));
+    gh.seed({ body: managedBody("", ["(id: a-1)"]) });
+    const { store, warnings } = makeStore(gh);
+
+    const task = await store.transition("a-1", "in_flight");
+    expect(task.state).toBe("in_flight");
+    expect(warnings).toContain(
+      "warning: label color projection degraded: color projection unavailable; run tasks-axi render to resync",
+    );
+  });
+
+  it("rejects a malformed projection label color", () => {
+    const gh = new FakeGh();
+    expect(
+      () =>
+        new GithubStore({
+          repo: gh.repo,
+          client: gh,
+          labelColors: { held: "purple" },
+        }),
+    ).toThrow("github projection label colors must be 6-digit hex");
   });
 });
 

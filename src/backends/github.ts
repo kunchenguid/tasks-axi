@@ -75,6 +75,18 @@ export interface GithubLabels {
   held: string;
 }
 
+/** Per-role projection label colors (6-digit hex, no `#`). */
+export type GithubLabelColors = GithubLabels;
+
+/** Deliberate defaults, so lazily created labels never get random colors. */
+export const DEFAULT_LABEL_COLORS: GithubLabelColors = {
+  inFlight: "FF8C00",
+  blocked: "D73A4A",
+  held: "8250DF",
+};
+
+const LABEL_COLOR_RE = /^[0-9a-fA-F]{6}$/;
+
 export interface GithubStoreOptions {
   /** "owner/name" of the repository holding the backlog issues. */
   repo: string;
@@ -82,6 +94,8 @@ export interface GithubStoreOptions {
   client?: GhIssuesClient;
   /** Projection label names (defaults: in-flight, blocked, held). */
   labels?: Partial<GithubLabels>;
+  /** Projection label colors (defaults: DEFAULT_LABEL_COLORS). */
+  labelColors?: Partial<GithubLabelColors>;
   /** Injectable clock returning a YYYY-MM-DD stamp (for tests). */
   now?: () => string;
   warn?: (message: string) => void;
@@ -125,6 +139,7 @@ function unsupportedPublicFollowup(): AxiError {
 export class GithubStore implements Store {
   private readonly client: GhIssuesClient;
   private readonly labels: GithubLabels;
+  private readonly labelColors: GithubLabelColors;
   private readonly now: () => string;
   private readonly warn: (message: string) => void;
   private cache?: Promise<GithubRecord[]>;
@@ -152,6 +167,23 @@ export class GithubStore implements Store {
           "The prefix keeps every projected label in one durable, bulk-manageable namespace",
           "Fix the [github] *_label values in .tasks.toml",
         ],
+      );
+    }
+    this.labelColors = {
+      inFlight: options.labelColors?.inFlight ?? DEFAULT_LABEL_COLORS.inFlight,
+      blocked: options.labelColors?.blocked ?? DEFAULT_LABEL_COLORS.blocked,
+      held: options.labelColors?.held ?? DEFAULT_LABEL_COLORS.held,
+    };
+    const colors = [
+      this.labelColors.inFlight,
+      this.labelColors.blocked,
+      this.labelColors.held,
+    ];
+    if (colors.some((color) => !LABEL_COLOR_RE.test(color))) {
+      throw new AxiError(
+        'github projection label colors must be 6-digit hex like "FF8C00"',
+        "VALIDATION_ERROR",
+        ["Fix the [github] *_color values in .tasks.toml"],
       );
     }
     this.now = options.now ?? currentLocalDate;
@@ -310,6 +342,15 @@ export class GithubStore implements Store {
     return [this.labels.inFlight, this.labels.blocked, this.labels.held];
   }
 
+  /** Configured/default color per managed label name (lazy-create + heal). */
+  private managedLabelColors(): Record<string, string> {
+    return {
+      [this.labels.inFlight]: this.labelColors.inFlight,
+      [this.labels.blocked]: this.labelColors.blocked,
+      [this.labels.held]: this.labelColors.held,
+    };
+  }
+
   /** The derived display set per task (closed issues carry no state labels). */
   private expectedLabels(records: GithubRecord[]): Map<string, string[]> {
     const tasks = records.map((r) => r.task);
@@ -454,9 +495,38 @@ export class GithubStore implements Store {
     );
   }
 
+  /**
+   * Repaint managed labels whose repo color drifted from the configured value.
+   * Human (unprefixed) labels are never listed, so they are never touched;
+   * managed labels that do not exist yet get their color at lazy creation.
+   */
+  private async refreshLabelColors(): Promise<void> {
+    const want = this.managedLabelColors();
+    try {
+      for (const label of await this.client.listLabels(LABEL_PREFIX)) {
+        const color = want[label.name];
+        if (
+          color === undefined ||
+          label.color.toLowerCase() === color.toLowerCase()
+        ) {
+          continue;
+        }
+        await this.client.updateLabelColor(label.name, color);
+      }
+    } catch (error) {
+      const rawReason =
+        error instanceof Error ? error.message : "unknown projection error";
+      const reason = rawReason.replace(/\s+/g, " ").trim().slice(0, 240);
+      this.warn(
+        `warning: label color projection degraded: ${reason}; run tasks-axi render to resync`,
+      );
+    }
+  }
+
   /** Global projection refresh after every write. */
   private async refreshProjections(records: GithubRecord[]): Promise<void> {
     const managedNames = this.managedLabelNames();
+    const colors = this.managedLabelColors();
     for (const { record, want } of this.driftedRecords(records)) {
       const have = record.issue.labels.filter((label) =>
         managedNames.includes(label),
@@ -464,7 +534,11 @@ export class GithubStore implements Store {
       const add = want.filter((label) => !have.includes(label));
       const remove = have.filter((label) => !want.includes(label));
       try {
-        await this.client.updateLabels(record.issue.number, { add, remove });
+        await this.client.updateLabels(record.issue.number, {
+          add,
+          remove,
+          colors,
+        });
       } catch (error) {
         this.markProjectionDegraded(record, error);
         continue;
@@ -478,6 +552,7 @@ export class GithubStore implements Store {
         delete record.task.meta.label_projection_degraded;
       }
     }
+    await this.refreshLabelColors();
     await this.refreshParentLinks(records);
   }
 
