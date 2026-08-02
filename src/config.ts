@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import { DEFAULT_LABEL_COLORS } from "./backends/github.js";
 import { readFileSafe } from "./backends/lock.js";
 import { AxiError } from "./errors.js";
 
@@ -22,6 +23,10 @@ export interface ResolvedGithubConfig {
   inFlightLabel: string;
   blockedLabel: string;
   heldLabel: string;
+  /** Projection label colors: 6-digit hex, no `#`. */
+  inFlightColor: string;
+  blockedColor: string;
+  heldColor: string;
 }
 
 export interface ResolvedConfig {
@@ -55,6 +60,9 @@ interface TomlConfig {
     in_flight_label?: string;
     blocked_label?: string;
     held_label?: string;
+    in_flight_color?: string;
+    blocked_color?: string;
+    held_color?: string;
   };
 }
 
@@ -110,6 +118,9 @@ export function parseConfigToml(src: string): TomlConfig {
       if (key === "in_flight_label") config.github.in_flight_label = text;
       if (key === "blocked_label") config.github.blocked_label = text;
       if (key === "held_label") config.github.held_label = text;
+      if (key === "in_flight_color") config.github.in_flight_color = text;
+      if (key === "blocked_color") config.github.blocked_color = text;
+      if (key === "held_color") config.github.held_color = text;
       continue;
     }
     config.markdown ??= {};
@@ -161,7 +172,10 @@ function configKeySource(table: ConfigTable, key: string): string | undefined {
     (key === "repo" ||
       key === "in_flight_label" ||
       key === "blocked_label" ||
-      key === "held_label")
+      key === "held_label" ||
+      key === "in_flight_color" ||
+      key === "blocked_color" ||
+      key === "held_color")
   ) {
     return `github.${key}`;
   }
@@ -248,6 +262,23 @@ function validateGithubLabel(
   return value;
 }
 
+const GITHUB_COLOR_RE = /^#?[0-9a-fA-F]{6}$/;
+
+function validateGithubColor(
+  value: string | undefined,
+  source: string,
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (!GITHUB_COLOR_RE.test(value)) {
+    throw new AxiError(
+      `${source} must be a 6-digit hex color like "FF8C00"`,
+      "VALIDATION_ERROR",
+      ['Set `[github] in_flight_color = "FF8C00"` style values in .tasks.toml'],
+    );
+  }
+  return value.replace(/^#/, "");
+}
+
 function resolveGithubConfig(
   projectToml: TomlConfig,
   homeToml: TomlConfig,
@@ -269,6 +300,15 @@ function resolveGithubConfig(
     heldLabel:
       validateGithubLabel(pick("held_label"), "github.held_label") ??
       "tasks-axi:held",
+    inFlightColor:
+      validateGithubColor(pick("in_flight_color"), "github.in_flight_color") ??
+      DEFAULT_LABEL_COLORS.inFlight,
+    blockedColor:
+      validateGithubColor(pick("blocked_color"), "github.blocked_color") ??
+      DEFAULT_LABEL_COLORS.blocked,
+    heldColor:
+      validateGithubColor(pick("held_color"), "github.held_color") ??
+      DEFAULT_LABEL_COLORS.held,
   };
   if (repo !== undefined) config.repo = repo;
   return config;

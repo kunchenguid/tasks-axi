@@ -55,6 +55,11 @@ function createStore(config: ResolvedConfig): Store {
         blocked: github.blockedLabel,
         held: github.heldLabel,
       },
+      labelColors: {
+        inFlight: github.inFlightColor,
+        blocked: github.blockedColor,
+        held: github.heldColor,
+      },
     });
   }
   throw new AxiError(

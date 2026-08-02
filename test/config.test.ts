@@ -183,6 +183,7 @@ describe("github config", () => {
         'in_flight_label = "wip"',
         'blocked_label = "stuck"',
         'held_label = "paused"',
+        'in_flight_color = "112233"',
       ].join("\n"),
     );
     expect(cfg.backend).toBe("github");
@@ -191,6 +192,7 @@ describe("github config", () => {
       in_flight_label: "wip",
       blocked_label: "stuck",
       held_label: "paused",
+      in_flight_color: "112233",
     });
   });
 
@@ -208,6 +210,9 @@ describe("github config", () => {
       inFlightLabel: "tasks-axi:in-flight",
       blockedLabel: "tasks-axi:blocked",
       heldLabel: "tasks-axi:held",
+      inFlightColor: "FF8C00",
+      blockedColor: "D73A4A",
+      heldColor: "8250DF",
     });
   });
 
@@ -218,8 +223,33 @@ describe("github config", () => {
       inFlightLabel: "tasks-axi:in-flight",
       blockedLabel: "tasks-axi:blocked",
       heldLabel: "tasks-axi:held",
+      inFlightColor: "FF8C00",
+      blockedColor: "D73A4A",
+      heldColor: "8250DF",
     });
   });
+
+  it("accepts a configured label color and strips a leading #", () => {
+    writeFileSync(
+      join(dir, ".tasks.toml"),
+      '[github]\nrepo = "o/r"\nheld_color = "#a1B2c3"\n',
+    );
+    const cfg = resolveConfig({ cwd: dir, home, env: {} });
+    expect(cfg.github).toMatchObject({ heldColor: "a1B2c3" });
+  });
+
+  it.each(["FF8C0", "orange", "FF8C000", "gg8c00"])(
+    "rejects the malformed label color %s loudly",
+    (value) => {
+      writeFileSync(
+        join(dir, ".tasks.toml"),
+        `[github]\nrepo = "o/r"\nblocked_color = "${value}"\n`,
+      );
+      expect(() => resolveConfig({ cwd: dir, home, env: {} })).toThrow(
+        /github\.blocked_color must be a 6-digit hex color/,
+      );
+    },
+  );
 
   it("merges project over home github settings per key", () => {
     mkdirSync(join(home, ".tasks-axi"), { recursive: true });

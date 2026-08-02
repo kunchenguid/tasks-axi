@@ -52,6 +52,15 @@ export interface IssuePatch {
 export interface LabelPatch {
   add: string[];
   remove: string[];
+  /** Creation colors (6-digit hex, no `#`) for labels created lazily. */
+  colors?: Record<string, string>;
+}
+
+/** One repository label as the store consumes it for color healing. */
+export interface RepoLabel {
+  name: string;
+  /** 6-digit hex without `#`, as GitHub stores it. */
+  color: string;
 }
 
 /** The typed GitHub surface the store consumes; faked wholesale in tests. */
@@ -59,9 +68,13 @@ export interface GhIssuesClient {
   readonly repo: string;
   /** Every issue (open and closed) in one paginated GraphQL read. */
   listIssues(): Promise<IssueData[]>;
+  /** Repository labels whose name contains `search` (the managed prefix). */
+  listLabels(search: string): Promise<RepoLabel[]>;
   createIssue(title: string, body: string): Promise<IssueData>;
   updateIssue(number: number, patch: IssuePatch): Promise<void>;
   updateLabels(number: number, patch: LabelPatch): Promise<void>;
+  /** Repaint one repository label (6-digit hex, no `#`). */
+  updateLabelColor(name: string, color: string): Promise<void>;
   addComment(number: number, body: string): Promise<void>;
   /**
    * Link `subIssueId` (a global issue id) under parent `number` via the native
@@ -163,6 +176,18 @@ const LIST_ISSUES_QUERY = `query($owner: String!, $name: String!, $cursor: Strin
     }
   }
 }`;
+
+const LIST_LABELS_QUERY = `query($owner: String!, $name: String!, $search: String!) {
+  repository(owner: $owner, name: $name) {
+    labels(first: 100, query: $search) { nodes { name color } }
+  }
+}`;
+
+interface GraphqlLabelsPage {
+  data?: {
+    repository: { labels: { nodes: RepoLabel[] } } | null;
+  };
+}
 
 interface GraphqlIssueNode {
   number: number;
@@ -316,6 +341,25 @@ export function createGhIssuesClient(
       }
     },
 
+    async listLabels(search: string): Promise<RepoLabel[]> {
+      const [owner, name] = repo.split("/");
+      const page = JSON.parse(
+        await run([
+          "api",
+          "graphql",
+          "-f",
+          `query=${LIST_LABELS_QUERY}`,
+          "-f",
+          `owner=${owner}`,
+          "-f",
+          `name=${name}`,
+          "-f",
+          `search=${search}`,
+        ]),
+      ) as GraphqlLabelsPage;
+      return page.data?.repository?.labels.nodes ?? [];
+    },
+
     async createIssue(title: string, body: string): Promise<IssueData> {
       const stdout = await rest("POST", `repos/${repo}/issues`, {
         title,
@@ -339,8 +383,12 @@ export function createGhIssuesClient(
         } catch (error) {
           if (!isMissingLabelError(error)) throw error;
           for (const label of patch.add) {
+            const color = patch.colors?.[label];
             try {
-              await rest("POST", `repos/${repo}/labels`, { name: label });
+              await rest("POST", `repos/${repo}/labels`, {
+                name: label,
+                ...(color !== undefined ? { color } : {}),
+              });
             } catch (createError) {
               if (!isExistingLabelError(createError)) throw createError;
             }
@@ -360,6 +408,12 @@ export function createGhIssuesClient(
           }
         }
       }
+    },
+
+    async updateLabelColor(name: string, color: string): Promise<void> {
+      await rest("PATCH", `repos/${repo}/labels/${encodeURIComponent(name)}`, {
+        color,
+      });
     },
 
     async addComment(number: number, body: string): Promise<void> {
