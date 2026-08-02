@@ -74,7 +74,7 @@ type ConfigTable = "root" | "markdown" | "github" | "unsupported";
  * Minimal TOML reader for the tiny config surface we need: a top-level
  * `backend` key, a `[markdown]` table with `path` / `archive` / `done_keep`
  * (`archive` points at the file that receives pruned tasks), and a `[github]`
- * table with `repo` plus the projection label names.
+ * table with `repo` plus the projection label names and colors.
  * Intentionally not a general TOML parser.
  */
 export function parseConfigToml(src: string): TomlConfig {

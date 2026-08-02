@@ -51,7 +51,7 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 - **The block reuses the one tag grammar** (`extractTags`/`buildProse` from `markdown-grammar.ts`); `(id:)`/`(state:)` are the only block-only tags.
   Parse is strict: a mangled block is a loud `VALIDATION_ERROR` naming the issue, a deleted block orphans the task, and duplicate ids across issues fail loud naming both numbers.
 - **Hand-edits are valid state edits**: a UI close is an artifact-less done (idempotent `done` backfills the artifact), a reopen lands queued (done normalizes the state tag away), and a retitle can never orphan a task because the id lives only in the block.
-- **Reads are one memoized GraphQL query per process; writes PATCH the freshly-read body. There is no lock** - the TOCTOU window is accepted and documented in the README; do not add locking machinery.
+- **Task reads are one memoized issue GraphQL query per process; writes PATCH the freshly-read body. There is no lock** - label color healing adds one prefix-filtered label query only on the write path, while the TOCTOU window is accepted and documented in the README; do not add locking machinery.
   Links live in the body prose (never the title); `--archive-body` posts a comment; `rm` is guarded by active dependents and its cleanup ordering is owned by `GithubStore.remove` (the README owns its user contract); `mv`/`prune`/`public-followup` are refused via the existing guards and capability gates.
 - E1 (2026-07-30) measured that GitHub's API and web editor round-trip the block byte-exactly; never pass issue bodies through shell `$()` (it strips the trailing newline) - the exec layer sends payloads over stdin.
 
