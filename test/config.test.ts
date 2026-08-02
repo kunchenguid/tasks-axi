@@ -217,7 +217,10 @@ describe("project config discovery", () => {
     const nestedHome = join(above, "home");
     const sub = join(nestedHome, "proj", "sub");
     mkdirSync(sub, { recursive: true });
-    writeFileSync(join(above, ".tasks.toml"), '[markdown]\npath = "decoy.md"\n');
+    writeFileSync(
+      join(above, ".tasks.toml"),
+      '[markdown]\npath = "decoy.md"\n',
+    );
     const cfg = resolveConfig({ cwd: sub, home: nestedHome, env: {} });
     expect(cfg.path).toBe(join(sub, "backlog.md"));
   });
