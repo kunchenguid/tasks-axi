@@ -1,5 +1,9 @@
 import { MarkdownStore } from "./backends/markdown.js";
-import { type ConfigOverrides, type ResolvedConfig, resolveConfig } from "./config.js";
+import {
+  type ConfigOverrides,
+  type ResolvedConfig,
+  resolveConfig,
+} from "./config.js";
 import { AxiError } from "./errors.js";
 import type { Store } from "./store.js";
 import type { SuggestionGlobals } from "./suggestions.js";
