@@ -1,5 +1,12 @@
-import { writeFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it, vi } from "vitest";
 import { MarkdownStore } from "../../src/backends/markdown.js";
 import { readyTasks } from "../../src/derive.js";
 import { AxiError } from "../../src/errors.js";
@@ -656,6 +663,216 @@ describe("MarkdownStore", () => {
         // In-flight renders in firstmate's `- [ ]` checkbox form (same bullet as
         // Queued); the In flight section header is what marks the state.
         expect(read).toMatch(/## In flight[\s\S]*- \[ \] cert-cleanup/);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("keeps unconfigured start output byte-identical without probing a marker", async () => {
+      const source = [
+        "# Backlog",
+        "",
+        "## In flight",
+        "",
+        "## Queued",
+        "- [ ] task-q1 - title",
+        "",
+        "## Done",
+        "",
+      ].join("\n");
+      const b = makeBacklog(source);
+      const inspectStartFence = vi.fn(() => {
+        throw new Error("unconfigured marker probe must not run");
+      });
+      const store = new MarkdownStore({
+        path: b.path,
+        now: () => "2026-07-01",
+        inspectStartFence,
+      });
+      try {
+        await store.transition("task-q1", "in_flight");
+        expect(inspectStartFence).not.toHaveBeenCalled();
+        expect(b.read()).toBe(
+          [
+            "# Backlog",
+            "",
+            "## In flight",
+            "- [ ] task-q1 - title (since 2026-07-01)",
+            "",
+            "## Queued",
+            "## Done",
+            "",
+          ].join("\n"),
+        );
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("starts normally when the configured marker is absent", async () => {
+      const b = makeBacklog();
+      const fencePath = join(b.dir, "absent-start-fence");
+      const store = new MarkdownStore({
+        path: b.path,
+        now: () => "2026-07-01",
+        startFencePath: fencePath,
+      });
+      try {
+        const task = await store.transition("cert-cleanup", "in_flight");
+        expect(task.state).toBe("in_flight");
+        expect(b.read()).toMatch(/## In flight[\s\S]*- \[ \] cert-cleanup/);
+        expect(existsSync(fencePath)).toBe(false);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("resolves a relative marker against the store directory, not cwd", async () => {
+      const b = makeBacklog();
+      const markerDir = join(b.dir, "control");
+      const otherCwd = join(b.dir, "other-cwd");
+      mkdirSync(markerDir);
+      mkdirSync(otherCwd);
+      writeFileSync(join(markerDir, "start-fence"), "opaque", "utf8");
+      const savedCwd = process.cwd();
+      const before = b.read();
+      try {
+        process.chdir(otherCwd);
+        const store = new MarkdownStore({
+          path: b.path,
+          now: () => "2026-07-01",
+          startFencePath: join("control", "start-fence"),
+        });
+        await expect(
+          store.transition("cert-cleanup", "in_flight"),
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+        expect(b.read()).toBe(before);
+      } finally {
+        process.chdir(savedCwd);
+        b.cleanup();
+      }
+    });
+
+    it("refuses a start atomically when any file marks the fence active", async () => {
+      const b = makeBacklog();
+      const fencePath = join(b.dir, "start-fence");
+      const markerContents = "contents are not inspected";
+      writeFileSync(fencePath, markerContents, "utf8");
+      const store = new MarkdownStore({
+        path: b.path,
+        now: () => "2026-07-01",
+        startFencePath: fencePath,
+      });
+      const before = b.read();
+      try {
+        await expect(
+          store.transition("cert-cleanup", "in_flight"),
+        ).rejects.toMatchObject({
+          code: "CONFLICT",
+          message: expect.stringContaining("start fence is active"),
+        });
+        expect(b.read()).toBe(before);
+        expect(readFileSync(fencePath, "utf8")).toBe(markerContents);
+        expect((await store.get("cert-cleanup"))?.state).toBe("queued");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("treats a directory at the configured path as an active fence", async () => {
+      const b = makeBacklog();
+      const fencePath = join(b.dir, "start-fence");
+      mkdirSync(fencePath);
+      const store = new MarkdownStore({
+        path: b.path,
+        now: () => "2026-07-01",
+        startFencePath: fencePath,
+      });
+      const before = b.read();
+      try {
+        await expect(
+          store.transition("cert-cleanup", "in_flight"),
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+        expect(b.read()).toBe(before);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it.skipIf(process.platform === "win32")(
+      "treats a broken symlink at the configured path as an active fence",
+      async () => {
+        const b = makeBacklog();
+        const fencePath = join(b.dir, "start-fence");
+        symlinkSync(join(b.dir, "missing-target"), fencePath);
+        const store = new MarkdownStore({
+          path: b.path,
+          now: () => "2026-07-01",
+          startFencePath: fencePath,
+        });
+        const before = b.read();
+        try {
+          await expect(
+            store.transition("cert-cleanup", "in_flight"),
+          ).rejects.toMatchObject({ code: "CONFLICT" });
+          expect(b.read()).toBe(before);
+        } finally {
+          b.cleanup();
+        }
+      },
+    );
+
+    it.each(["EACCES", "ELOOP"])(
+      "fails closed without exposing the marker path when inspection returns %s",
+      async (code) => {
+        const b = makeBacklog();
+        const fencePath = join(b.dir, "private-marker-location");
+        const inspectStartFence = vi.fn(() => {
+          throw Object.assign(new Error("opaque inspection failure"), { code });
+        });
+        const store = new MarkdownStore({
+          path: b.path,
+          now: () => "2026-07-01",
+          startFencePath: fencePath,
+          inspectStartFence,
+        });
+        const before = b.read();
+        try {
+          const transition = store.transition("cert-cleanup", "in_flight");
+          await expect(transition).rejects.toMatchObject({
+            code: "CONFLICT",
+            message: expect.stringContaining("Cannot reliably check"),
+          });
+          await transition.catch((error: unknown) => {
+            expect(String(error)).not.toContain(fencePath);
+          });
+          expect(b.read()).toBe(before);
+          expect((await store.get("cert-cleanup"))?.state).toBe("queued");
+        } finally {
+          b.cleanup();
+        }
+      },
+    );
+
+    it("does not fence transitions other than queued -> in_flight", async () => {
+      const b = makeBacklog();
+      const fencePath = join(b.dir, "start-fence");
+      writeFileSync(fencePath, "opaque", "utf8");
+      const store = new MarkdownStore({
+        path: b.path,
+        now: () => "2026-07-01",
+        startFencePath: fencePath,
+      });
+      try {
+        const completed = await store.transition("owns-widget-h7", "done");
+        expect(completed.state).toBe("done");
+        const restored = await store.transition("design-scout-d4", "in_flight");
+        expect(restored.state).toBe("in_flight");
+        const closedWithoutStart = await store.transition(
+          "cert-cleanup",
+          "done",
+        );
+        expect(closedWithoutStart.state).toBe("done");
       } finally {
         b.cleanup();
       }

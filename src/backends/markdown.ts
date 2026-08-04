@@ -1,11 +1,12 @@
 import {
   appendFileSync,
+  lstatSync,
   mkdirSync,
   statSync,
   truncateSync,
   unlinkSync,
 } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { AxiError } from "../errors.js";
 import { validateDependencyId, validateId } from "../id.js";
 import type {
@@ -58,6 +59,10 @@ export interface MarkdownStoreOptions {
   archivePath?: string;
   /** Where superseded task bodies are archived (default `<dir>/note-archive.md`). */
   noteArchivePath?: string;
+  /** Marker whose presence fences queued -> in-flight transitions. */
+  startFencePath?: string;
+  /** Injectable presence check (for deterministic failure-path tests). */
+  inspectStartFence?: (path: string) => boolean;
   /** Injectable clock returning a YYYY-MM-DD stamp (for tests). */
   now?: () => string;
 }
@@ -94,6 +99,16 @@ function errno(error: unknown): string {
   return error && typeof error === "object" && "code" in error
     ? String((error as NodeJS.ErrnoException).code)
     : "UNKNOWN";
+}
+
+function inspectStartFence(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch (error) {
+    if (errno(error) === "ENOENT") return false;
+    throw error;
+  }
 }
 
 function normalizeTitle(title: string): string {
@@ -302,6 +317,8 @@ export class MarkdownStore implements Store {
   private readonly path: string;
   private readonly archivePath: string;
   private readonly noteArchivePath: string;
+  private readonly startFencePath: string | undefined;
+  private readonly inspectStartFence: (path: string) => boolean;
   private readonly now: () => string;
 
   constructor(options: MarkdownStoreOptions) {
@@ -322,6 +339,21 @@ export class MarkdownStore implements Store {
         "VALIDATION_ERROR",
       );
     }
+    if (
+      options.startFencePath !== undefined &&
+      options.startFencePath.trim() === ""
+    ) {
+      throw new AxiError(
+        "Start fence path must not be empty",
+        "VALIDATION_ERROR",
+      );
+    }
+    this.startFencePath = options.startFencePath
+      ? isAbsolute(options.startFencePath)
+        ? options.startFencePath
+        : resolve(dirname(options.path), options.startFencePath)
+      : undefined;
+    this.inspectStartFence = options.inspectStartFence ?? inspectStartFence;
     this.now = options.now ?? today;
   }
 
@@ -413,6 +445,28 @@ export class MarkdownStore implements Store {
     );
   }
 
+  private requireStartFenceOpen(): void {
+    if (this.startFencePath === undefined) return;
+
+    let active: boolean;
+    try {
+      active = this.inspectStartFence(this.startFencePath);
+    } catch {
+      throw new AxiError(
+        "Cannot reliably check the configured start fence; refusing to start queued work",
+        "CONFLICT",
+        ["Check access to the configured marker path, then retry"],
+      );
+    }
+    if (active) {
+      throw new AxiError(
+        "Queued work cannot start while the configured start fence is active",
+        "CONFLICT",
+        ["Wait for the supervising process to clear the marker, then retry"],
+      );
+    }
+  }
+
   async get(id: string): Promise<Task | null> {
     const found = this.findEntry(this.load(), id);
     return found ? found.entry.task : null;
@@ -484,9 +538,13 @@ export class MarkdownStore implements Store {
     }
   }
 
-  private persist(loaded: LoadedBacklogDoc): void {
+  private persist(loaded: LoadedBacklogDoc, checkStartFence = false): void {
     this.assertUnchanged(loaded);
-    atomicWrite(this.path, renderBacklog(loaded.doc));
+    const rendered = renderBacklog(loaded.doc);
+    // Keep the marker inspection at the transition's commit point under the
+    // backlog lock. A marker published after this point fences the next start.
+    if (checkStartFence) this.requireStartFenceOpen();
+    atomicWrite(this.path, rendered);
   }
 
   private removeCreatedTask(id: string): void {
@@ -972,6 +1030,7 @@ export class MarkdownStore implements Store {
           ],
         );
       }
+      const queuedStart = task.state === "queued" && to === "in_flight";
       const date = normalizeDate(opts.date ?? this.now(), "transition date");
 
       // Record links / notes before stamping so closureVerb sees them.
@@ -1007,7 +1066,7 @@ export class MarkdownStore implements Store {
       // Done and started work surface at the top; reopened work appends to queued.
       this.insert(this.section(doc, to), moved, to !== "queued");
 
-      this.persist(loaded);
+      this.persist(loaded, queuedStart);
       return task;
     });
   }

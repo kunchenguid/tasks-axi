@@ -32,6 +32,7 @@ export function resolveTasksContext(
   const store = new MarkdownStore({
     path: config.path,
     ...(config.archivePath ? { archivePath: config.archivePath } : {}),
+    ...(config.startFencePath ? { startFencePath: config.startFencePath } : {}),
   });
   return {
     store,

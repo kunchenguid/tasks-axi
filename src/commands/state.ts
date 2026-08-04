@@ -43,6 +43,9 @@ import { renderTaskDetail, renderTaskList, showFullTextHint } from "../view.js";
 
 export const START_HELP = `usage: tasks-axi start <id>
 Move a task to In flight (idempotent).
+A configured start fence refuses queued -> In flight while its marker path exists.
+Set start_fence or TASKS_AXI_START_FENCE; marker contents are never read.
+Relative marker paths resolve against the backlog file's directory; absolute paths are recommended.
 flags:
   --json   print the resulting task as a JSON object
 examples:

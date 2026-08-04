@@ -32,6 +32,7 @@ function decodedHelp(out: string): string[] {
 let dir: string;
 let path: string;
 const savedFile = process.env.TASKS_AXI_FILE;
+const savedStartFence = process.env.TASKS_AXI_START_FENCE;
 const savedCwd = process.cwd();
 
 beforeEach(() => {
@@ -39,6 +40,7 @@ beforeEach(() => {
   path = join(dir, "backlog.md");
   writeFileSync(path, FIXTURE, "utf8");
   process.env.TASKS_AXI_FILE = path;
+  delete process.env.TASKS_AXI_START_FENCE;
 });
 
 afterEach(() => {
@@ -46,6 +48,8 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
   if (savedFile === undefined) delete process.env.TASKS_AXI_FILE;
   else process.env.TASKS_AXI_FILE = savedFile;
+  if (savedStartFence === undefined) delete process.env.TASKS_AXI_START_FENCE;
+  else process.env.TASKS_AXI_START_FENCE = savedStartFence;
   process.exitCode = undefined;
 });
 
@@ -99,6 +103,67 @@ describe("CLI entrypoint", () => {
     expect(readFileSync(path, "utf8")).toMatch(
       /## In flight[\s\S]*- \[ \] cert-cleanup/,
     );
+  });
+
+  it("starts normally when the configured fence marker is absent", async () => {
+    process.env.TASKS_AXI_START_FENCE = join(dir, "absent-start-fence");
+    const c = capture();
+    await main({ argv: ["start", "cert-cleanup"], stdout: c.stdout });
+    expect(c.read()).toContain("ok: start cert-cleanup -> In flight");
+    expect(process.exitCode).toBeFalsy();
+  });
+
+  it("refuses a fenced start with a non-zero exit and no partial write", async () => {
+    const fencePath = join(dir, "start-fence");
+    writeFileSync(fencePath, "opaque", "utf8");
+    process.env.TASKS_AXI_START_FENCE = fencePath;
+    const before = readFileSync(path, "utf8");
+    const c = capture();
+
+    await main({ argv: ["start", "cert-cleanup"], stdout: c.stdout });
+
+    expect(c.read()).toContain("start fence is active");
+    expect(process.exitCode).toBe(1);
+    expect(readFileSync(path, "utf8")).toBe(before);
+  });
+
+  it("allows non-start commands while the configured fence is active", async () => {
+    const fencePath = join(dir, "start-fence");
+    writeFileSync(fencePath, "opaque", "utf8");
+    process.env.TASKS_AXI_START_FENCE = fencePath;
+
+    const completed = capture();
+    await main({
+      argv: ["done", "owns-widget-h7", "--no-prune"],
+      stdout: completed.stdout,
+    });
+    expect(completed.read()).toContain("ok: done owns-widget-h7 -> Done");
+
+    const blocked = capture();
+    await main({
+      argv: ["block", "cert-cleanup", "--by", "lease-core-t4"],
+      stdout: blocked.stdout,
+    });
+    expect(blocked.read()).toContain(
+      "ok: block cert-cleanup -> blocked-by lease-core-t4",
+    );
+
+    const held = capture();
+    await main({
+      argv: ["hold", "cert-cleanup", "--reason", "await approval"],
+      stdout: held.stdout,
+    });
+    expect(held.read()).toContain("ok: hold cert-cleanup -> held");
+
+    const listed = capture();
+    await main({ argv: ["list"], stdout: listed.stdout });
+    expect(listed.read()).toContain("cert-cleanup");
+
+    const shown = capture();
+    await main({ argv: ["show", "cert-cleanup"], stdout: shown.stdout });
+    expect(shown.read()).toContain("id: cert-cleanup");
+    expect(process.exitCode).toBeFalsy();
+    expect(readFileSync(fencePath, "utf8")).toBe("opaque");
   });
 
   it("emits machine-readable JSON for a mutation with --json", async () => {
@@ -214,6 +279,16 @@ describe("CLI entrypoint", () => {
     const c = capture();
     await main({ argv: ["done", "--help"], stdout: c.stdout });
     expect(c.read()).toContain("usage: tasks-axi done");
+  });
+
+  it("documents start-fence configuration in start help", async () => {
+    const c = capture();
+    await main({ argv: ["start", "--help"], stdout: c.stdout });
+    expect(c.read()).toContain("TASKS_AXI_START_FENCE");
+    expect(c.read()).toContain("marker path");
+    expect(c.read()).toContain(
+      "Relative marker paths resolve against the backlog file's directory",
+    );
   });
 
   it("returns focused help for a public-followup subcommand", async () => {

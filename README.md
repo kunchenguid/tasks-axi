@@ -234,6 +234,8 @@ Without an explicit path, tasks-axi uses `backlog.md` when present, then `data/b
 ```toml
 # .tasks.toml in the project root
 backend = "markdown"
+# Optional: presence of this opaque marker fences queued -> in-flight starts.
+start_fence = "/absolute/path/to/operator-marker"
 
 [markdown]
 path = "data/backlog.md"
@@ -243,6 +245,8 @@ done_keep = 10
 
 `archive` is optional; when omitted, pruned tasks are appended to `done-archive.md` next to the active backlog.
 Body replacements with `--archive-body` append superseded bodies to `note-archive.md` next to the active backlog.
+
+The start fence is opt-in and has no default or auto-detection. Set the top-level `start_fence` key or `TASKS_AXI_START_FENCE`; the environment variable takes precedence over project and home config. An absolute marker path is used as-is. A relative marker path resolves against the directory containing the active backlog file, not the process working directory; absolute paths are recommended. Any filesystem entry at that exact path, including a directory or broken symlink, refuses only a queued-to-in-flight transition. tasks-axi observes the entry with presence-only semantics: it never reads its contents or creates, changes, or removes it. Other operations remain available while the fence is active.
 
 ## Backends
 

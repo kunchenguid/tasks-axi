@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { readFileSafe } from "./backends/lock.js";
 import { AxiError } from "./errors.js";
 
@@ -11,6 +11,8 @@ import { AxiError } from "./errors.js";
  *   --backend / --file flag > TASKS_AXI_* env > project .tasks.toml >
  *   ~/.tasks-axi/config.toml > defaults (markdown, first existing
  *   backlog.md/data/backlog.md, otherwise backlog.md).
+ * The optional start fence resolves from TASKS_AXI_START_FENCE, then project
+ * config, then home config, with no default.
  *
  * P1 ships only the markdown backend; the Store seam keeps sqlite/remote
  * additions invisible to the CLI layer.
@@ -22,6 +24,8 @@ export interface ResolvedConfig {
   path: string;
   /** Optional archive path for pruned tasks (resolved to an absolute path). */
   archivePath?: string;
+  /** Optional marker path that fences queued -> in-flight transitions. */
+  startFencePath?: string;
   doneKeep: number;
 }
 
@@ -35,6 +39,7 @@ export interface ConfigOverrides {
 
 interface TomlConfig {
   backend?: string;
+  start_fence?: string;
   markdown?: {
     path?: string;
     archive?: string;
@@ -47,9 +52,10 @@ const PATH_CANDIDATES = ["backlog.md", "data/backlog.md"];
 type ConfigTable = "root" | "markdown" | "unsupported";
 
 /**
- * Minimal TOML reader for the tiny config surface we need: a top-level
- * `backend` key and a `[markdown]` table with `path` / `archive` / `done_keep`.
- * `archive` points at the file that receives pruned tasks.
+ * Minimal TOML reader for the tiny config surface we need: top-level
+ * `backend` / `start_fence` keys and a `[markdown]` table with `path` /
+ * `archive` / `done_keep`. `archive` points at the file that receives pruned
+ * tasks.
  * Intentionally not a general TOML parser.
  */
 export function parseConfigToml(src: string): TomlConfig {
@@ -82,7 +88,9 @@ export function parseConfigToml(src: string): TomlConfig {
     const value = parseTomlValue(kv[2], source);
 
     if (table === "root") {
-      config.backend = requireTomlString(value, source);
+      const stringValue = requireTomlString(value, source);
+      if (key === "backend") config.backend = stringValue;
+      if (key === "start_fence") config.start_fence = stringValue;
       continue;
     }
     config.markdown ??= {};
@@ -125,7 +133,9 @@ function configKeySource(
   table: ConfigTable,
   key: string,
 ): string | undefined {
-  if (table === "root" && key === "backend") return "backend";
+  if (table === "root" && (key === "backend" || key === "start_fence")) {
+    return key;
+  }
   if (
     table === "markdown" &&
     (key === "path" || key === "archive" || key === "done_keep")
@@ -239,10 +249,21 @@ export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
       homeToml.markdown?.done_keep ??
       DEFAULT_KEEP,
   );
+  const startFence =
+    env.TASKS_AXI_START_FENCE !== undefined
+      ? validatePathValue(env.TASKS_AXI_START_FENCE, "TASKS_AXI_START_FENCE")
+      : projectToml.start_fence !== undefined
+        ? validatePathValue(projectToml.start_fence, "start_fence")
+        : validatePathValue(homeToml.start_fence, "start_fence");
 
   const config: ResolvedConfig = { backend, path, doneKeep };
   if (archive) {
     config.archivePath = isAbsolute(archive) ? archive : resolve(cwd, archive);
+  }
+  if (startFence) {
+    config.startFencePath = isAbsolute(startFence)
+      ? startFence
+      : resolve(dirname(path), startFence);
   }
   return config;
 }

@@ -21,6 +21,7 @@ describe("parseConfigToml", () => {
       [
         "# a comment",
         'backend = "markdown"',
+        'start_fence = ".control/start-fence"',
         "",
         "[markdown]",
         'path = "data/backlog.md"',
@@ -29,6 +30,7 @@ describe("parseConfigToml", () => {
       ].join("\n"),
     );
     expect(cfg.backend).toBe("markdown");
+    expect(cfg.start_fence).toBe(".control/start-fence");
     expect(cfg.markdown).toEqual({
       path: "data/backlog.md",
       done_keep: 15,
@@ -146,6 +148,52 @@ describe("resolveConfig", () => {
     expect(resolveConfig({ cwd: dir, home, env: {} }).doneKeep).toBe(5);
   });
 
+  it("leaves the start fence unconfigured by default", () => {
+    expect(
+      resolveConfig({ cwd: dir, home, env: {} }).startFencePath,
+    ).toBeUndefined();
+  });
+
+  it("resolves a configured start fence with env taking precedence", () => {
+    mkdirSync(join(home, ".tasks-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".tasks-axi", "config.toml"),
+      'start_fence = "from-home"\n',
+    );
+    const fromHome = resolveConfig({ cwd: dir, home, env: {} });
+    expect(fromHome.startFencePath).toBe(join(dir, "from-home"));
+
+    writeFileSync(
+      join(dir, ".tasks.toml"),
+      [
+        'start_fence = "from-project"',
+        "[markdown]",
+        'path = "data/backlog.md"',
+      ].join("\n"),
+    );
+
+    const fromProject = resolveConfig({ cwd: dir, home, env: {} });
+    expect(fromProject.startFencePath).toBe(join(dir, "data", "from-project"));
+
+    const fromEnv = resolveConfig({
+      cwd: dir,
+      home,
+      env: { TASKS_AXI_START_FENCE: "from-env" },
+    });
+    expect(fromEnv.startFencePath).toBe(join(dir, "data", "from-env"));
+  });
+
+  it("uses an absolute start fence path as-is", () => {
+    const absolute = join(home, "absolute-start-fence");
+    expect(
+      resolveConfig({
+        cwd: dir,
+        home,
+        env: { TASKS_AXI_START_FENCE: absolute },
+      }).startFencePath,
+    ).toBe(absolute);
+  });
+
   it("rejects negative done_keep from toml", () => {
     writeFileSync(join(dir, ".tasks.toml"), "[markdown]\ndone_keep = -1\n");
     expect(() => resolveConfig({ cwd: dir, home, env: {} })).toThrow(
@@ -171,6 +219,29 @@ describe("resolveConfig", () => {
       );
       expect(() => resolveConfig({ cwd: dir, home, env: {} })).toThrow(
         /markdown\.path/,
+      );
+    },
+  );
+
+  it.each(["", "   "])(
+    "rejects an empty TASKS_AXI_START_FENCE value %#",
+    (value) => {
+      expect(() =>
+        resolveConfig({
+          cwd: dir,
+          home,
+          env: { TASKS_AXI_START_FENCE: value },
+        }),
+      ).toThrow(/TASKS_AXI_START_FENCE/);
+    },
+  );
+
+  it.each(["", "   "])(
+    "rejects an empty start_fence config value %#",
+    (value) => {
+      writeFileSync(join(dir, ".tasks.toml"), `start_fence = "${value}"\n`);
+      expect(() => resolveConfig({ cwd: dir, home, env: {} })).toThrow(
+        /start_fence/,
       );
     },
   );
