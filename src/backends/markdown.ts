@@ -149,7 +149,7 @@ function normalizeTypedLink(link: TaskLink): TaskLink {
   ) {
     const expected =
       link.kind === "pr"
-        ? "an http(s) pull request URL ending in /pull/<number>"
+        ? "an http(s) pull request URL ending in /pull/<number> or /pulls/<number>"
         : link.kind === "report"
           ? "a data/<id>/report.md path"
           : "an http(s) URL";

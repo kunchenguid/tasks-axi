@@ -326,6 +326,18 @@ describe("markdown grammar", () => {
       });
       expect(links).toContainEqual({ kind: "report", url: "data/x/report.md" });
     });
+
+    it("derives a pr link from a Gitea /pulls/ URL, never a doc link", () => {
+      const links = deriveLinks("shipped https://git.itken.icu/o/r/pulls/42");
+      expect(links).toContainEqual({
+        kind: "pr",
+        url: "https://git.itken.icu/o/r/pulls/42",
+      });
+      expect(links).not.toContainEqual({
+        kind: "doc",
+        url: "https://git.itken.icu/o/r/pulls/42",
+      });
+    });
   });
 
   describe("canonical render", () => {

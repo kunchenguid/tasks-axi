@@ -125,6 +125,29 @@ describe("state commands", () => {
       }
     });
 
+    it("closes with a Gitea pull URL and records it as the pr link", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await doneCommand(
+          [
+            "cert-cleanup",
+            "--pr",
+            "https://git.itken.icu/cashew/app/pulls/42",
+            "--no-prune",
+          ],
+          b.ctx,
+        );
+        expect(out).toContain(
+          "done cert-cleanup -> Done (pr https://git.itken.icu/cashew/app/pulls/42)",
+        );
+        const read = b.read();
+        expect(read).toContain("https://git.itken.icu/cashew/app/pulls/42");
+        expect(read).toContain("(merged 2026-07-01)");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("emits a machine-readable task and pruned count with --json", async () => {
       const b = makeBacklog();
       try {

@@ -57,6 +57,7 @@ flags:
   --json   print the resulting task as a JSON object
 examples:
   tasks-axi done sm-idle-handoff-q8 --pr https://github.com/o/r/pull/42
+  tasks-axi done sm-idle-handoff-q8 --pr https://git.itken.icu/cashew/app/pulls/42
   tasks-axi done pr31-review-r6 --report data/pr31-review-r6/report.md`;
 
 export const REOPEN_HELP = `usage: tasks-axi reopen <id>
