@@ -348,6 +348,26 @@ describe("crud commands", () => {
       }
     });
 
+    it("records a Gitea pr link on add", async () => {
+      const b = makeBacklog();
+      try {
+        await addCommand(
+          [
+            "new-q1",
+            "linked task",
+            "--pr",
+            "https://git.itken.icu/cashew/app/pulls/9",
+          ],
+          b.ctx,
+        );
+        expect(b.read()).toContain(
+          "https://git.itken.icu/cashew/app/pulls/9",
+        );
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects an empty link flag before creating a task", async () => {
       const b = makeBacklog();
       try {

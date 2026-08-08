@@ -485,6 +485,26 @@ describe("MarkdownStore", () => {
       }
     });
 
+    it("folds an added Gitea pr link into the prose and re-derives links", async () => {
+      const b = makeBacklog();
+      try {
+        const { task } = await b.store.update("cert-cleanup", {
+          addLinks: [
+            { kind: "pr", url: "https://git.itken.icu/cashew/app/pulls/9" },
+          ],
+        });
+        expect(task.links).toContainEqual({
+          kind: "pr",
+          url: "https://git.itken.icu/cashew/app/pulls/9",
+        });
+        expect(b.read()).toContain(
+          "https://git.itken.icu/cashew/app/pulls/9",
+        );
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("dedupes added links by exact parsed url, not substring", async () => {
       const b = makeBacklog(
         "# Backlog\n\n## Queued\n- [ ] task-q1 - title https://github.com/o/r/pull/10\n\n## Done\n",
@@ -746,6 +766,26 @@ describe("MarkdownStore", () => {
         expect(task.closed).toBe("2026-07-01");
         const read = b.read();
         expect(read).toContain("https://github.com/o/r/pull/7");
+        expect(read).toContain("(merged 2026-07-01)");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("moves to done, records a Gitea pr link and a merged stamp", async () => {
+      const b = makeBacklog();
+      try {
+        const task = await b.store.transition("cert-cleanup", "done", {
+          pr: "https://git.itken.icu/cashew/app/pulls/7",
+        });
+        expect(task.state).toBe("done");
+        expect(task.links).toContainEqual({
+          kind: "pr",
+          url: "https://git.itken.icu/cashew/app/pulls/7",
+        });
+        expect(task.closed).toBe("2026-07-01");
+        const read = b.read();
+        expect(read).toContain("https://git.itken.icu/cashew/app/pulls/7");
         expect(read).toContain("(merged 2026-07-01)");
       } finally {
         b.cleanup();

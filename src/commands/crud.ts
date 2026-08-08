@@ -146,7 +146,7 @@ function requireTypedLinkUrl(
   ) {
     const expected =
       kind === "pr"
-        ? "an http(s) pull request URL ending in /pull/<number>"
+        ? "an http(s) pull request URL ending in /pull/<number> or /pulls/<number>"
         : "a data/<id>/report.md path";
     throw new AxiError(`${flag} must be ${expected}`, "VALIDATION_ERROR");
   }

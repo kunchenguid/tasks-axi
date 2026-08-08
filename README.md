@@ -93,6 +93,7 @@ tasks-axi add lavish-foo-q9 "fix summary toggle" --kind ship --repo lavish-axi -
 # move through the workflow
 tasks-axi start firstmate-lease-adopt
 tasks-axi done sm-idle-handoff-q8 --pr https://github.com/owner/repo/pull/42
+tasks-axi done sm-idle-handoff-q8 --pr https://git.example.com/owner/repo/pulls/42
 tasks-axi reopen some-task
 
 # dependencies, holds, and the ready queue

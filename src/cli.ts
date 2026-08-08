@@ -73,6 +73,7 @@ examples:
   tasks-axi list --state queued
   tasks-axi show homemux-h7 --full
   tasks-axi done sm-idle-handoff-q8 --pr https://github.com/o/r/pull/42
+  tasks-axi done sm-idle-handoff-q8 --pr https://git.itken.icu/cashew/app/pulls/42
   tasks-axi block fm-x --by treehouse-lease-t4
   tasks-axi hold fm-x --reason "captain decision pending" --kind captain
   tasks-axi ready
