@@ -247,13 +247,60 @@ Body replacements with `--archive-body` append superseded bodies to `note-archiv
 
 ## Backends
 
-P1 ships the **markdown** backend only, behind a narrow `Store` interface so additional backends slot in without touching the CLI layer.
+Backends live behind a narrow `Store` interface, so the CLI layer never knows which one is active.
 
-| Backend                | Status  |
-| ---------------------- | ------- |
-| markdown               | shipped |
-| sqlite                 | planned |
-| github / jira / linear | planned |
+| Backend                | Status            |
+| ---------------------- | ----------------- |
+| markdown               | shipped           |
+| ado (Azure DevOps)     | shipped (phase 1) |
+| sqlite                 | planned           |
+| github / jira / linear | planned           |
+
+### Azure DevOps
+
+```toml
+backend = "ado"
+
+[ado]
+org = "contoso"
+project = "Internal"
+area = 'Internal\Firstmate\main'    # optional: scope + where new work items land
+# work_item_type  = "Task"
+# id_field        = "Custom.TasksAxiId"
+# meta_field      = "Custom.TasksAxiMeta"
+# followup_field  = "Custom.TasksAxiPublicFollowup"
+# state_queued    = "New, To Do"        # first entry is the value tasks-axi writes
+# state_in_flight = "Active, In Progress"
+# state_done      = "Closed, Done"
+```
+
+Note the **single quotes** on `area`: an ADO area path contains backslashes, and the config reader takes TOML literal strings only — a `"a\\b"` escape is refused with a message rather than silently resolved to the literal backslashes.
+
+`org` / `project` / `area` also read `TASKS_AXI_ADO_ORG` / `_PROJECT` / `_AREA`.
+Auth is a PAT from `TASKS_AXI_ADO_PAT` (or `ADO_PAT` / `AZURE_DEVOPS_EXT_PAT` / `AZURE_DEVOPS_PAT`), falling back to `az account get-access-token`.
+The PAT needs **Work Items (read & write)**. Azure DevOps answers an unauthenticated REST call with `203` and an HTML sign-in page rather than a `401`, so tasks-axi detects that shape and reports it as a rejected credential.
+
+#### Switching a live backlog onto ADO
+
+`backend` is the one line that decides where tasks live, and nothing flips it for you — no default, no `setup` command.
+Changing it does not migrate data: an empty ADO scope appears as an empty backlog, and existing Markdown tasks stop being visible to the CLI. Seed the ADO items and verify a known task with `tasks-axi show <id> --backend ado --full` before switching.
+Before flipping it, dry-run the exact production code path without switching:
+
+```sh
+tasks-axi list --backend ado          # reads from ADO, changes no config
+tasks-axi show <id> --backend ado --full
+```
+
+`--backend` overrides the config file for a single command, so a green read proves the org, project, area, credential, and join field; `meta_field` is exercised by an ordinary create or update, while `followup_field` is exercised only by a public-followup operation.
+See [`.tasks.toml.example`](.tasks.toml.example) for a fully prepared table with the switch left off.
+The three custom fields (`id_field`, `meta_field`, `followup_field`) must exist on the work item type **before** the switch. Configure `id_field` as a String field for WIQL equality, and configure `meta_field` and `followup_field` as PlainText (long-text) fields; ADO String fields are limited to 255 characters and can reject or truncate their payloads. A missing `id_field` fails the dry-read WIQL request, a missing `meta_field` fails an ordinary create or update, and a missing `followup_field` fails a public-followup operation. Only items of the configured `work_item_type` are managed.
+
+The default state map writes the Azure DevOps Agile-process Task states `New`, `Active`, and `Closed`. Scrum and Basic task workflows need explicit state mappings before the switch; a dry read cannot prove write states, so an incorrect mapping fails on the first create or transition and names the rejected state.
+Adds targeting In flight or Done create the work item in the queued state and then apply the ordinary optimistic transition; if the transition reports an error, its outcome is unconfirmed, so retry `start` or `done` idempotently. A requested close date remains pending until a successful `done` transition consumes it. If an item is reopened and completed again entirely in ADO between tasks-axi reads, tasks-axi continues to report its previously recorded close date.
+The three tasks-axi states map 1:1 onto `System.State`, dependencies are work item links, and the public-followup obligation lives in its own field with the same canonical payload the markdown backend writes.
+Parent and discovered-from links are imported only when marked as tasks-axi-owned; ordinary native ADO hierarchy links are ignored.
+`AdoStore.moveTo(id, areaPath)` implements cross-queue moves as Area Path changes, but the CLI `mv` verb is still markdown/path-shaped; wiring it to area paths is a follow-up.
+The ADO backend has no `prune` and no `render` (ADO owns its storage), refuses `--archive-body`, and `rm` sends the work item to the recycle bin rather than hard-deleting it.
 
 ## Development
 

@@ -1,7 +1,7 @@
 # tasks-axi — agent notes
 
 Agent-ergonomic task/backlog CLI in the `*-axi` family, built on `axi-sdk-js` and mirroring `gh-axi`.
-P1 ships only the markdown backend behind a `Store` seam; sqlite (P2) and remote trackers (P3) are deferred.
+Markdown is the default backend; an Azure DevOps backend ships behind the same `Store` seam. sqlite (P2) and other remote trackers (P3) are deferred.
 
 ## Architecture
 
@@ -13,7 +13,8 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 - `src/model.ts` — the `Task` data model (report §5).
 - `src/pr-url.ts` — `isPrUrl`, the one canonical PR-URL seam (GitHub `/pull/<n>` on github.com, Forgejo `/pulls/<n>` on any lowercase DNS host) shared by prose link derivation, `--pr` validation, and public-followup `pr_url`; near-misses derive as `doc` links, never `pr`.
 - `src/derive.ts` - worker `blocked` / `ready` / active `held` and public delivery readiness are derived in the CLI from `list` + the dep graph + hold date gates, never Store methods, so every backend gets them for free.
-- `src/backends/markdown*.ts` — the only P1 backend.
+- `src/backends/markdown*.ts` — the default backend.
+- `src/backends/ado.ts` + `ado-client.ts` — the Azure DevOps backend (see below).
 - `src/public-followup.ts` - authoritative versioned schema, strict privacy-safe validation, canonical encoding, immutable-field checks, relation/event readiness, and terminal-state invariants for `kind=public-followup`; `src/commands/public-followup.ts` owns its dedicated CLI state machine.
 - `src/commands/*` — one file per verb group; `src/view.ts` owns the read-side TOON projection; `src/confirm.ts` owns the write-side output (the `ok:` confirmation line, the `--json` payload, and `renderMutation`, which assembles both).
 - Shared helpers copied from the family: `args.ts`, `body.ts`, `format.ts`, `fields.ts`, `toon.ts`, `suggestions.ts`, `skill.ts`.
@@ -28,7 +29,7 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 - **Trailing-tag extraction.** Canonical tags (`(repo: X)`, `(kind: X)`, `(priority: 0-4)`, `(since DATE)`, `(merged|reported|done|closed DATE)`, `(hold: REASON)`, `(hold-kind: captain|external|load|parked|future)`, `(hold-until: DATE)`, `blocked-by:/parent:/discovered-from:`) are pulled only off the **trailing** tag-region of a line and re-appended in canonical order on render. This is what makes normalization idempotent: a mid-sentence parenthetical (e.g. `report.md (reported 2026-06-22): …`) or a non-date one (`(closed w/ link)`) is left in the prose and never duplicated or relocated. Date tags require an actual `YYYY-MM-DD`.
 - **Dependency edges carry an optional free-text reason.** firstmate writes `blocked-by: <id> - <reason>` (e.g. `blocked-by: fix-login-k3 - waits on the login refactor`); the id stops at the first space and the reason runs to end-of-line, captured into `Dep.reason` and preserved across a round-trip. A reason does **not** affect `blocked`/`ready` (the graph keys off the blocker id alone), but a blocked item still stays out of `ready`. **Render-order rule:** a bare edge sits right after the title (before the parentheticals), but an edge **with a reason renders last**, after all `( … )` tags — both to match firstmate's real `(repo: …) blocked-by: <id> - <reason>` form and so a re-parse strips the parentheticals first and the reason never swallows a trailing tag (the idempotency trap).
 - **Links and leading-word kinds live in the prose**, not as managed tags, so they are never duplicated. `done --pr`/`--report` append the url/path to the title text; links are re-derived by scanning. `kind` comes from a `(kind:)` tag or a leading `SHIP`/`SCOUT`/`DOCS-ONLY`/`PERSISTENT SECONDMATE` word, and the tag is emitted only when the prose does not already lead with that word.
-- **body** = the item block under a bullet: every following indented (2-space) OR blank line, up to the next item header or free-form column-0 content (column-0 `## ` section headings are split earlier). Blank separators between paragraphs and trailing blanks before the next item/section belong to the block and move with it (`mv`/`start`/`done`/etc.). Indented pseudo-headings (e.g. `  ## Intent`) are body, never section boundaries. Owned by `parseEntries` in `markdown-grammar.ts`.
+- **body** = the item block under a bullet: every following indented (2-space) OR blank line, up to the next item header or free-form column-0 content (column-0 `##` section headings are split earlier). Blank separators between paragraphs and trailing blanks before the next item/section belong to the block and move with it (`mv`/`start`/`done`/etc.). Indented pseudo-headings (e.g. `  ## Intent`) are body, never section boundaries. Owned by `parseEntries` in `markdown-grammar.ts`.
   Note writes are inspect-then-update: `show <id> --full`, then `update --body` or `update --body-file` with a curated replacement.
   Add `--archive-body` when the superseded body should be preserved in `note-archive.md`.
 - **Public-followup metadata** is one reserved `  <!-- tasks-axi:public-followup/v1:<base64url-canonical-json> -->` line immediately below a `kind=public-followup` bullet.
@@ -39,6 +40,24 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
   If the lock looks stale, the error tells the user to remove `<path>.lock` only after confirming no `tasks-axi` process is running.
   Corruption-safety is guaranteed independently by atomic temp-file + rename writes, and a hand-edit landing between read and write is detected and refused.
   Reads do not lock.
+
+## The ADO backend
+
+`src/backends/ado.ts` maps a tasks-axi `Task` onto an ADO work item; its header comment is the authoritative field map. The shape that matters:
+
+- **ADO owns what ADO models**, tasks-axi owns the rest: title/state/area/description/tags/links are native fields, and the residue (priority, hold, typed links, created/closed) rides in one JSON `meta_field`. The public-followup obligation gets its own field carrying the same canonical base64url payload the markdown backend writes, so a Relay obligation reads identically on either backend.
+- **The join key is a custom field** (`id_field`), queried through WIQL — ADO's numeric id is exposed only as `meta.ado_id`. ADO cannot enforce custom-field uniqueness, so concurrent creates of one slug can both pass the precheck; the read-side duplicate guard then fails closed and names the slug for operator cleanup.
+- **No force-fit:** `prune`/`render` are absent (capability-gated), `--archive-body` is a structured `UNSUPPORTED`, and `remove` sends the work item to the recycle bin. An ADO state that is not in the configured state map is a `VALIDATION_ERROR` naming the state — never silently coerced.
+- **Every JSON-patch update is optimistic:** a `{op:"test", path:"/rev"}` op leads the patch, so a concurrent ADO edit fails closed instead of clobbering. ADO DELETE has no revision precondition; removal is unconditional but recoverable from the recycle bin.
+- **`moveTo(id, areaPath)`** is the cross-queue move (Area Path change). The CLI `mv` verb is still markdown/path-shaped; wiring it to areas is a follow-up.
+- **Tests never touch a live project:** `test/backends/fake-ado.ts` is an in-memory ADO (JSON-patch + enough WIQL). Keep new store behaviour testable through that fake rather than the REST client. `AdoRestClient` itself is covered separately through its injected `fetchImpl` seam (`test/backends/ado-client.test.ts`) — no network in either.
+- **An unauthenticated ADO REST call returns `203` + an HTML sign-in page, not a `401`.** `response.ok` is therefore true and the body is not JSON, so `AdoRestClient.request` checks that shape before parsing and reports a rejected credential. Do not move that check below the parse.
+- **Area paths must be TOML literal strings** (`area = 'A\B'`). The minimal config reader does not process escapes, so a basic-string `"A\\B"` would resolve to literal double backslashes and point every WIQL read at an area ADO does not have; active ADO config resolution refuses it instead.
+
+## Backend selection is a deliberate switch, never a default
+
+`backend` (`.tasks.toml` > `~/.tasks-axi/config.toml`, overridable by `TASKS_AXI_BACKEND` and `--backend`) defaults to `markdown` and nothing in the codebase flips it — not `setup`, not a migration, not a fallback. Keep it that way: moving a live backlog onto ADO is an operator decision.
+`--backend ado` on a read verb (`list`, `show`) is the supported dry run: it proves org/project/area, credential, WIQL, and the join field without touching config; `meta_field` is exercised by an ordinary create or update, while `followup_field` is exercised only by a public-followup operation. `.tasks.toml.example` carries a fully prepared `[ado]` table with the switch left at `markdown`.
 
 ## Conventions
 

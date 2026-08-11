@@ -1,0 +1,60 @@
+# tasks-axi project config — copy to `.tasks.toml` in the repo that owns the backlog.
+#
+# ── THE DELIVERY SWITCH ───────────────────────────────────────────────────────
+# `backend` is the ONE line that decides where tasks live. It ships as
+# "markdown" on purpose: everything below is prepared so flipping it to "ado"
+# is a one-word, one-line change — and that flip is a deliberate Captain step,
+# not something a setup command or a default does for you.
+#
+# Before flipping, dry-run the exact production code path without switching:
+#
+#     tasks-axi list --backend ado
+#     tasks-axi show <some-id> --backend ado --full
+#
+# `--backend` overrides this file for one command. A green read proves the org,
+# project, area, credential, and join field; meta/followup fields wait for a write.
+backend = "markdown"
+# backend = "ado"   # ← Captain-only: flip when the ADO project is provisioned
+
+[markdown]
+path = "data/backlog.md"
+archive = "data/done-archive.md"
+done_keep = 10
+
+# ── Azure DevOps backend ──────────────────────────────────────────────────────
+# Read whenever `backend = "ado"` (or `--backend ado` / TASKS_AXI_BACKEND=ado).
+# Present here without being active: resolving this table has no side effects.
+[ado]
+org = "contoso"
+project = "Internal"
+# Root area path new work items land in; also scopes every read (WIQL `UNDER`),
+# so tasks-axi never sees unrelated work items in the project.
+# Single quotes: an area path contains backslashes, and tasks-axi's config
+# reader takes literal strings only (a `"a\\b"` escape is refused, not guessed).
+area = 'Internal\Firstmate\main'
+
+# The join key and the tasks-axi residue. All three must exist as custom fields
+# on the work item type below BEFORE the switch. id_field must be a String field
+# for WIQL equality; meta_field and followup_field must be PlainText (long-text)
+# fields because ADO String fields are limited to 255 characters and can reject
+# or truncate their payloads. A missing id_field fails the dry read; missing
+# meta_field fails an ordinary create or update, while missing followup_field
+# fails a public-followup operation. Only this work item type is managed.
+work_item_type = "Task"
+id_field = "Custom.TasksAxiId"
+meta_field = "Custom.TasksAxiMeta"
+followup_field = "Custom.TasksAxiPublicFollowup"
+
+# ADO state names per tasks-axi state; the FIRST entry is what writes use, the
+# rest are accepted on read. These defaults write Agile-process Task states;
+# Scrum and Basic task workflows need explicit mappings before the switch.
+# A dry read cannot prove write states; a wrong first entry fails on the first
+# create or transition and names the rejected state.
+state_queued = "New, To Do, Proposed"
+state_in_flight = "Active, In Progress, Doing, Committed"
+state_done = "Closed, Done, Resolved, Removed"
+
+# ── Credentials (never in this file) ──────────────────────────────────────────
+# First non-empty wins: TASKS_AXI_ADO_PAT, ADO_PAT, AZURE_DEVOPS_EXT_PAT,
+# AZURE_DEVOPS_PAT — otherwise an `az account get-access-token` bearer token.
+# `az login` alone is enough on a machine that already runs the other AXIs.
