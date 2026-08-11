@@ -183,6 +183,38 @@ describe("AdoStore", () => {
 			expect(client.items.size).toBe(0);
 		});
 
+		it("reports a definitive post-create verification failure as unconfirmed", async () => {
+			const { store, client } = makeStore();
+			await store.create({ id: "verified-blocker-a1", title: "blocker" });
+			const get = client.get.bind(client);
+			let reads = 0;
+			client.get = async (id) => {
+				reads += 1;
+				if (reads === 2) {
+					throw adoError(403, "credential expired after create");
+				}
+				return get(id);
+			};
+
+			await expect(
+				store.create({
+					id: "verified-dependent-a1",
+					title: "dependent",
+					deps: [{ type: "blocked-by", id: "verified-blocker-a1" }],
+				}),
+			).rejects.toMatchObject({
+				code: "CONFLICT",
+				message: expect.stringContaining(
+					'Task "verified-dependent-a1" was created, but post-create verification was rejected',
+				),
+			});
+			expect(
+				[...client.items.values()].some(
+					(item) => item.fields[ID_FIELD] === "verified-dependent-a1",
+				),
+			).toBe(true);
+		});
+
 		it("reports a server-side create failure as unconfirmed", async () => {
 			const { store, client } = makeStore();
 			const create = client.create.bind(client);
@@ -648,7 +680,7 @@ describe("AdoStore", () => {
 			).rejects.toMatchObject({
 				code: "CONFLICT",
 				message: expect.stringContaining(
-					'Task "raced-create-dependent-a1" creation has an unconfirmed outcome',
+					'Task "raced-create-dependent-a1" was created, but post-create verification has an unconfirmed outcome',
 				),
 			});
 			expect(

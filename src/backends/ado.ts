@@ -1113,8 +1113,10 @@ export class AdoStore implements Store {
 		}
 
 		let created: WorkItem;
+		let initialCreateReturned = false;
 		try {
 			created = await this.client.create(this.workItemType, ops);
+			initialCreateReturned = true;
 			this.requireMutationResult(created, id);
 			requirePatchPostconditions(
 				{ id: created.id, fields: {}, relations: [] },
@@ -1125,9 +1127,12 @@ export class AdoStore implements Store {
 		} catch (error) {
 			unconfirmedCreate(
 				id,
-				"creation",
+				initialCreateReturned
+					? "was created, but post-create verification"
+					: "creation",
 				error,
 				`Inspect Azure DevOps for task "${id}" before retrying creation`,
+				!initialCreateReturned,
 			);
 		}
 		if (state !== initialState) {

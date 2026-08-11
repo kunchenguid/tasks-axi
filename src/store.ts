@@ -1,13 +1,13 @@
 import type { PublicFollowupMutation } from "./public-followup.js";
 import type {
-	Dep,
-	State,
-	Task,
-	TaskInput,
-	TaskPatch,
-	TaskUpdateResult,
-	TaskQuery,
-	TransitionOpts,
+  Dep,
+  State,
+  Task,
+  TaskInput,
+  TaskPatch,
+  TaskUpdateResult,
+  TaskQuery,
+  TransitionOpts,
 } from "./model.js";
 
 /**
@@ -16,31 +16,31 @@ import type {
  * returns a structured error naming the capability — never a raw backend error.
  */
 export interface Capabilities {
-	/** Backend identifier, e.g. "markdown". */
-	backend: string;
-	deps: boolean;
-	prune: boolean;
-	comments: boolean;
-	fullTextSearch: boolean;
-	realtimeSync: boolean;
-	/** Can it represent backend-specific states beyond queued/in_flight/done? */
-	customStates: boolean;
-	/** Does the server assign its own ids (remote trackers)? */
-	serverMintsIds: boolean;
-	/** Supports the durable, receipt-gated public-followup state machine. */
-	publicFollowups: boolean;
-	fileMoves: boolean;
+  /** Backend identifier, e.g. "markdown". */
+  backend: string;
+  deps: boolean;
+  prune: boolean;
+  comments: boolean;
+  fullTextSearch: boolean;
+  realtimeSync: boolean;
+  /** Can it represent backend-specific states beyond queued/in_flight/done? */
+  customStates: boolean;
+  /** Does the server assign its own ids (remote trackers)? */
+  serverMintsIds: boolean;
+  /** Supports the durable, receipt-gated public-followup state machine. */
+  publicFollowups: boolean;
+  fileMoves: boolean;
 }
 
 export interface PruneOptions {
-	state: State;
-	keep: number;
-	archive: boolean;
+  state: State;
+  keep: number;
+  archive: boolean;
 }
 
 export interface PruneResult {
-	archived: number;
-	ids: string[];
+  archived: number;
+  ids: string[];
 }
 
 /**
@@ -55,31 +55,31 @@ export interface PruneResult {
  * capability-gated.
  */
 export interface Store {
-	capabilities(): Capabilities;
+  capabilities(): Capabilities;
 
-	// CRUD
-	create(input: TaskInput): Promise<Task>;
-	get(id: string): Promise<Task | null>;
-	/** Apply a patch and report which fields actually changed. */
-	update(id: string, patch: TaskPatch): Promise<TaskUpdateResult>;
-	remove(id: string): Promise<Task>;
+  // CRUD
+  create(input: TaskInput): Promise<Task>;
+  get(id: string): Promise<Task | null>;
+  /** Apply a patch and report which fields actually changed. */
+  update(id: string, patch: TaskPatch): Promise<TaskUpdateResult>;
+  remove(id: string): Promise<Task>;
 
-	// query
-	list(query: TaskQuery): Promise<{ items: Task[]; total: number }>;
+  // query
+  list(query: TaskQuery): Promise<{ items: Task[]; total: number }>;
 
-	// state + dependencies
-	transition(id: string, to: State, opts?: TransitionOpts): Promise<Task>;
-	addDep(id: string, dep: Dep): Promise<boolean>;
-	removeDep(id: string, dep: Dep): Promise<boolean>;
+  // state + dependencies
+  transition(id: string, to: State, opts?: TransitionOpts): Promise<Task>;
+  addDep(id: string, dep: Dep): Promise<boolean>;
+  removeDep(id: string, dep: Dep): Promise<boolean>;
 
-	/** Atomically replace one typed obligation revision and optionally complete it. */
-	updatePublicFollowup(
-		id: string,
-		mutation: PublicFollowupMutation,
-	): Promise<Task>;
+  /** Atomically replace one typed obligation revision and optionally complete it. */
+  updatePublicFollowup(
+    id: string,
+    mutation: PublicFollowupMutation,
+  ): Promise<Task>;
 
-	// maintenance (optional, capability-gated)
-	prune?(options: PruneOptions): Promise<PruneResult>;
-	/** Normalize the persisted view (markdown: rewrite every item canonically). */
-	render?(): Promise<number>;
+  // maintenance (optional, capability-gated)
+  prune?(options: PruneOptions): Promise<PruneResult>;
+  /** Normalize the persisted view (markdown: rewrite every item canonically). */
+  render?(): Promise<number>;
 }

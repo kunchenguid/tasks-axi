@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+	ADO_RESOURCE,
 	AdoRestClient,
 	PAT_ENV_VARS,
 	adoError,
@@ -88,6 +89,38 @@ describe("AdoRestClient", () => {
 		expect((init.headers as Record<string, string>).Authorization).toBe(
 			"Bearer token",
 		);
+		const [file, args, options] = execFileMock.mock.calls.at(-1)!;
+		expect(file).toBe("az");
+		expect(args).toEqual([
+			"account",
+			"get-access-token",
+			"--resource",
+			ADO_RESOURCE,
+			"-o",
+			"json",
+		]);
+		expect(options).toEqual({ env, timeout: 30_000 });
+	});
+
+	it("reports az credential command failures", async () => {
+		execFileMock.mockImplementationOnce((...args: unknown[]) => {
+			const callback = args.at(-1) as (error: Error | null) => void;
+			callback(new Error("az executable unavailable"));
+		});
+		const fetchImpl = vi.fn();
+
+		await expect(
+			client(fetchImpl as unknown as typeof fetch, {}).queryIds(
+				"SELECT [System.Id] FROM WorkItems",
+			),
+		).rejects.toMatchObject({
+			code: "VALIDATION_ERROR",
+			message: expect.stringContaining(
+				"No Azure DevOps credential: set TASKS_AXI_ADO_PAT or sign in with `az login` (az executable unavailable)",
+			),
+			suggestions: ["export TASKS_AXI_ADO_PAT=<pat>", "az login"],
+		});
+		expect(fetchImpl).not.toHaveBeenCalled();
 	});
 
 	it.each([null, {}, { accessToken: 7 }, { accessToken: " " }])(
