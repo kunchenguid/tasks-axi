@@ -205,6 +205,26 @@ describe("resolveConfig", () => {
 		).toThrow(/key = value/);
 	});
 
+	it("ignores malformed Markdown settings while ADO is selected", () => {
+		writeFileSync(
+			join(dir, ".tasks.toml"),
+			[
+				"[markdown]",
+				'path = ""',
+				'archive = ""',
+				"done_keep = -1",
+				"[ado]",
+				'org = "contoso"',
+				'project = "Internal"',
+				"",
+			].join("\n"),
+		);
+
+		const config = resolveConfig({ cwd: dir, home, env: {}, backend: "ado" });
+		expect(config.backend).toBe("ado");
+		expect(config.ado).toMatchObject({ org: "contoso", project: "Internal" });
+	});
+
 	it("rejects unknown ADO keys only when ADO is selected", () => {
 		writeFileSync(
 			join(dir, ".tasks.toml"),

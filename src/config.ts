@@ -89,6 +89,12 @@ interface TomlConfig {
 	ado?: string[];
 }
 
+interface RawTomlConfig {
+	backend?: string;
+	markdown?: string[];
+	ado?: string[];
+}
+
 const DEFAULT_KEEP = 10;
 const PATH_CANDIDATES = ["backlog.md", "data/backlog.md"];
 type ConfigTable = "root" | "markdown" | "ado" | "unsupported";
@@ -101,7 +107,16 @@ type ConfigTable = "root" | "markdown" | "ado" | "unsupported";
  * Intentionally not a general TOML parser.
  */
 export function parseConfigToml(src: string): TomlConfig {
+	const raw = scanConfigToml(src);
 	const config: TomlConfig = {};
+	if (raw.backend !== undefined) config.backend = raw.backend;
+	if (raw.markdown) config.markdown = parseMarkdownTable(raw.markdown);
+	if (raw.ado) config.ado = raw.ado;
+	return config;
+}
+
+function scanConfigToml(src: string): RawTomlConfig {
+	const config: RawTomlConfig = {};
 	let table: ConfigTable = "root";
 
 	for (const rawLine of src.split("\n")) {
@@ -118,6 +133,11 @@ export function parseConfigToml(src: string): TomlConfig {
 			continue;
 		}
 
+		if (table === "markdown") {
+			config.markdown ??= [];
+			config.markdown.push(rawLine);
+			continue;
+		}
 		if (table === "ado") {
 			config.ado ??= [];
 			config.ado.push(rawLine);
@@ -133,28 +153,9 @@ export function parseConfigToml(src: string): TomlConfig {
 				["Use `key = value` assignments in .tasks.toml"],
 			);
 		}
-		const key = kv[1];
-		const source = configKeySource(table, key);
-		if (!source) continue;
-		const value = parseTomlValue(kv[2], source);
-
-		if (table === "root") {
-			config.backend = requireTomlString(value, source);
-			continue;
-		}
-		config.markdown ??= {};
-		if (key === "path") config.markdown.path = requireTomlString(value, source);
-		if (key === "archive")
-			config.markdown.archive = requireTomlString(value, source);
-		if (key === "done_keep") {
-			if (typeof value !== "number") {
-				throw new AxiError(
-					"markdown.done_keep must be an integer",
-					"VALIDATION_ERROR",
-					["Set `[markdown] done_keep = 10` in .tasks.toml"],
-				);
-			}
-			config.markdown.done_keep = value;
+		const source = configKeySource(table, kv[1]);
+		if (source) {
+			config.backend = requireTomlString(parseTomlValue(kv[2], source), source);
 		}
 	}
 
@@ -190,6 +191,41 @@ function configKeySource(table: ConfigTable, key: string): string | undefined {
 		return `ado.${key}`;
 	}
 	return undefined;
+}
+
+function parseMarkdownTable(
+	lines: string[],
+): NonNullable<TomlConfig["markdown"]> {
+	const values: NonNullable<TomlConfig["markdown"]> = {};
+	for (const rawLine of lines) {
+		const line = stripTomlComment(rawLine).trim();
+		if (line === "") continue;
+		const kv = line.match(/^([A-Za-z0-9_]+)\s*=\s*(.*)$/);
+		if (!kv) {
+			throw new AxiError(
+				"Invalid config line: expected `key = value`",
+				"VALIDATION_ERROR",
+				["Use `key = value` assignments in .tasks.toml"],
+			);
+		}
+		const key = kv[1];
+		const source = configKeySource("markdown", key);
+		if (!source) continue;
+		const value = parseTomlValue(kv[2], source);
+		if (key === "path") values.path = requireTomlString(value, source);
+		if (key === "archive") values.archive = requireTomlString(value, source);
+		if (key === "done_keep") {
+			if (typeof value !== "number") {
+				throw new AxiError(
+					"markdown.done_keep must be an integer",
+					"VALIDATION_ERROR",
+					["Set `[markdown] done_keep = 10` in .tasks.toml"],
+				);
+			}
+			values.done_keep = value;
+		}
+	}
+	return values;
 }
 
 function parseAdoTable(lines: string[]): Record<string, string> {
@@ -235,9 +271,9 @@ function requireTomlString(value: string | number, source: string): string {
 	throw new AxiError(`${source} must be a quoted string`, "VALIDATION_ERROR");
 }
 
-function loadToml(path: string): TomlConfig {
+function loadToml(path: string): RawTomlConfig {
 	const src = readFileSafe(path);
-	return src ? parseConfigToml(src) : {};
+	return src ? scanConfigToml(src) : {};
 }
 
 function resolveMarkdownPath(
@@ -457,43 +493,18 @@ export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
 
 	const homeToml = loadToml(join(home, ".tasks-axi", "config.toml"));
 	const projectToml = loadToml(resolve(cwd, ".tasks.toml"));
-
-	const explicitPath =
-		overrides.file !== undefined
-			? validatePathValue(overrides.file, "--file")
-			: env.TASKS_AXI_FILE !== undefined
-				? validatePathValue(env.TASKS_AXI_FILE, "TASKS_AXI_FILE")
-				: undefined;
-	const tomlPath =
-		explicitPath !== undefined
-			? undefined
-			: projectToml.markdown?.path !== undefined
-				? validatePathValue(projectToml.markdown.path, "markdown.path")
-				: validatePathValue(homeToml.markdown?.path, "markdown.path");
-
 	const backend =
 		overrides.backend ??
 		env.TASKS_AXI_BACKEND ??
 		projectToml.backend ??
 		homeToml.backend ??
 		"markdown";
+	const config: ResolvedConfig = {
+		backend,
+		path: resolveMarkdownPath(undefined, undefined, cwd),
+		doneKeep: DEFAULT_KEEP,
+	};
 
-	const path = resolveMarkdownPath(explicitPath, tomlPath, cwd);
-
-	const archive =
-		projectToml.markdown?.archive !== undefined
-			? validatePathValue(projectToml.markdown.archive, "markdown.archive")
-			: validatePathValue(homeToml.markdown?.archive, "markdown.archive");
-	const doneKeep = validateDoneKeep(
-		projectToml.markdown?.done_keep ??
-			homeToml.markdown?.done_keep ??
-			DEFAULT_KEEP,
-	);
-
-	const config: ResolvedConfig = { backend, path, doneKeep };
-	if (archive) {
-		config.archivePath = isAbsolute(archive) ? archive : resolve(cwd, archive);
-	}
 	if (backend === "ado") {
 		const ado = resolveAdo(
 			{
@@ -503,6 +514,28 @@ export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
 			env,
 		);
 		if (ado) config.ado = ado;
+		return config;
+	}
+	if (backend !== "markdown") return config;
+
+	const homeMarkdown = parseMarkdownTable(homeToml.markdown ?? []);
+	const projectMarkdown = parseMarkdownTable(projectToml.markdown ?? []);
+	const markdown = { ...homeMarkdown, ...projectMarkdown };
+	const explicitPath =
+		overrides.file !== undefined
+			? validatePathValue(overrides.file, "--file")
+			: env.TASKS_AXI_FILE !== undefined
+				? validatePathValue(env.TASKS_AXI_FILE, "TASKS_AXI_FILE")
+				: undefined;
+	const tomlPath =
+		explicitPath === undefined
+			? validatePathValue(markdown.path, "markdown.path")
+			: undefined;
+	config.path = resolveMarkdownPath(explicitPath, tomlPath, cwd);
+	const archive = validatePathValue(markdown.archive, "markdown.archive");
+	config.doneKeep = validateDoneKeep(markdown.done_keep ?? DEFAULT_KEEP);
+	if (archive) {
+		config.archivePath = isAbsolute(archive) ? archive : resolve(cwd, archive);
 	}
 	return config;
 }
