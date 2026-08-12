@@ -48,7 +48,7 @@ Run `npx -y tasks-axi --help` for global flags, or `npx -y tasks-axi <command> -
 - Output is TOON-encoded and token-efficient; the long task body is truncated by default - the whole point is that `list` stays cheap.
   Use `--full` only when you need the complete notes.
 - Every write leads with an `ok:` line confirming the write result, including the resulting task state when the command changes one (e.g. `ok: start <id> -> In flight`, `ok: done <id> -> Done (pr <url>)`, `ok: render -> normalized <n>`), then state-aware next-step hints.
-  Mutations are idempotent and add `already: true` on a no-op; re-running is safe.
+  Successful mutations are idempotent and add `already: true` on a no-op; re-running after a normal response is safe. After an ADO unconfirmed-outcome error, follow its inspection or query guidance before retrying.
 - Pass `--json` to any mutation supported by the active backend for a machine-readable result object (`{ "ok": true, "action": ..., "task": { ... } }` or operation-specific result fields) instead of TOON - confirm a write deterministically without a follow-up read.
 - `block <id> --by <other>` and `unblock` manage the dependency graph; `hold <id> --reason "<text>" [--until YYYY-MM-DD]` and `unhold` manage structured dispatch pauses; `ready` lists only queued work with no unresolved blocker and no active hold.
 - Filter `list` with `--state`, `--repo`, `--kind`, `--blocked`, `--limit`, and add columns with `--fields a,b,c`.

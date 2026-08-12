@@ -5,7 +5,7 @@ Markdown is the default backend; an Azure DevOps backend ships behind the same `
 
 ## Architecture
 
-The CLI layer never knows which backend is active — it only talks to the `Store` interface.
+Most command logic talks only to the `Store` interface; capability checks gate backend-specific behavior, while `resolveTasksContext` constructs the active backend.
 
 - `src/cli.ts` — `runAxiCli` wiring: `DESCRIPTION`, `TOP_HELP`, the verb→handler map (with aliases create/view/edit/delete/close), the optional `task` noun prefix, and the global `--backend` / `--file` flags (stripped before handlers, parsed for `resolveContext`).
 - `src/context.ts` — `resolveTasksContext` builds the backend `Store` + `ResolvedConfig`; every command receives this `TasksContext`.
@@ -63,7 +63,7 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 
 - **Ids are caller-supplied join keys (D6)** validated by `ID_RE` (slug-shaped); `add --mint [--prefix]` generates a `slug-xx` id.
 - **prune archives, never deletes (D4)** - surplus Done tasks are appended to `markdown.archive` or default `done-archive.md`. It keeps N _recognized_ tasks; free-form Done lines are preserved and not counted.
-- **`done` auto-prunes** to `config.doneKeep` (default 10) and archives, unless `--no-prune`.
+- **On the Markdown backend, `done` auto-prunes** to `config.doneKeep` (default 10) and archives, unless `--no-prune`.
 - **`done` on an already-Done task** stays idempotent but backfills supplied `--pr`, `--report`, and non-duplicate `--note` metadata without replacing the original closed date.
 - **Dependency mutations validate targets.** `add --blocked-by` and `block --by` reject missing blockers and self-blocks. Parsed dangling blockers are still treated as resolved for legacy hand-edited files.
 - **Blocking tasks are protected.** `rm` and single-id `mv` reject a task that still blocks active dependents; unblock or complete the dependents first.

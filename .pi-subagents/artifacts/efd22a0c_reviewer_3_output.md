@@ -1,0 +1,6 @@
+## Review
+- **Correct:** The diff is ADO-focused and additive. Markdown remains the default in `src/config.ts:498-511`; ADO selection is explicit in `src/context.ts`, and unsupported file moves are capability-gated before destination access in `src/commands/state.ts:665-673`.
+- **Correct:** Tests cover REST authentication/response validation, optimistic writes, CRUD, dependencies, public follow-ups, configuration precedence, context selection, and Markdown-default preservation.
+- **Note — medium:** `src/backends/ado.ts:895-901` and `src/backends/ado.ts:1781-1788` identify owned `kind:`/`repo:` tags case-sensitively. Azure DevOps tags are case-insensitive, so a valid ADO tag such as `Kind:public-followup` or `Repo:foo` is silently treated as foreign. Reads then lose the modeled field, filtering becomes incorrect, and later writes can preserve the stale case-variant while adding another owned tag. **Action:** match owned tag prefixes case-insensitively, reject multiple case-variant owned tags, and add read/rewrite tests.
+- **Blocker:** None.
+- **Review scope:** Full committed diff from `9a86c7c86a4617a5a4f00f28dcb9588b03897f8f` through `6972168`; tests were not run as instructed. Requested `plan.md` and `progress.md` were absent.

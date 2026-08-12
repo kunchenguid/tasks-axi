@@ -125,7 +125,7 @@ The long task body is truncated by default — the whole point is that `list` st
 `update --body` and `update --body-file` replace the body wholesale, so agents should inspect the current body first and write back the curated current state rather than appending a journal entry.
 On the Markdown backend, `--archive-body` preserves the replaced body in `note-archive.md` using the same dated markdown archive block style as done pruning.
 Every write leads with a terse `ok:` line confirming the write result, including the resulting task state when the command changes one (e.g. `ok: start lavish-share -> In flight`, `ok: done grok-harness-g7 -> Done (pr <url>)`, `ok: render -> normalized 3`), followed by state-aware next-step hints that never suggest an action the command just performed.
-Mutations are idempotent and report what changed (`already: true` on a no-op), so re-running one is safe.
+Successful mutations are idempotent and report what changed (`already: true` on a no-op), so re-running after a normal response is safe. After an ADO unconfirmed-outcome error, follow its inspection or query guidance before retrying.
 Running `done` again on an already Done task can still backfill a new `--pr`, `--report`, or `--note` without changing the original close date.
 `hold <id> --reason "<text>"` records an intentional pause without turning it into prose, and `unhold <id>` clears it.
 The reason must be single-line text without parentheses because parentheses are reserved for canonical markdown tags.
@@ -247,7 +247,7 @@ Body replacements with `--archive-body` append superseded bodies to `note-archiv
 
 ## Backends
 
-Backends live behind a narrow `Store` interface, so the CLI layer never knows which one is active.
+Backends implement a narrow `Store` interface, with capability checks gating backend-specific operations.
 
 | Backend                | Status            |
 | ---------------------- | ----------------- |
@@ -296,7 +296,7 @@ See [`.tasks.toml.example`](.tasks.toml.example) for a fully prepared table with
 The three custom fields (`id_field`, `meta_field`, `followup_field`) must exist on the work item type **before** the switch. Configure `id_field` as a String field for WIQL equality, and configure `meta_field` and `followup_field` as PlainText (long-text) fields; ADO String fields are limited to 255 characters and can reject or truncate their payloads. A missing `id_field` fails the dry-read WIQL request, a missing `meta_field` fails an ordinary create or update, and a missing `followup_field` fails a public-followup operation. Only items of the configured `work_item_type` are managed.
 
 The default state map writes the Azure DevOps Agile-process Task states `New`, `Active`, and `Closed`. Scrum and Basic task workflows need explicit state mappings before the switch; a dry read cannot prove write states, so an incorrect mapping fails on the first create or transition and names the rejected state.
-Adds targeting In flight or Done create the work item in the queued state and then apply the ordinary optimistic transition; if the transition reports an error, its outcome is unconfirmed, so retry `start` or `done` idempotently. A requested close date remains pending until a successful `done` transition consumes it. If an item is reopened and completed again entirely in ADO between tasks-axi reads, tasks-axi continues to report its previously recorded close date.
+Adds targeting In flight or Done create the work item in the queued state and then apply the ordinary optimistic transition. If creation or its follow-up transition has an unconfirmed outcome, follow the emitted recovery instruction: inspect the named ADO work item, or query the project-wide join field, before retrying. A requested close date remains pending until a successful `done` transition consumes it. If an item is reopened and completed again entirely in ADO between tasks-axi reads, tasks-axi continues to report its previously recorded close date.
 The three tasks-axi states map 1:1 onto `System.State`, bodies are HTML-encoded in `System.Description` and decoded on read so Boards renders their text literally, dependencies are work item links, and the public-followup obligation lives in its own field with the same canonical payload the markdown backend writes.
 Parent and discovered-from links are imported only when marked as tasks-axi-owned; ordinary native ADO hierarchy links are ignored.
 ADO reads also fail closed when a public-followup work item's title, body, or links drift from its public-safe promise through an out-of-band Boards edit. Applying the same strictness to hand-edited Markdown backlogs is a separate compatibility decision.
