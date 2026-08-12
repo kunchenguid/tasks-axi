@@ -1302,7 +1302,7 @@ export class AdoStore implements Store {
 			]);
 		}
 		await this.requireNoActiveDependents(id);
-		// ADO DELETE is unconditional: it has no rev precondition and recycle-bin removal is recoverable.
+		// The dependent check is a best-effort snapshot: a concurrent addDep can race ADO's unconditional DELETE, but recycle-bin removal is recoverable.
 		await this.client.remove(item.id);
 		return task;
 	}
@@ -1447,13 +1447,49 @@ export class AdoStore implements Store {
 			return false;
 		}
 		const resolved = await this.resolveDeps([checked]);
-		await this.applyPatch(item, [
-			add(
-				"/relations/-",
-				this.relationValue(task.id, checked, resolved.get(checked.id)!),
-			),
+		const relation = this.relationValue(
+			task.id,
+			checked,
+			resolved.get(checked.id)!,
+		);
+		const updated = await this.applyPatch(item, [
+			add("/relations/-", relation),
 		]);
-		await this.requireResolvedDeps(resolved);
+		try {
+			await this.requireResolvedDeps(resolved);
+		} catch (verificationError) {
+			const expectedRelation = normalizedRelations([relation])[0];
+			const relationIndex = (updated.relations ?? []).findIndex(
+				(candidate) => normalizedRelations([candidate])[0] === expectedRelation,
+			);
+			try {
+				if (relationIndex < 0) {
+					throw new Error("the appended relation was not identifiable", {
+						cause: verificationError,
+					});
+				}
+				await this.applyPatch(updated, [
+					{ op: "remove", path: `/relations/${relationIndex}` },
+				]);
+			} catch (rollbackError) {
+				const verificationMessage =
+					verificationError instanceof Error
+						? verificationError.message
+						: String(verificationError);
+				const rollbackMessage =
+					rollbackError instanceof Error
+						? rollbackError.message
+						: String(rollbackError);
+				throw new AxiError(
+					`Task "${id}" dependency update has an unconfirmed outcome: ${verificationMessage}; rollback could not be confirmed: ${rollbackMessage}`,
+					"CONFLICT",
+					[
+						`Inspect task "${id}" in Azure DevOps and remove the appended ${checked.type} relation before retrying`,
+					],
+				);
+			}
+			throw verificationError;
+		}
 		return true;
 	}
 

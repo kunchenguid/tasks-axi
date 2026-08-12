@@ -300,7 +300,7 @@ Adds targeting In flight or Done create the work item in the queued state and th
 The three tasks-axi states map 1:1 onto `System.State`, dependencies are work item links, and the public-followup obligation lives in its own field with the same canonical payload the markdown backend writes.
 Parent and discovered-from links are imported only when marked as tasks-axi-owned; ordinary native ADO hierarchy links are ignored.
 `AdoStore.moveTo(id, areaPath)` implements cross-queue moves as Area Path changes, but the CLI `mv` verb is still markdown/path-shaped; wiring it to area paths is a follow-up.
-The ADO backend has no `prune` and no `render` (ADO owns its storage), refuses `--archive-body`, and `rm` sends the work item to the recycle bin rather than hard-deleting it.
+The ADO backend has no `prune`, `render`, archive-body, or CLI move support. `rm` checks active dependents from a best-effort snapshot, but ADO has no cross-item transaction or DELETE revision precondition, so a concurrent dependency can race that check; removal is unconditional but recoverable from the recycle bin.
 
 ## Development
 

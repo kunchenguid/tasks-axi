@@ -679,14 +679,17 @@ describe("AdoStore", () => {
 			).rejects.toMatchObject({ code: "CONFLICT" });
 		});
 
-		it("revalidates a relation target after adding a dependency", async () => {
+		it("rolls back a dependency when its target changes identity", async () => {
 			const { store, client } = makeStore();
 			await store.create({ id: "raced-blocker-a1", title: "blocker" });
 			await store.create({ id: "raced-dependent-a1", title: "dependent" });
 			const blocker = [...client.items.values()].find(
 				(item) => item.fields[ID_FIELD] === "raced-blocker-a1",
 			);
-			if (!blocker) throw new Error("expected the blocker work item");
+			const dependent = [...client.items.values()].find(
+				(item) => item.fields[ID_FIELD] === "raced-dependent-a1",
+			);
+			if (!blocker || !dependent) throw new Error("expected both work items");
 			const update = client.update.bind(client);
 			client.update = async (id, patch) => {
 				const updated = await update(id, patch);
@@ -705,6 +708,53 @@ describe("AdoStore", () => {
 					'Dependency "raced-blocker-a1" changed identity or scope',
 				),
 			});
+			expect(dependent.relations).toEqual([]);
+			expect(
+				client.calls
+					.filter((call) => call.kind === "update" && call.id === dependent.id)
+					.at(-1)?.patch,
+			).toEqual([
+				{ op: "test", path: "/rev", value: 2 },
+				{ op: "remove", path: "/relations/0" },
+			]);
+		});
+
+		it("reports an unconfirmed dependency outcome when rollback fails", async () => {
+			const { store, client } = makeStore();
+			await store.create({ id: "uncertain-blocker-a1", title: "blocker" });
+			await store.create({ id: "uncertain-dependent-a1", title: "dependent" });
+			const blocker = [...client.items.values()].find(
+				(item) => item.fields[ID_FIELD] === "uncertain-blocker-a1",
+			);
+			const dependent = [...client.items.values()].find(
+				(item) => item.fields[ID_FIELD] === "uncertain-dependent-a1",
+			);
+			if (!blocker || !dependent) throw new Error("expected both work items");
+			const update = client.update.bind(client);
+			let updates = 0;
+			client.update = async (id, patch) => {
+				updates += 1;
+				if (updates === 2) throw new Error("rollback response lost");
+				const updated = await update(id, patch);
+				blocker.fields[ID_FIELD] = "renamed-blocker-a1";
+				return updated;
+			};
+
+			await expect(
+				store.addDep("uncertain-dependent-a1", {
+					type: "blocked-by",
+					id: "uncertain-blocker-a1",
+				}),
+			).rejects.toMatchObject({
+				code: "CONFLICT",
+				message: expect.stringContaining(
+					'Task "uncertain-dependent-a1" dependency update has an unconfirmed outcome',
+				),
+				suggestions: [
+					'Inspect task "uncertain-dependent-a1" in Azure DevOps and remove the appended blocked-by relation before retrying',
+				],
+			});
+			expect(dependent.relations).toHaveLength(1);
 		});
 
 		it("reports an unconfirmed create when a relation target leaves scope", async () => {
