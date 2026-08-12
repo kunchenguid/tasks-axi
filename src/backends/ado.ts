@@ -1176,9 +1176,14 @@ export class AdoStore implements Store {
 		let retryVerb: "start" | "done" | undefined;
 		if (state === "in_flight") retryVerb = "start";
 		if (state === "done") retryVerb = "done";
-		const retrySuggestion = retryVerb
-			? `Run \`tasks-axi show ${id}\`, then \`tasks-axi ${retryVerb} ${id}\` if needed`
-			: `Run \`tasks-axi show ${id}\` before retrying creation`;
+		const retrySuggestion = (workItemId?: number): string => {
+			if (Number.isSafeInteger(workItemId)) {
+				return `Inspect Azure DevOps work item ${workItemId} directly before retrying`;
+			}
+			return retryVerb
+				? `Run \`tasks-axi show ${id}\`, then \`tasks-axi ${retryVerb} ${id}\` if needed`
+				: `Run \`tasks-axi show ${id}\` before retrying creation`;
+		};
 
 		const ops: JsonPatchOp[] = [
 			add(`/fields/${this.idField}`, id),
@@ -1248,7 +1253,7 @@ export class AdoStore implements Store {
 				id,
 				initialCreateReturned ? "post-create verification" : "creation",
 				error,
-				retrySuggestion,
+				retrySuggestion(created?.id),
 				initialCreateReturned,
 			);
 		}
@@ -1264,7 +1269,7 @@ export class AdoStore implements Store {
 					id,
 					`transition to ${state}`,
 					error,
-					retrySuggestion,
+					retrySuggestion(created?.id),
 					true,
 				);
 			}

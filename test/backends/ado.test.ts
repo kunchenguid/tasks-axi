@@ -199,6 +199,32 @@ describe("AdoStore", () => {
 			expect(client.calls.some((call) => call.kind === "remove")).toBe(false);
 		});
 
+		it("points recovery at the numeric work item after an out-of-scope create", async () => {
+			const { store, client } = makeStore();
+			const create = client.create.bind(client);
+			client.create = async (type, patch) => {
+				const created = await create(type, patch);
+				created.fields["System.AreaPath"] = "Internal\\Other";
+				const persisted = client.items.get(created.id);
+				if (!persisted) throw new Error("expected the created work item");
+				persisted.fields["System.AreaPath"] = "Internal\\Other";
+				return created;
+			};
+
+			await expect(
+				store.create({
+					id: "moved-create-a1",
+					title: "find the persisted work item",
+				}),
+			).rejects.toMatchObject({
+				code: "CONFLICT",
+				suggestions: [
+					"Inspect Azure DevOps work item 1 directly before retrying",
+				],
+			});
+			expect(await store.get("moved-create-a1")).toBeNull();
+		});
+
 		it("preserves a definitive create rejection", async () => {
 			const { store, client } = makeStore();
 			client.create = async () => {
@@ -250,7 +276,7 @@ describe("AdoStore", () => {
 					/^Task "verified-dependent-a1" post-create verification has an unconfirmed outcome.*; its existence and state could not be confirmed$/,
 				),
 				suggestions: [
-					"Run `tasks-axi show verified-dependent-a1` before retrying creation",
+					"Inspect Azure DevOps work item 2 directly before retrying",
 				],
 			});
 			expect(
@@ -320,7 +346,7 @@ describe("AdoStore", () => {
 					'Task "failed-start-a1" transition to in_flight has an unconfirmed outcome',
 				),
 				suggestions: [
-					"Run `tasks-axi show failed-start-a1`, then `tasks-axi start failed-start-a1` if needed",
+					"Inspect Azure DevOps work item 1 directly before retrying",
 				],
 			});
 			expect([...client.items.values()][0]?.fields["System.State"]).toBe(
@@ -347,7 +373,7 @@ describe("AdoStore", () => {
 					/^Task "rejected-start-a1" transition to in_flight has an unconfirmed outcome.*; its existence and state could not be confirmed$/,
 				),
 				suggestions: [
-					"Run `tasks-axi show rejected-start-a1`, then `tasks-axi start rejected-start-a1` if needed",
+					"Inspect Azure DevOps work item 1 directly before retrying",
 				],
 			});
 			expect([...client.items.values()][0]?.fields["System.State"]).toBe("New");
@@ -371,7 +397,7 @@ describe("AdoStore", () => {
 					"its existence and state could not be confirmed",
 				),
 				suggestions: [
-					"Run `tasks-axi show conflicted-start-a1`, then `tasks-axi start conflicted-start-a1` if needed",
+					"Inspect Azure DevOps work item 1 directly before retrying",
 				],
 			});
 			expect(client.items.size).toBe(1);
@@ -396,7 +422,7 @@ describe("AdoStore", () => {
 					"its existence and state could not be confirmed",
 				),
 				suggestions: [
-					"Run `tasks-axi show missing-start-a1`, then `tasks-axi start missing-start-a1` if needed",
+					"Inspect Azure DevOps work item 1 directly before retrying",
 				],
 			});
 			expect(client.items.size).toBe(0);
@@ -424,7 +450,7 @@ describe("AdoStore", () => {
 			).rejects.toMatchObject({
 				code: "CONFLICT",
 				suggestions: [
-					"Run `tasks-axi show failed-done-a1`, then `tasks-axi done failed-done-a1` if needed",
+					"Inspect Azure DevOps work item 1 directly before retrying",
 				],
 			});
 			expect((await store.get("failed-done-a1"))?.closed).toBeUndefined();
