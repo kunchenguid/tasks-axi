@@ -1,6 +1,0 @@
-## Review
-- **Correct:** No concrete blockers found. Windows launcher selection correctly defaults to `process.platform` and checks `win32`, independent of environment-variable presence (`src/backends/ado-client.ts:112,133-139`). The behavioral test covers the injected Windows path (`test/backends/ado-client.test.ts:107-149`).
-- **Correct:** HTTP timeouts remain non-definitive, while explicit 4xx rejections feed the mutation uncertainty safeguards in `ado.ts` (`src/backends/ado-client.ts:183-212,415-445`; `src/backends/ado.ts:117-130,952-979,1418-1430`).
-- **Correct:** API 7.1, URL encoding, PAT/Bearer authentication, 203/HTML sign-in handling, and malformed success-response validation are coherent and behaviorally tested.
-- **Note:** No source-content-only tests were found; tests import and exercise runtime behavior. Per instruction, tests were not run and files were not modified.
-- **Note:** Residual risk is limited to mocked HTTP/launcher coverage; no live ADO endpoint or native Windows process was exercised in this review.
