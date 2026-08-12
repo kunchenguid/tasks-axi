@@ -47,6 +47,7 @@ import { normalizeTypedLinks } from "./markdown-grammar.js";
  *   body           -> System.Description (HTML-encoded plain text)
  *   kind / repo    -> System.Tags      (`kind:<v>` / `repo:<v>`, filterable in ADO)
  *   deps           -> work item links  (predecessor / parent / related)
+ *                    Parent dependencies use native hierarchy: one per task.
  *   public_followup-> `<followupField>` (same canonical base64url payload as markdown)
  *   area (moveTo)  -> System.AreaPath
  *   the remainder  -> `<metaField>`    (priority, hold, links, dates, meta)
@@ -1104,6 +1105,9 @@ export class AdoStore implements Store {
 				}),
 			).values(),
 		];
+		if (deps.filter((dep) => dep.type === "parent").length > 1) {
+			validation(`Task "${id}" cannot have more than one parent`);
+		}
 
 		let publicFollowup;
 		if (kind === PUBLIC_FOLLOWUP_KIND) {
@@ -1579,6 +1583,12 @@ export class AdoStore implements Store {
 		}
 		if (task.deps.some((d) => d.type === checked.type && d.id === checked.id)) {
 			return false;
+		}
+		if (
+			checked.type === "parent" &&
+			item.relations?.some((relation) => relation.rel === REL_PARENT)
+		) {
+			validation(`Task "${id}" cannot have more than one parent`);
 		}
 		const resolved = await this.resolveDeps([checked]);
 		const relation = this.relationValue(

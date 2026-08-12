@@ -17,11 +17,13 @@ function client(
 	fetchImpl: typeof fetch,
 	env: NodeJS.ProcessEnv = PAT_ENV,
 	timeoutMs?: number,
+	platform: NodeJS.Platform = "linux",
 ) {
 	return new AdoRestClient({
 		org: "AIMENTUM",
 		project: "Internal",
 		env,
+		platform,
 		fetchImpl,
 		timeoutMs,
 	});
@@ -104,7 +106,6 @@ describe("AdoRestClient", () => {
 
 	it("launches az.cmd through the Windows command processor", async () => {
 		const env = {
-			OS: "Windows_NT",
 			ComSpec: "C:\\Windows\\System32\\cmd.exe",
 		};
 		execFileMock.mockImplementationOnce((...args: unknown[]) => {
@@ -121,9 +122,12 @@ describe("AdoRestClient", () => {
 			Promise.resolve(reply(JSON.stringify({ workItems: [] }))),
 		);
 
-		await client(fetchImpl as unknown as typeof fetch, env).queryIds(
-			"SELECT [System.Id] FROM WorkItems",
-		);
+		await client(
+			fetchImpl as unknown as typeof fetch,
+			env,
+			undefined,
+			"win32",
+		).queryIds("SELECT [System.Id] FROM WorkItems");
 
 		expect(execFileMock.mock.calls.at(-1)).toEqual([
 			"C:\\Windows\\System32\\cmd.exe",

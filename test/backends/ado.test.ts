@@ -1452,6 +1452,76 @@ describe("AdoStore", () => {
 			});
 		});
 
+		it("rejects a second parent before create or update", async () => {
+			const { store, client } = makeStore();
+			await store.create({ id: "parent-one-a1", title: "first parent" });
+			await store.create({ id: "parent-two-a1", title: "second parent" });
+
+			await expect(
+				store.create({
+					id: "two-parents-a1",
+					title: "invalid child",
+					deps: [
+						{ type: "parent", id: "parent-one-a1" },
+						{ type: "parent", id: "parent-two-a1" },
+					],
+				}),
+			).rejects.toMatchObject({
+				code: "VALIDATION_ERROR",
+				message: 'Task "two-parents-a1" cannot have more than one parent',
+			});
+			expect(
+				client.calls.filter((call) => call.kind === "create"),
+			).toHaveLength(2);
+
+			await store.create({
+				id: "one-parent-a1",
+				title: "valid child",
+				deps: [{ type: "parent", id: "parent-one-a1" }],
+			});
+			expect(
+				await store.addDep("one-parent-a1", {
+					type: "parent",
+					id: "parent-one-a1",
+				}),
+			).toBe(false);
+			await expect(
+				store.addDep("one-parent-a1", {
+					type: "parent",
+					id: "parent-two-a1",
+				}),
+			).rejects.toMatchObject({
+				code: "VALIDATION_ERROR",
+				message: 'Task "one-parent-a1" cannot have more than one parent',
+			});
+			expect(
+				client.calls.filter((call) => call.kind === "update"),
+			).toHaveLength(0);
+
+			const child = [...client.items.values()].find(
+				(item) => item.fields[ID_FIELD] === "one-parent-a1",
+			);
+			const secondParent = [...client.items.values()].find(
+				(item) => item.fields[ID_FIELD] === "parent-two-a1",
+			);
+			if (!child || !secondParent)
+				throw new Error("expected parent work items");
+			await expect(
+				client.update(child.id, [
+					{ op: "test", path: "/rev", value: child.rev },
+					{
+						op: "add",
+						path: "/relations/-",
+						value: {
+							rel: "System.LinkTypes.Hierarchy-Reverse",
+							url: client.workItemUrl(secondParent.id),
+						},
+					},
+				]),
+			).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+			expect(child.relations).toHaveLength(1);
+		});
+
 		it("round-trips owned parent and symmetric discovered-from edges", async () => {
 			const { store, client } = makeStore();
 			await store.create({ id: "parent-a1", title: "parent" });

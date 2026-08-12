@@ -75,6 +75,7 @@ export interface AdoRestClientOptions {
 	project: string;
 	host?: string;
 	env?: NodeJS.ProcessEnv;
+	platform?: NodeJS.Platform;
 	fetchImpl?: typeof fetch;
 	timeoutMs?: number;
 }
@@ -98,6 +99,7 @@ export class AdoRestClient implements AdoClient {
 	private readonly project: string;
 	private readonly host: string;
 	private readonly env: NodeJS.ProcessEnv;
+	private readonly platform: NodeJS.Platform;
 	private readonly fetchImpl: typeof fetch;
 	private readonly timeoutMs: number;
 	private authHeader?: string;
@@ -107,6 +109,7 @@ export class AdoRestClient implements AdoClient {
 		this.project = options.project;
 		this.host = options.host ?? "dev.azure.com";
 		this.env = options.env ?? process.env;
+		this.platform = options.platform ?? process.platform;
 		this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
 		this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 	}
@@ -127,7 +130,7 @@ export class AdoRestClient implements AdoClient {
 			"-o",
 			"json",
 		];
-		const windows = this.env.OS === "Windows_NT";
+		const windows = this.platform === "win32";
 		try {
 			({ stdout } = await execFileAsync(
 				windows ? this.env.ComSpec || "cmd.exe" : "az",
