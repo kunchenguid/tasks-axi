@@ -598,12 +598,12 @@ export class AdoStore implements Store {
 	// Read
 	// ---------------------------------------------------------------------
 
-	private wiql(where: string[]): string {
+	private wiql(where: string[], area = this.area): string {
 		const clauses = [
 			`[System.TeamProject] = '${sq(this.project)}'`,
 			`[System.WorkItemType] = '${sq(this.workItemType)}'`,
 			`[${this.idField}] <> ''`,
-			...(this.area ? [`[System.AreaPath] UNDER '${sq(this.area)}'`] : []),
+			...(area ? [`[System.AreaPath] UNDER '${sq(area)}'`] : []),
 			...where,
 		];
 		return `SELECT [System.Id] FROM WorkItems WHERE ${clauses.join(" AND ")}`;
@@ -791,7 +791,8 @@ export class AdoStore implements Store {
 		if (!id) {
 			validation(`Work item ${item.id} has no ${this.idField} value`);
 		}
-		const meta = parseMeta(fields[this.metaField]);
+		const rawMeta = fields[this.metaField];
+		const meta = parseMeta(rawMeta);
 		const tags = parseTags(fields[F_TAGS]);
 		const task: Task = {
 			id,
@@ -808,7 +809,10 @@ export class AdoStore implements Store {
 		if (body) task.body = body;
 		if (meta.hold) task.hold = meta.hold;
 		if (meta.priority !== undefined) task.priority = meta.priority;
-		const created = meta.created ?? dateOnly(fields[F_CREATED]);
+		const metaMissing =
+			rawMeta == null || (typeof rawMeta === "string" && rawMeta.trim() === "");
+		const created =
+			meta.created ?? (metaMissing ? dateOnly(fields[F_CREATED]) : undefined);
 		if (created) task.created = created;
 		const updated = dateOnly(fields[F_CHANGED]);
 		if (updated) task.updated = updated;
@@ -961,7 +965,8 @@ export class AdoStore implements Store {
 
 	private async requireResolvedDeps(
 		resolved: Map<string, number>,
-	): Promise<void> {
+	): Promise<Map<number, string>> {
+		const slugs = new Map<number, string>();
 		for (const [id, workItemId] of resolved) {
 			const item = await this.loadItem(id);
 			if (!item || item.id !== workItemId) {
@@ -970,7 +975,9 @@ export class AdoStore implements Store {
 					"CONFLICT",
 				);
 			}
+			slugs.set(workItemId, id);
 		}
+		return slugs;
 	}
 
 	private relationValue(
@@ -1112,10 +1119,10 @@ export class AdoStore implements Store {
 			);
 		}
 
-		let created: WorkItem;
+		let createdTask: Task;
 		let initialCreateReturned = false;
 		try {
-			created = await this.client.create(this.workItemType, ops);
+			const created = await this.client.create(this.workItemType, ops);
 			initialCreateReturned = true;
 			this.requireMutationResult(created, id);
 			requirePatchPostconditions(
@@ -1123,7 +1130,9 @@ export class AdoStore implements Store {
 				created,
 				ops,
 			);
-			await this.requireResolvedDeps(depIds);
+			const slugs = await this.requireResolvedDeps(depIds);
+			slugs.set(created.id, id);
+			createdTask = this.toTask(created, slugs);
 		} catch (error) {
 			unconfirmedCreate(
 				id,
@@ -1153,7 +1162,7 @@ export class AdoStore implements Store {
 				);
 			}
 		}
-		return this.toTask(created, await this.slugMap([created]));
+		return createdTask;
 	}
 
 	async update(id: string, patch: TaskPatch): Promise<TaskUpdateResult> {
@@ -1331,6 +1340,15 @@ export class AdoStore implements Store {
 		const item = await this.requireItem(id);
 		const task = this.toTask(item, await this.slugMap([item]));
 		if (str(item.fields[F_AREA]) === area) return task;
+		const destinationIds = await this.client.queryIds(
+			this.wiql([`[${this.idField}] = '${sq(id)}'`], area),
+		);
+		if (destinationIds.some((workItemId) => workItemId !== item.id)) {
+			throw new AxiError(
+				`Task "${id}" already exists in Azure DevOps area "${area}"`,
+				"CONFLICT",
+			);
+		}
 		if (!this.isAreaInScope(area)) {
 			let source = id;
 			let edge: Dep | undefined = task.deps[0];

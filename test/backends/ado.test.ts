@@ -112,6 +112,23 @@ describe("AdoStore", () => {
 			expect(got?.meta?.ado_id).toBe(item.id);
 		});
 
+		it("preserves an omitted created date in valid metadata", async () => {
+			const { store, client } = makeStore();
+			const task = await store.create({
+				id: "no-created-a1",
+				title: "done without created date",
+				state: "done",
+				created: null,
+			});
+
+			expect(task.created).toBeUndefined();
+			expect((await store.get("no-created-a1"))?.created).toBeUndefined();
+			const item = [...client.items.values()][0];
+			if (!item) throw new Error("expected the created work item");
+			delete item.fields[META_FIELD];
+			expect((await store.get("no-created-a1"))?.created).toBe("2026-06-22");
+		});
+
 		it("creates in-flight work in the queued state before transitioning", async () => {
 			const { store, client } = makeStore();
 			const task = await store.create({
@@ -213,6 +230,24 @@ describe("AdoStore", () => {
 					(item) => item.fields[ID_FIELD] === "verified-dependent-a1",
 				),
 			).toBe(true);
+		});
+
+		it("returns a created dependency without a second batch read", async () => {
+			const { store, client } = makeStore();
+			await store.create({ id: "batch-blocker-a1", title: "blocker" });
+			client.getMany = async () => {
+				throw adoError(403, "credential expired before a redundant batch read");
+			};
+
+			const task = await store.create({
+				id: "batch-dependent-a1",
+				title: "dependent",
+				deps: [{ type: "blocked-by", id: "batch-blocker-a1" }],
+			});
+
+			expect(task.deps).toEqual([
+				{ type: "blocked-by", id: "batch-blocker-a1" },
+			]);
 		});
 
 		it("reports a server-side create failure as unconfirmed", async () => {
@@ -1506,6 +1541,32 @@ describe("AdoStore", () => {
 			expect(item.fields["System.AreaPath"]).toBe(
 				"Internal\\Firstmate\\scribe",
 			);
+		});
+
+		it("refuses to move onto an existing destination slug", async () => {
+			const { store, client } = makeStore();
+			await store.create({ id: "move-duplicate-a1", title: "source" });
+			const source = [...client.items.values()][0];
+			if (!source) throw new Error("expected the source work item");
+			const duplicate = structuredClone(source);
+			duplicate.id = 99;
+			duplicate.fields["System.AreaPath"] = "Internal\\Other";
+			client.items.set(duplicate.id, duplicate);
+
+			await expect(
+				store.moveTo("move-duplicate-a1", "Internal\\Other"),
+			).rejects.toMatchObject({
+				code: "CONFLICT",
+				message: expect.stringContaining(
+					'Task "move-duplicate-a1" already exists in Azure DevOps area "Internal\\Other"',
+				),
+			});
+			expect(source.fields["System.AreaPath"]).toBe(
+				"Internal\\Firstmate\\main",
+			);
+			expect(
+				client.calls.filter((call) => call.kind === "update"),
+			).toHaveLength(0);
 		});
 
 		it("rejects a move response with a changed work item type", async () => {
