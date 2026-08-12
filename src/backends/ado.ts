@@ -1411,6 +1411,8 @@ export class AdoStore implements Store {
 			);
 		}
 		if (!this.isAreaInScope(area)) {
+			// The edge check and Area Path patch are separate ADO operations, so a
+			// concurrent relation can still split the graph; moveTo is not CLI-reachable.
 			const { items } = await this.list({});
 			const current = items.find((candidate) => candidate.id === id);
 			if (!current) {
