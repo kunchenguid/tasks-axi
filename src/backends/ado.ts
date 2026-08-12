@@ -1452,12 +1452,43 @@ export class AdoStore implements Store {
 			checked,
 			resolved.get(checked.id)!,
 		);
-		const updated = await this.applyPatch(item, [
-			add("/relations/-", relation),
-		]);
+		if (item.rev === undefined) {
+			throw new AxiError(
+				`Work item ${item.id} has no revision; refusing an unguarded update`,
+				"CONFLICT",
+			);
+		}
+		const expectedId = this.taskId(item);
+		if (!expectedId) {
+			validation(`Work item ${item.id} has no ${this.idField} value`);
+		}
+		const ops = [add("/relations/-", relation)];
+		let updated: WorkItem | undefined;
 		try {
+			updated = await this.client.update(item.id, [
+				{ op: "test", path: "/rev", value: item.rev },
+				...ops,
+			]);
+			this.requireMutationResult(updated, expectedId);
+			requirePatchPostconditions(item, updated, ops);
 			await this.requireResolvedDeps(resolved);
 		} catch (verificationError) {
+			if (!updated) {
+				if (isDefinitiveAdoRejection(verificationError)) {
+					throw verificationError;
+				}
+				const verificationMessage =
+					verificationError instanceof Error
+						? verificationError.message
+						: String(verificationError);
+				throw new AxiError(
+					`Task "${id}" dependency update has an unconfirmed outcome: ${verificationMessage}`,
+					"CONFLICT",
+					[
+						`Inspect task "${id}" in Azure DevOps and remove the appended ${checked.type} relation before retrying`,
+					],
+				);
+			}
 			const expectedRelation = normalizedRelations([relation])[0];
 			const relationIndex = (updated.relations ?? []).findIndex(
 				(candidate) => normalizedRelations([candidate])[0] === expectedRelation,

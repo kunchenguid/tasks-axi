@@ -679,6 +679,56 @@ describe("AdoStore", () => {
 			).rejects.toMatchObject({ code: "CONFLICT" });
 		});
 
+		it("reports an unconfirmed dependency outcome when the append response is lost", async () => {
+			const { store, client } = makeStore();
+			await store.create({ id: "lost-blocker-a1", title: "blocker" });
+			await store.create({ id: "lost-dependent-a1", title: "dependent" });
+			const dependent = [...client.items.values()].find(
+				(item) => item.fields[ID_FIELD] === "lost-dependent-a1",
+			);
+			if (!dependent) throw new Error("expected the dependent work item");
+			const update = client.update.bind(client);
+			client.update = async (id, patch) => {
+				await update(id, patch);
+				throw new Error("append response lost");
+			};
+
+			await expect(
+				store.addDep("lost-dependent-a1", {
+					type: "blocked-by",
+					id: "lost-blocker-a1",
+				}),
+			).rejects.toMatchObject({
+				code: "CONFLICT",
+				message: expect.stringContaining(
+					'Task "lost-dependent-a1" dependency update has an unconfirmed outcome',
+				),
+				suggestions: [
+					'Inspect task "lost-dependent-a1" in Azure DevOps and remove the appended blocked-by relation before retrying',
+				],
+			});
+			expect(dependent.relations).toHaveLength(1);
+		});
+
+		it("propagates a definitive dependency append rejection", async () => {
+			const { store, client } = makeStore();
+			await store.create({ id: "rejected-blocker-a1", title: "blocker" });
+			await store.create({ id: "rejected-dependent-a1", title: "dependent" });
+			client.update = async () => {
+				throw adoError(412, "work item revision mismatch");
+			};
+
+			await expect(
+				store.addDep("rejected-dependent-a1", {
+					type: "blocked-by",
+					id: "rejected-blocker-a1",
+				}),
+			).rejects.toMatchObject({
+				code: "CONFLICT",
+				message: "work item revision mismatch",
+			});
+		});
+
 		it("rolls back a dependency when its target changes identity", async () => {
 			const { store, client } = makeStore();
 			await store.create({ id: "raced-blocker-a1", title: "blocker" });
