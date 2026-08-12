@@ -807,7 +807,7 @@ describe("AdoStore", () => {
 			expect(dependent.relations).toHaveLength(1);
 		});
 
-		it("reports an unconfirmed create when a relation target leaves scope", async () => {
+		it("rolls back created dependencies when a relation target leaves scope", async () => {
 			const { store, client } = makeStore();
 			await store.create({ id: "raced-create-blocker-a1", title: "blocker" });
 			const blocker = [...client.items.values()].find(
@@ -829,18 +829,62 @@ describe("AdoStore", () => {
 				}),
 			).rejects.toMatchObject({
 				code: "CONFLICT",
-				message: expect.stringMatching(
-					/^Task "raced-create-dependent-a1" post-create verification has an unconfirmed outcome.*; its existence and state could not be confirmed$/,
+				message: expect.stringContaining(
+					'Task "raced-create-dependent-a1" post-create verification has an unconfirmed outcome',
+				),
+			});
+			const dependent = [...client.items.values()].find(
+				(item) => item.fields[ID_FIELD] === "raced-create-dependent-a1",
+			);
+			expect(dependent?.relations).toEqual([]);
+			expect(blocker.relations).toEqual([]);
+			expect(
+				client.calls
+					.filter((call) => call.kind === "update" && call.id === dependent?.id)
+					.at(-1)?.patch,
+			).toEqual([
+				{ op: "test", path: "/rev", value: 1 },
+				{ op: "remove", path: "/relations/0" },
+			]);
+		});
+
+		it("requires direct ADO inspection when created dependency rollback is unconfirmed", async () => {
+			const { store, client } = makeStore();
+			await store.create({
+				id: "uncertain-create-blocker-a1",
+				title: "blocker",
+			});
+			const blocker = [...client.items.values()].find(
+				(item) => item.fields[ID_FIELD] === "uncertain-create-blocker-a1",
+			);
+			if (!blocker) throw new Error("expected the blocker work item");
+			const create = client.create.bind(client);
+			client.create = async (type, patch) => {
+				const created = await create(type, patch);
+				blocker.fields["System.AreaPath"] = "Internal\\Other";
+				return created;
+			};
+			client.update = async () => {
+				throw new Error("rollback response lost");
+			};
+
+			await expect(
+				store.create({
+					id: "uncertain-create-dependent-a1",
+					title: "dependent",
+					deps: [{ type: "blocked-by", id: "uncertain-create-blocker-a1" }],
+				}),
+			).rejects.toMatchObject({
+				code: "CONFLICT",
+				message: expect.stringContaining(
+					"dependency rollback could not be confirmed",
 				),
 				suggestions: [
-					"Run `tasks-axi show raced-create-dependent-a1` before retrying creation",
+					expect.stringMatching(
+						/^Inspect Azure DevOps work item \d+ directly and remove the appended dependency relations before retrying$/,
+					),
 				],
 			});
-			expect(
-				[...client.items.values()].some(
-					(item) => item.fields[ID_FIELD] === "raced-create-dependent-a1",
-				),
-			).toBe(true);
 		});
 
 		it("returns null for an unknown id", async () => {
@@ -1684,6 +1728,51 @@ describe("AdoStore", () => {
 			);
 			expect(
 				client.calls.filter((call) => call.kind === "update"),
+			).toHaveLength(0);
+		});
+
+		it("rechecks relations immediately before moving outside the configured area", async () => {
+			const { store, client } = makeStore();
+			await store.create({ id: "late-move-blocker-a1", title: "blocker" });
+			await store.create({ id: "late-move-dependent-a1", title: "dependent" });
+			const blocker = [...client.items.values()].find(
+				(item) => item.fields[ID_FIELD] === "late-move-blocker-a1",
+			);
+			const dependent = [...client.items.values()].find(
+				(item) => item.fields[ID_FIELD] === "late-move-dependent-a1",
+			);
+			if (!blocker || !dependent) throw new Error("expected both work items");
+			const queryIds = client.queryIds.bind(client);
+			let queries = 0;
+			client.queryIds = async (wiql) => {
+				queries += 1;
+				const ids = await queryIds(wiql);
+				if (queries === 2) {
+					await store.addDep("late-move-dependent-a1", {
+						type: "blocked-by",
+						id: "late-move-blocker-a1",
+					});
+				}
+				return ids;
+			};
+
+			await expect(
+				store.moveTo("late-move-blocker-a1", "Internal\\Other"),
+			).rejects.toMatchObject({
+				code: "VALIDATION_ERROR",
+				message: expect.stringMatching(
+					/late-move-blocker-a1.*late-move-dependent-a1|late-move-dependent-a1.*late-move-blocker-a1/,
+				),
+			});
+			expect(blocker.fields["System.AreaPath"]).toBe(
+				"Internal\\Firstmate\\main",
+			);
+			expect(
+				client.calls.filter(
+					(call) =>
+						call.kind === "update" &&
+						call.patch?.some((op) => op.path === "/fields/System.AreaPath"),
+				),
 			).toHaveLength(0);
 		});
 

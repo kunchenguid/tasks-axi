@@ -938,6 +938,51 @@ export class AdoStore implements Store {
 		return updated;
 	}
 
+	private async rollbackRelations(
+		item: WorkItem,
+		relations: NonNullable<WorkItem["relations"]>,
+	): Promise<void> {
+		if (item.rev === undefined) {
+			throw new AxiError(
+				`Work item ${item.id} has no revision; refusing an unguarded update`,
+				"CONFLICT",
+			);
+		}
+		const available = (item.relations ?? []).map((relation, index) => ({
+			index,
+			key: normalizedRelations([relation])[0],
+		}));
+		const used = new Set<number>();
+		const indexes = relations.map((relation) => {
+			const key = normalizedRelations([relation])[0];
+			const match = available.find(
+				(candidate) => candidate.key === key && !used.has(candidate.index),
+			);
+			if (!match) {
+				throw new AxiError(
+					`Work item ${item.id} did not return an appended relation`,
+					"CONFLICT",
+				);
+			}
+			used.add(match.index);
+			return match.index;
+		});
+		const ops: JsonPatchOp[] = indexes
+			.sort((left, right) => right - left)
+			.map((index) => ({ op: "remove", path: `/relations/${index}` }));
+		const rolledBack = await this.client.update(item.id, [
+			{ op: "test", path: "/rev", value: item.rev },
+			...ops,
+		]);
+		if (rolledBack.id !== item.id) {
+			throw new AxiError(
+				`Azure DevOps returned work item ${rolledBack.id}, expected ${item.id}`,
+				"CONFLICT",
+			);
+		}
+		requirePatchPostconditions(item, rolledBack, ops);
+	}
+
 	/** Resolve dependency slugs to work item ids, failing on a missing target. */
 	private async resolveDeps(deps: Dep[]): Promise<Map<string, number>> {
 		const resolved = new Map<string, number>();
@@ -1111,16 +1156,18 @@ export class AdoStore implements Store {
 				),
 			);
 		}
-		for (const d of deps) {
-			ops.push(
-				add("/relations/-", this.relationValue(id, d, depIds.get(d.id)!)),
-			);
+		const depRelations = deps.map((dep) =>
+			this.relationValue(id, dep, depIds.get(dep.id)!),
+		);
+		for (const relation of depRelations) {
+			ops.push(add("/relations/-", relation));
 		}
 
 		let createdTask: Task;
+		let created: WorkItem | undefined;
 		let initialCreateReturned = false;
 		try {
-			const created = await this.client.create(this.workItemType, ops);
+			created = await this.client.create(this.workItemType, ops);
 			initialCreateReturned = true;
 			this.requireMutationResult(created, id);
 			requirePatchPostconditions(
@@ -1132,6 +1179,25 @@ export class AdoStore implements Store {
 			slugs.set(created.id, id);
 			createdTask = this.toTask(created, slugs);
 		} catch (error) {
+			if (created && depRelations.length > 0) {
+				try {
+					await this.rollbackRelations(created, depRelations);
+				} catch (rollbackError) {
+					const verificationMessage =
+						error instanceof Error ? error.message : String(error);
+					const rollbackMessage =
+						rollbackError instanceof Error
+							? rollbackError.message
+							: String(rollbackError);
+					throw new AxiError(
+						`Task "${id}" post-create verification has an unconfirmed outcome: ${verificationMessage}; dependency rollback could not be confirmed: ${rollbackMessage}`,
+						"CONFLICT",
+						[
+							`Inspect Azure DevOps work item ${created.id} directly and remove the appended dependency relations before retrying`,
+						],
+					);
+				}
+			}
 			unconfirmedCreate(
 				id,
 				initialCreateReturned ? "post-create verification" : "creation",
@@ -1345,10 +1411,17 @@ export class AdoStore implements Store {
 			);
 		}
 		if (!this.isAreaInScope(area)) {
+			const { items } = await this.list({});
+			const current = items.find((candidate) => candidate.id === id);
+			if (!current) {
+				throw new AxiError(
+					`Task "${id}" left the configured Azure DevOps area before it could be moved`,
+					"CONFLICT",
+				);
+			}
 			let source = id;
-			let edge: Dep | undefined = task.deps[0];
+			let edge: Dep | undefined = current.deps[0];
 			if (!edge) {
-				const { items } = await this.list({});
 				for (const candidate of items) {
 					edge = candidate.deps.find((dep) => dep.id === id);
 					if (edge) {
@@ -1489,19 +1562,8 @@ export class AdoStore implements Store {
 					],
 				);
 			}
-			const expectedRelation = normalizedRelations([relation])[0];
-			const relationIndex = (updated.relations ?? []).findIndex(
-				(candidate) => normalizedRelations([candidate])[0] === expectedRelation,
-			);
 			try {
-				if (relationIndex < 0) {
-					throw new Error("the appended relation was not identifiable", {
-						cause: verificationError,
-					});
-				}
-				await this.applyPatch(updated, [
-					{ op: "remove", path: `/relations/${relationIndex}` },
-				]);
+				await this.rollbackRelations(updated, [relation]);
 			} catch (rollbackError) {
 				const verificationMessage =
 					verificationError instanceof Error

@@ -299,7 +299,7 @@ The default state map writes the Azure DevOps Agile-process Task states `New`, `
 Adds targeting In flight or Done create the work item in the queued state and then apply the ordinary optimistic transition; if the transition reports an error, its outcome is unconfirmed, so retry `start` or `done` idempotently. A requested close date remains pending until a successful `done` transition consumes it. If an item is reopened and completed again entirely in ADO between tasks-axi reads, tasks-axi continues to report its previously recorded close date.
 The three tasks-axi states map 1:1 onto `System.State`, dependencies are work item links, and the public-followup obligation lives in its own field with the same canonical payload the markdown backend writes.
 Parent and discovered-from links are imported only when marked as tasks-axi-owned; ordinary native ADO hierarchy links are ignored.
-`AdoStore.moveTo(id, areaPath)` implements cross-queue moves as Area Path changes, but the CLI `mv` verb is still markdown/path-shaped; wiring it to area paths is a follow-up.
+`AdoStore.moveTo(id, areaPath)` implements cross-queue moves as Area Path changes, but refuses to move connected tasks outside the configured area; wiring safe area-path moves into the still markdown/path-shaped CLI `mv` verb is a follow-up.
 The ADO backend has no `prune`, `render`, archive-body, or CLI move support. `rm` checks active dependents from a best-effort snapshot, but ADO has no cross-item transaction or DELETE revision precondition, so a concurrent dependency can race that check; removal is unconditional but recoverable from the recycle bin.
 
 ## Development
