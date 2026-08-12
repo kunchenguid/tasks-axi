@@ -192,7 +192,7 @@ describe("AdoStore", () => {
 					'Task "uncertain-create-a1" creation has an unconfirmed outcome',
 				),
 				suggestions: [
-					"Run `tasks-axi show uncertain-create-a1` before retrying creation",
+					'Run a project-wide Azure DevOps query for Custom.TasksAxiId = "uncertain-create-a1" before retrying creation',
 				],
 			});
 			expect([...client.items.values()]).toHaveLength(1);
@@ -1865,7 +1865,7 @@ describe("AdoStore", () => {
 					'Task "uncertain-remove-b1" removal has an unconfirmed outcome',
 				),
 				suggestions: [
-					'Inspect task "uncertain-remove-b1" in the Azure DevOps recycle bin before retrying',
+					"Inspect Azure DevOps work item 1 in both active work items and the recycle bin before retrying",
 				],
 			});
 			expect(client.items.size).toBe(0);

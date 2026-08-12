@@ -1173,16 +1173,11 @@ export class AdoStore implements Store {
 				? undefined
 				: normalizeDate(input.closed, "closed date");
 		if (requestedClose) task.closed = requestedClose;
-		let retryVerb: "start" | "done" | undefined;
-		if (state === "in_flight") retryVerb = "start";
-		if (state === "done") retryVerb = "done";
 		const retrySuggestion = (workItemId?: number): string => {
 			if (Number.isSafeInteger(workItemId)) {
 				return `Inspect Azure DevOps work item ${workItemId} directly before retrying`;
 			}
-			return retryVerb
-				? `Run \`tasks-axi show ${id}\`, then \`tasks-axi ${retryVerb} ${id}\` if needed`
-				: `Run \`tasks-axi show ${id}\` before retrying creation`;
+			return `Run a project-wide Azure DevOps query for ${this.idField} = "${id}" before retrying creation`;
 		};
 
 		const ops: JsonPatchOp[] = [
@@ -1431,7 +1426,7 @@ export class AdoStore implements Store {
 				`Task "${id}" removal has an unconfirmed outcome${reason}`,
 				"CONFLICT",
 				[
-					`Inspect task "${id}" in the Azure DevOps recycle bin before retrying`,
+					`Inspect Azure DevOps work item ${item.id} in both active work items and the recycle bin before retrying`,
 				],
 			);
 		}
