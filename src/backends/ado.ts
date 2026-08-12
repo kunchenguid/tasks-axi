@@ -118,23 +118,15 @@ function unconfirmedCreate(
 	action: string,
 	error: unknown,
 	suggestion: string,
-	passThroughDefinitive = true,
+	createRequestReturned: boolean,
 ): never {
-	const definitive = isDefinitiveAdoRejection(error);
-	if (definitive && passThroughDefinitive) throw error;
+	if (!createRequestReturned && isDefinitiveAdoRejection(error)) throw error;
 	const reason = error instanceof Error ? `: ${error.message}` : "";
-	let outcome = `has an unconfirmed outcome${reason}`;
-	if (definitive) {
-		outcome = `was rejected${reason}; the task exists in its initial queued state`;
-		if (error instanceof AxiError && error.code === "NOT_FOUND") {
-			outcome = `was rejected${reason}; whether the task still exists and its current state are unconfirmed`;
-		} else if (error instanceof AxiError && error.code === "CONFLICT") {
-			outcome = `was rejected${reason}; the task exists, but its current state is unconfirmed`;
-		}
-	}
-	throw new AxiError(`Task "${id}" ${action} ${outcome}`, "CONFLICT", [
-		suggestion,
-	]);
+	throw new AxiError(
+		`Task "${id}" ${action} has an unconfirmed outcome${reason}; its existence and state could not be confirmed`,
+		"CONFLICT",
+		[suggestion],
+	);
 }
 
 function normalizeTitle(title: string): string {
@@ -1091,6 +1083,12 @@ export class AdoStore implements Store {
 				? undefined
 				: normalizeDate(input.closed, "closed date");
 		if (requestedClose) task.closed = requestedClose;
+		let retryVerb: "start" | "done" | undefined;
+		if (state === "in_flight") retryVerb = "start";
+		if (state === "done") retryVerb = "done";
+		const retrySuggestion = retryVerb
+			? `Run \`tasks-axi show ${id}\`, then \`tasks-axi ${retryVerb} ${id}\` if needed`
+			: `Run \`tasks-axi show ${id}\` before retrying creation`;
 
 		const ops: JsonPatchOp[] = [
 			add(`/fields/${this.idField}`, id),
@@ -1136,12 +1134,10 @@ export class AdoStore implements Store {
 		} catch (error) {
 			unconfirmedCreate(
 				id,
-				initialCreateReturned
-					? "was created, but post-create verification"
-					: "creation",
+				initialCreateReturned ? "post-create verification" : "creation",
 				error,
-				`Inspect Azure DevOps for task "${id}" before retrying creation`,
-				!initialCreateReturned,
+				retrySuggestion,
+				initialCreateReturned,
 			);
 		}
 		if (state !== initialState) {
@@ -1152,13 +1148,12 @@ export class AdoStore implements Store {
 					state === "done" && requestedClose ? { date: requestedClose } : {},
 				);
 			} catch (error) {
-				const verb = state === "in_flight" ? "start" : "done";
 				unconfirmedCreate(
 					id,
-					`was created, but its transition to ${state}`,
+					`transition to ${state}`,
 					error,
-					`Run \`tasks-axi ${verb} ${id}\` to retry`,
-					false,
+					retrySuggestion,
+					true,
 				);
 			}
 		}

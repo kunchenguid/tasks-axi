@@ -167,7 +167,7 @@ describe("AdoStore", () => {
 					'Task "uncertain-create-a1" creation has an unconfirmed outcome',
 				),
 				suggestions: [
-					'Inspect Azure DevOps for task "uncertain-create-a1" before retrying creation',
+					"Run `tasks-axi show uncertain-create-a1` before retrying creation",
 				],
 			});
 			expect([...client.items.values()]).toHaveLength(1);
@@ -221,9 +221,12 @@ describe("AdoStore", () => {
 				}),
 			).rejects.toMatchObject({
 				code: "CONFLICT",
-				message: expect.stringContaining(
-					'Task "verified-dependent-a1" was created, but post-create verification was rejected',
+				message: expect.stringMatching(
+					/^Task "verified-dependent-a1" post-create verification has an unconfirmed outcome.*; its existence and state could not be confirmed$/,
 				),
+				suggestions: [
+					"Run `tasks-axi show verified-dependent-a1` before retrying creation",
+				],
 			});
 			expect(
 				[...client.items.values()].some(
@@ -289,9 +292,11 @@ describe("AdoStore", () => {
 			).rejects.toMatchObject({
 				code: "CONFLICT",
 				message: expect.stringContaining(
-					'Task "failed-start-a1" was created, but its transition to in_flight has an unconfirmed outcome',
+					'Task "failed-start-a1" transition to in_flight has an unconfirmed outcome',
 				),
-				suggestions: ["Run `tasks-axi start failed-start-a1` to retry"],
+				suggestions: [
+					"Run `tasks-axi show failed-start-a1`, then `tasks-axi start failed-start-a1` if needed",
+				],
 			});
 			expect([...client.items.values()][0]?.fields["System.State"]).toBe(
 				"Active",
@@ -313,10 +318,12 @@ describe("AdoStore", () => {
 				}),
 			).rejects.toMatchObject({
 				code: "CONFLICT",
-				message: expect.stringContaining(
-					'Task "rejected-start-a1" was created, but its transition to in_flight was rejected',
+				message: expect.stringMatching(
+					/^Task "rejected-start-a1" transition to in_flight has an unconfirmed outcome.*; its existence and state could not be confirmed$/,
 				),
-				suggestions: ["Run `tasks-axi start rejected-start-a1` to retry"],
+				suggestions: [
+					"Run `tasks-axi show rejected-start-a1`, then `tasks-axi start rejected-start-a1` if needed",
+				],
 			});
 			expect([...client.items.values()][0]?.fields["System.State"]).toBe("New");
 		});
@@ -335,8 +342,12 @@ describe("AdoStore", () => {
 				}),
 			).rejects.toMatchObject({
 				code: "CONFLICT",
-				message: expect.stringContaining("current state is unconfirmed"),
-				suggestions: ["Run `tasks-axi start conflicted-start-a1` to retry"],
+				message: expect.stringContaining(
+					"its existence and state could not be confirmed",
+				),
+				suggestions: [
+					"Run `tasks-axi show conflicted-start-a1`, then `tasks-axi start conflicted-start-a1` if needed",
+				],
 			});
 			expect(client.items.size).toBe(1);
 		});
@@ -357,9 +368,11 @@ describe("AdoStore", () => {
 			).rejects.toMatchObject({
 				code: "CONFLICT",
 				message: expect.stringContaining(
-					"whether the task still exists and its current state are unconfirmed",
+					"its existence and state could not be confirmed",
 				),
-				suggestions: ["Run `tasks-axi start missing-start-a1` to retry"],
+				suggestions: [
+					"Run `tasks-axi show missing-start-a1`, then `tasks-axi start missing-start-a1` if needed",
+				],
 			});
 			expect(client.items.size).toBe(0);
 		});
@@ -385,7 +398,9 @@ describe("AdoStore", () => {
 				}),
 			).rejects.toMatchObject({
 				code: "CONFLICT",
-				suggestions: ["Run `tasks-axi done failed-done-a1` to retry"],
+				suggestions: [
+					"Run `tasks-axi show failed-done-a1`, then `tasks-axi done failed-done-a1` if needed",
+				],
 			});
 			expect((await store.get("failed-done-a1"))?.closed).toBeUndefined();
 
@@ -714,9 +729,12 @@ describe("AdoStore", () => {
 				}),
 			).rejects.toMatchObject({
 				code: "CONFLICT",
-				message: expect.stringContaining(
-					'Task "raced-create-dependent-a1" was created, but post-create verification has an unconfirmed outcome',
+				message: expect.stringMatching(
+					/^Task "raced-create-dependent-a1" post-create verification has an unconfirmed outcome.*; its existence and state could not be confirmed$/,
 				),
+				suggestions: [
+					"Run `tasks-axi show raced-create-dependent-a1` before retrying creation",
+				],
 			});
 			expect(
 				[...client.items.values()].some(
