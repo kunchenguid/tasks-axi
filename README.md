@@ -274,7 +274,7 @@ area = 'Internal\Firstmate\main'    # optional: scope + where new work items lan
 # state_done      = "Closed, Done"
 ```
 
-Note the **single quotes** on `area`: an ADO area path contains backslashes, and the config reader takes TOML literal strings only — a `"a\\b"` escape is refused with a message rather than silently resolved to the literal backslashes.
+Note the **single quotes** on `area`: an ADO area path contains backslashes, and tasks-axi rejects doubled separators from TOML or `TASKS_AXI_ADO_AREA` rather than silently targeting the wrong area.
 
 `org` / `project` / `area` also read `TASKS_AXI_ADO_ORG` / `_PROJECT` / `_AREA`.
 Auth is a PAT from `TASKS_AXI_ADO_PAT` (or `ADO_PAT` / `AZURE_DEVOPS_EXT_PAT` / `AZURE_DEVOPS_PAT`), falling back to `az account get-access-token`.
@@ -297,10 +297,10 @@ The three custom fields (`id_field`, `meta_field`, `followup_field`) must exist 
 
 The default state map writes the Azure DevOps Agile-process Task states `New`, `Active`, and `Closed`. Scrum and Basic task workflows need explicit state mappings before the switch; a dry read cannot prove write states, so an incorrect mapping fails on the first create or transition and names the rejected state.
 Adds targeting In flight or Done create the work item in the queued state and then apply the ordinary optimistic transition; if the transition reports an error, its outcome is unconfirmed, so retry `start` or `done` idempotently. A requested close date remains pending until a successful `done` transition consumes it. If an item is reopened and completed again entirely in ADO between tasks-axi reads, tasks-axi continues to report its previously recorded close date.
-The three tasks-axi states map 1:1 onto `System.State`, dependencies are work item links, and the public-followup obligation lives in its own field with the same canonical payload the markdown backend writes.
+The three tasks-axi states map 1:1 onto `System.State`, bodies are HTML-encoded in `System.Description` and decoded on read so Boards renders their text literally, dependencies are work item links, and the public-followup obligation lives in its own field with the same canonical payload the markdown backend writes.
 Parent and discovered-from links are imported only when marked as tasks-axi-owned; ordinary native ADO hierarchy links are ignored.
 `AdoStore.moveTo(id, areaPath)` implements cross-queue moves as Area Path changes, but refuses to move connected tasks outside the configured area; wiring safe area-path moves into the still markdown/path-shaped CLI `mv` verb is a follow-up.
-The ADO backend has no `prune`, `render`, archive-body, or CLI move support. `rm` checks active dependents from a best-effort snapshot, but ADO has no cross-item transaction or DELETE revision precondition, so a concurrent dependency can race that check; removal is unconditional but recoverable from the recycle bin.
+The ADO backend has no `prune`, `render`, archive-body, or CLI move support. `rm` checks active dependents from a best-effort snapshot, but ADO has no cross-item transaction or DELETE revision precondition, so a concurrent dependency can race that check; removal is unconditional but recoverable from the recycle bin. Public-followup delivery has the same containment: blocker state is checked before the obligation's revision-guarded patch, so a concurrent blocker reopen can race delivery advancement.
 
 ## Development
 

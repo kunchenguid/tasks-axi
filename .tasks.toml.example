@@ -29,8 +29,8 @@ org = "contoso"
 project = "Internal"
 # Root area path new work items land in; also scopes every read (WIQL `UNDER`),
 # so tasks-axi never sees unrelated work items in the project.
-# Single quotes: an area path contains backslashes, and tasks-axi's config
-# reader takes literal strings only (a `"a\\b"` escape is refused, not guessed).
+# Single quotes: an area path contains backslashes, and tasks-axi refuses
+# doubled separators from TOML or the environment rather than guessing.
 area = 'Internal\Firstmate\main'
 
 # The join key and the tasks-axi residue. All three must exist as custom fields

@@ -44,7 +44,7 @@ import { normalizeTypedLinks } from "./markdown-grammar.js";
  *   id             -> `<idField>`      (join key, queried through WIQL)
  *   title          -> System.Title
  *   state          -> System.State     (1:1 through the configured state map)
- *   body           -> System.Description
+ *   body           -> System.Description (HTML-encoded plain text)
  *   kind / repo    -> System.Tags      (`kind:<v>` / `repo:<v>`, filterable in ADO)
  *   deps           -> work item links  (predecessor / parent / related)
  *   public_followup-> `<followupField>` (same canonical base64url payload as markdown)
@@ -126,6 +126,32 @@ function unconfirmedCreate(
 		`Task "${id}" ${action} has an unconfirmed outcome${reason}; its existence and state could not be confirmed`,
 		"CONFLICT",
 		[suggestion],
+	);
+}
+
+function encodeDescription(body: string): string {
+	return body
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;")
+		.replaceAll("'", "&#39;")
+		.replaceAll("\n", "<br>");
+}
+
+function decodeDescription(body: string): string {
+	return body.replace(/<br\s*\/?>/gi, "\n").replace(
+		/&(?:amp|lt|gt|quot|apos|#39|#x27);/gi,
+		(entity) =>
+			({
+				"&amp;": "&",
+				"&lt;": "<",
+				"&gt;": ">",
+				"&quot;": '"',
+				"&apos;": "'",
+				"&#39;": "'",
+				"&#x27;": "'",
+			})[entity.toLowerCase()]!,
 	);
 }
 
@@ -369,8 +395,10 @@ function normalizedField(field: string, value: unknown): unknown {
 		return typeof value === "string" ? value.toLowerCase() : value;
 	}
 	if (field === F_TAGS) return parseTags(value).sort();
-	if (field === F_DESCRIPTION && (value === undefined || value === null))
-		return "";
+	if (field === F_DESCRIPTION) {
+		const description = str(value);
+		return description === undefined ? "" : decodeDescription(description);
+	}
 	return value;
 }
 
@@ -797,7 +825,8 @@ export class AdoStore implements Store {
 		const repo = tagValue(tags, "repo");
 		if (kind) task.kind = kind;
 		if (repo) task.repo = repo;
-		const body = str(fields[F_DESCRIPTION]);
+		const rawBody = str(fields[F_DESCRIPTION]);
+		const body = rawBody === undefined ? undefined : decodeDescription(rawBody);
 		if (body) task.body = body;
 		if (meta.hold) task.hold = meta.hold;
 		if (meta.priority !== undefined) task.priority = meta.priority;
@@ -929,13 +958,25 @@ export class AdoStore implements Store {
 		if (!expectedId) {
 			validation(`Work item ${item.id} has no ${this.idField} value`);
 		}
-		const updated = await this.client.update(item.id, [
-			{ op: "test", path: "/rev", value: item.rev },
-			...ops,
-		]);
-		this.requireMutationResult(updated, expectedId, expectedArea);
-		requirePatchPostconditions(item, updated, ops);
-		return updated;
+		let responseReturned = false;
+		try {
+			const updated = await this.client.update(item.id, [
+				{ op: "test", path: "/rev", value: item.rev },
+				...ops,
+			]);
+			responseReturned = true;
+			this.requireMutationResult(updated, expectedId, expectedArea);
+			requirePatchPostconditions(item, updated, ops);
+			return updated;
+		} catch (error) {
+			if (!responseReturned && isDefinitiveAdoRejection(error)) throw error;
+			const reason = error instanceof Error ? `: ${error.message}` : "";
+			throw new AxiError(
+				`Work item ${item.id} update has an unconfirmed outcome${reason}`,
+				"CONFLICT",
+				[`Inspect task "${expectedId}" in Azure DevOps before retrying`],
+			);
+		}
 	}
 
 	private async rollbackRelations(
@@ -1145,7 +1186,8 @@ export class AdoStore implements Store {
 			),
 		];
 		if (this.area) ops.push(add(`/fields/${F_AREA}`, this.area));
-		if (task.body) ops.push(add(`/fields/${F_DESCRIPTION}`, task.body));
+		if (task.body)
+			ops.push(add(`/fields/${F_DESCRIPTION}`, encodeDescription(task.body)));
 		const tags = this.tagString(undefined, task);
 		if (tags) ops.push(add(`/fields/${F_TAGS}`, tags));
 		if (publicFollowup) {
@@ -1342,7 +1384,9 @@ export class AdoStore implements Store {
 			ops.push(add(`/fields/${F_TITLE}`, task.title));
 		}
 		if (changed.includes("body")) {
-			ops.push(add(`/fields/${F_DESCRIPTION}`, task.body ?? ""));
+			ops.push(
+				add(`/fields/${F_DESCRIPTION}`, encodeDescription(task.body ?? "")),
+			);
 		}
 		if (changed.includes("kind") || changed.includes("repo")) {
 			ops.push(add(`/fields/${F_TAGS}`, this.tagString(item, task)));
@@ -1369,7 +1413,19 @@ export class AdoStore implements Store {
 		}
 		await this.requireNoActiveDependents(id);
 		// The dependent check is a best-effort snapshot: a concurrent addDep can race ADO's unconditional DELETE, but recycle-bin removal is recoverable.
-		await this.client.remove(item.id);
+		try {
+			await this.client.remove(item.id);
+		} catch (error) {
+			if (isDefinitiveAdoRejection(error)) throw error;
+			const reason = error instanceof Error ? `: ${error.message}` : "";
+			throw new AxiError(
+				`Task "${id}" removal has an unconfirmed outcome${reason}`,
+				"CONFLICT",
+				[
+					`Inspect task "${id}" in the Azure DevOps recycle bin before retrying`,
+				],
+			);
+		}
 		return task;
 	}
 
@@ -1500,7 +1556,10 @@ export class AdoStore implements Store {
 			add(`/fields/${this.metaField}`, this.metaBlob(task)),
 		];
 		if (!already) ops.unshift(add(`/fields/${F_STATE}`, this.adoState(to)));
-		if (opts.note) ops.push(add(`/fields/${F_DESCRIPTION}`, task.body ?? ""));
+		if (opts.note)
+			ops.push(
+				add(`/fields/${F_DESCRIPTION}`, encodeDescription(task.body ?? "")),
+			);
 		const updated = await this.applyPatch(item, ops);
 		return this.toTask(updated, slugs);
 	}

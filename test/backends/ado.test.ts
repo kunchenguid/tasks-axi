@@ -112,6 +112,31 @@ describe("AdoStore", () => {
 			expect(got?.meta?.ado_id).toBe(item.id);
 		});
 
+		it("round-trips multiline plain-text bodies through System.Description", async () => {
+			const { store, client } = makeStore();
+			const body = "Use <script> & \"quotes\".\nKeep 'apostrophes' literal.";
+			const task = await store.create({
+				id: "encoded-body-a1",
+				title: "encoded body",
+				body,
+			});
+
+			expect(task.body).toBe(body);
+			const item = [...client.items.values()][0];
+			expect(item.fields["System.Description"]).toBe(
+				"Use &lt;script&gt; &amp; &quot;quotes&quot;.<br>Keep &#39;apostrophes&#39; literal.",
+			);
+			expect((await store.get("encoded-body-a1"))?.body).toBe(body);
+
+			const updated = await store.update("encoded-body-a1", {
+				body: `${body}\nUpdated > before`,
+			});
+			expect(updated.task.body).toBe(`${body}\nUpdated > before`);
+			expect(item.fields["System.Description"]).toBe(
+				"Use &lt;script&gt; &amp; &quot;quotes&quot;.<br>Keep &#39;apostrophes&#39; literal.<br>Updated &gt; before",
+			);
+		});
+
 		it("preserves an omitted created date in valid metadata", async () => {
 			const { store, client } = makeStore();
 			const task = await store.create({
@@ -1169,6 +1194,46 @@ describe("AdoStore", () => {
 			});
 		});
 
+		it("reports an unconfirmed outcome when an update response is lost", async () => {
+			const { store, client } = makeStore();
+			await store.create({ id: "uncertain-update-a1", title: "before" });
+			const update = client.update.bind(client);
+			client.update = async (id, patch) => {
+				await update(id, patch);
+				throw new Error("update response lost");
+			};
+
+			await expect(
+				store.update("uncertain-update-a1", { title: "after" }),
+			).rejects.toMatchObject({
+				code: "CONFLICT",
+				message: expect.stringContaining(
+					"Work item 1 update has an unconfirmed outcome",
+				),
+				suggestions: [
+					'Inspect task "uncertain-update-a1" in Azure DevOps before retrying',
+				],
+			});
+			expect([...client.items.values()][0]?.fields["System.Title"]).toBe(
+				"after",
+			);
+		});
+
+		it("preserves a definitive update rejection", async () => {
+			const { store, client } = makeStore();
+			await store.create({ id: "rejected-update-a1", title: "before" });
+			client.update = async () => {
+				throw adoError(412, "work item revision mismatch");
+			};
+
+			await expect(
+				store.update("rejected-update-a1", { title: "after" }),
+			).rejects.toMatchObject({
+				code: "CONFLICT",
+				message: "work item revision mismatch",
+			});
+		});
+
 		it("refuses an update when ADO omits the revision", async () => {
 			const { store, client } = makeStore();
 			await store.create({ id: "rev-missing-a1", title: "r" });
@@ -1687,6 +1752,27 @@ describe("AdoStore", () => {
 			expect(removed.id).toBe("gone-b1");
 			expect(client.items.size).toBe(0);
 			expect(await store.get("gone-b1")).toBeNull();
+		});
+
+		it("reports an unconfirmed outcome when a removal response is lost", async () => {
+			const { store, client } = makeStore();
+			await store.create({ id: "uncertain-remove-b1", title: "gone" });
+			const remove = client.remove.bind(client);
+			client.remove = async (id) => {
+				await remove(id);
+				throw new Error("remove response lost");
+			};
+
+			await expect(store.remove("uncertain-remove-b1")).rejects.toMatchObject({
+				code: "CONFLICT",
+				message: expect.stringContaining(
+					'Task "uncertain-remove-b1" removal has an unconfirmed outcome',
+				),
+				suggestions: [
+					'Inspect task "uncertain-remove-b1" in the Azure DevOps recycle bin before retrying',
+				],
+			});
+			expect(client.items.size).toBe(0);
 		});
 	});
 
