@@ -12,8 +12,8 @@ import { AxiError } from "./errors.js";
  *   ~/.tasks-axi/config.toml > defaults (markdown, first existing
  *   backlog.md/data/backlog.md, otherwise backlog.md).
  *
- * P1 ships only the markdown backend; the Store seam keeps sqlite/remote
- * additions invisible to the CLI layer.
+ * Markdown remains the default; the ADO backend and future additions stay
+ * invisible to the CLI layer behind the Store seam.
  */
 
 export interface ResolvedConfig {

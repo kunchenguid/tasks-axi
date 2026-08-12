@@ -9,17 +9,17 @@
 
 Task and backlog manager for agents — designed with [AXI](https://github.com/kunchenguid/axi) (Agent eXperience Interface).
 
-tasks-axi makes a tiny structured change to a human-readable backlog at near-zero output-token cost.
-It edits a hand-editable `backlog.md` in place with a byte-exact round-trip, so the markdown stays the source of truth while long task bodies never bloat a `list`.
+With its default Markdown backend, tasks-axi makes a tiny structured change to a human-readable backlog at near-zero output-token cost.
+It edits a hand-editable `backlog.md` in place with a byte-exact round-trip, so the markdown stays the source of truth while long task bodies never bloat a `list`; the optional Azure DevOps backend keeps the same CLI over ADO work items.
 It borrows the dependency-graph and ready-query model from [beads](https://github.com/gastownhall/beads), adds structured dispatch holds, and keeps the house style from its `*-axi` siblings - token-efficient TOON output, contextual next-step suggestions, idempotent mutations, and structured errors.
 
 ## Why
 
-Every backlog mutation today regenerates markdown through the model, which is expensive output tokens and risks dropped, duplicated, or reordered items.
+With a Markdown backlog, regenerating every mutation through the model is expensive in output tokens and risks dropped, duplicated, or reordered items.
 tasks-axi reduces that to the length of one short command plus a compact confirmation read back as cheap input.
 The long status line that the model used to rewrite on every status change is now a `body`.
 Note writes are inspect-then-update: read the current body with `show <id> --full`, then replace it deliberately with `update --body` or `update --body-file`.
-Pass `--archive-body` with a body replacement when the superseded body should be moved to cold history in `note-archive.md`.
+On the Markdown backend, pass `--archive-body` with a body replacement when the superseded body should be moved to cold history in `note-archive.md`.
 
 ## Quick Start
 
@@ -112,7 +112,7 @@ tasks-axi update nm-release-validation --title "clearer title"
 # read the full notes on demand (truncated by default)
 tasks-axi show homemux-h7 --full
 
-# maintenance
+# Markdown-only maintenance
 tasks-axi prune --keep 10        # archives the surplus, never deletes
 tasks-axi render                 # normalize the markdown in place
 tasks-axi mv hibit-cert-cleanup --to ../homemux/data/backlog.md
@@ -123,7 +123,7 @@ tasks-axi mv blocker-b1 dependent-d2 --to ../homemux/data/backlog.md
 Output is [TOON](https://toonformat.dev)-encoded and token-efficient.
 The long task body is truncated by default — the whole point is that `list` stays cheap; use `--full` only when you need the complete notes.
 `update --body` and `update --body-file` replace the body wholesale, so agents should inspect the current body first and write back the curated current state rather than appending a journal entry.
-`--archive-body` preserves the replaced body in `note-archive.md` using the same dated markdown archive block style as done pruning.
+On the Markdown backend, `--archive-body` preserves the replaced body in `note-archive.md` using the same dated markdown archive block style as done pruning.
 Every write leads with a terse `ok:` line confirming the write result, including the resulting task state when the command changes one (e.g. `ok: start lavish-share -> In flight`, `ok: done grok-harness-g7 -> Done (pr <url>)`, `ok: render -> normalized 3`), followed by state-aware next-step hints that never suggest an action the command just performed.
 Mutations are idempotent and report what changed (`already: true` on a no-op), so re-running one is safe.
 Running `done` again on an already Done task can still backfill a new `--pr`, `--report`, or `--note` without changing the original close date.
@@ -181,7 +181,7 @@ Existing same-backlog `blocked-by` edges remain delivery gates for `ready` and `
 Use `tasks-axi public-followup ready` when handling public delivery.
 Generic `start`, `done`, `reopen`, active removal, content or kind changes, and dispatch holds cannot bypass the public-followup state machine.
 Only `record-delivery` with a validated terminal `posted` receipt or `waive --approved-by captain` can atomically move an obligation to Done.
-Normal Done pruning then preserves the complete typed receipt or waiver in `done-archive.md`.
+On the Markdown backend, normal Done pruning then preserves the complete typed receipt or waiver in `done-archive.md`.
 
 The Markdown backend stores version 1 typed data in a reserved base64url canonical-JSON HTML comment immediately below the task bullet.
 The bounded public-safe title and `(kind: public-followup)` remain visible, but callers other than tasks-axi must not parse or rewrite the reserved comment.
@@ -229,8 +229,8 @@ Single-task `mv` has the same protection; use multi-task `mv` to move its active
 
 ## Configuration
 
-Backend and path are resolved in this order: `--backend` / `--file` flags passed after the command, then `TASKS_AXI_BACKEND` / `TASKS_AXI_FILE` env, then a project `.tasks.toml`, then `~/.tasks-axi/config.toml`, then the defaults.
-Without an explicit path, tasks-axi uses `backlog.md` when present, then `data/backlog.md` when present, and otherwise targets `backlog.md` for future writes.
+Backend selection and the Markdown path are resolved in this order: `--backend` / `--file` flags passed after the command, then `TASKS_AXI_BACKEND` / `TASKS_AXI_FILE` env, then a project `.tasks.toml`, then `~/.tasks-axi/config.toml`, then the defaults.
+Without an explicit Markdown path, tasks-axi uses `backlog.md` when present, then `data/backlog.md` when present, and otherwise targets `backlog.md` for future writes.
 
 ```toml
 # .tasks.toml in the project root
