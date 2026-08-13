@@ -11,6 +11,7 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 - `src/context.ts` — `resolveTasksContext` builds the backend `Store` + `ResolvedConfig`; every command receives this `TasksContext`.
 - `src/store.ts` - the `Store` interface and `Capabilities`. Core contract: `create/get/update/remove/list/transition/addDep/removeDep/updatePublicFollowup`. `prune`/`render` are optional and capability-gated.
 - `src/model.ts` — the `Task` data model (report §5).
+- `src/pr-url.ts` — `isPrUrl`, the one canonical PR-URL seam (GitHub `/pull/<n>` on github.com, Forgejo `/pulls/<n>` on any lowercase DNS host) shared by prose link derivation, `--pr` validation, and public-followup `pr_url`; near-misses derive as `doc` links, never `pr`.
 - `src/derive.ts` - worker `blocked` / `ready` / active `held` and public delivery readiness are derived in the CLI from `list` + the dep graph + hold date gates, never Store methods, so every backend gets them for free.
 - `src/backends/markdown*.ts` — the only P1 backend.
 - `src/public-followup.ts` - authoritative versioned schema, strict privacy-safe validation, canonical encoding, immutable-field checks, relation/event readiness, and terminal-state invariants for `kind=public-followup`; `src/commands/public-followup.ts` owns its dedicated CLI state machine.
@@ -65,6 +66,13 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 - **`--json` is the machine-readable success signal.** Every mutation accepts `--json`, which replaces the TOON output with a single pretty-printed object `{ ok: true, action, [already], task|id|operation fields... }` (see `renderMutation` / `taskToJson`).
   This lets an agent confirm a write deterministically without a follow-up read.
   Errors still use structured-error output + non-zero exit (not JSON), so `exit 0` + `ok:true` = success.
+
+## Entry point & the `--version` fast path
+
+`bin/tasks-axi.ts` answers a bare `-v`/`-V`/`--version` through `axi-sdk-js/fast-path` and only then `await import`s `src/cli.js`, so the heavy command graph never loads for a version query (~31ms -> ~20ms, the node floor).
+That makes `src/version.ts` a **leaf**: it may import node builtins and nothing else - importing anything from the command graph silently destroys the speedup. `cli.ts` re-imports `VERSION` from it, so there is still one source of the version string.
+Any argv shape other than exactly one version flag falls through to `runAxiCli`, which remains the sole owner of the general case (e.g. `list --version` is still an unknown-flag error).
+`test/bin/version-fast-path.test.ts` guards this deterministically with an ESM loader module trace (`test/fixtures/module-trace-*.mjs`) plus a negative control; do **not** add a wall-clock timing assertion to CI - it is flaky under runner contention.
 
 ## Build / test / ship
 

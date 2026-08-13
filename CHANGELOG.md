@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.5](https://github.com/kunchenguid/tasks-axi/compare/tasks-axi-v0.2.4...tasks-axi-v0.2.5) (2026-08-07)
+
+
+### Bug Fixes
+
+* **cli:** speed up standalone version queries ([#34](https://github.com/kunchenguid/tasks-axi/issues/34)) ([92911b2](https://github.com/kunchenguid/tasks-axi/commit/92911b2e0cc4ddfd6bafee977cca369bab7e165c))
+
 ## [0.2.4](https://github.com/kunchenguid/tasks-axi/compare/tasks-axi-v0.2.3...tasks-axi-v0.2.4) (2026-07-23)
 
 

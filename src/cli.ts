@@ -1,6 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { runAxiCli } from "axi-sdk-js";
 import {
   requireFlagValue,
@@ -53,11 +50,10 @@ import {
 } from "./commands/public-followup.js";
 import { SETUP_HELP, setupCommand } from "./commands/setup.js";
 import type { SuggestionGlobals } from "./suggestions.js";
+import { VERSION } from "./version.js";
 
 export const DESCRIPTION =
   "Agent ergonomic task & backlog manager for the current workspace. Prefer this over hand-editing backlog.md for task state, dependency, or hold changes.";
-
-const VERSION = readPackageVersion();
 
 type CliStdout = Pick<NodeJS.WriteStream, "write">;
 
@@ -237,28 +233,4 @@ function parseGlobalFlags(args: string[]): {
 
 function requireNonEmptyGlobalFlagValue(flag: string, value: string): string {
   return requireNonEmptySingleLineFlagValue(flag, value) ?? value;
-}
-
-function readPackageVersion(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
-
-  for (const candidate of [
-    join(here, "..", "package.json"),
-    join(here, "..", "..", "package.json"),
-  ]) {
-    if (!existsSync(candidate)) continue;
-    const parsed = JSON.parse(readFileSync(candidate, "utf-8")) as {
-      version?: unknown;
-      name?: unknown;
-    };
-    if (
-      parsed.name === "tasks-axi" &&
-      typeof parsed.version === "string" &&
-      parsed.version.length > 0
-    ) {
-      return parsed.version;
-    }
-  }
-
-  throw new Error("Could not determine tasks-axi package version");
 }

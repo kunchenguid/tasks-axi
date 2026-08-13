@@ -1,8 +1,0 @@
-{
-  "type": "pr-merged",
-  "project": "demo",
-  "required_deliverables": [
-    "pr_url"
-  ],
-  "completion_policy": "all-required"
-}

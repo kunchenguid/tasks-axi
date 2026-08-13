@@ -326,6 +326,42 @@ describe("markdown grammar", () => {
       });
       expect(links).toContainEqual({ kind: "report", url: "data/x/report.md" });
     });
+
+    it("derives a Forgejo pulls URL as the single pr link", () => {
+      const links = deriveLinks(
+        "merged https://forgejo.samesies.gay/eve/orchalycious/pulls/39",
+      );
+      expect(links).toEqual([
+        {
+          kind: "pr",
+          url: "https://forgejo.samesies.gay/eve/orchalycious/pulls/39",
+        },
+      ]);
+    });
+
+    it("keeps non-canonical PR-ish URLs as doc links, never pr", () => {
+      for (const url of [
+        "https://forgejo.samesies.gay/eve/orchalycious/pull/39",
+        "https://github.com/o/r/pulls/42",
+        "https://forgejo.samesies.gay/o/r/pulls/39?tab=files",
+      ]) {
+        expect(deriveLinks(`see ${url}`)).toEqual([{ kind: "doc", url }]);
+      }
+    });
+
+    it("round-trips a done bullet with a Forgejo pull URL byte-exactly", () => {
+      const src =
+        "## Queued\n\n## Done\n- [x] fj-done-q1 - merged https://forgejo.samesies.gay/eve/orchalycious/pulls/39 (merged 2026-08-07)\n";
+      const doc = parseBacklog(src);
+      const task = tasksOf(doc)[0];
+      expect(task.links).toEqual([
+        {
+          kind: "pr",
+          url: "https://forgejo.samesies.gay/eve/orchalycious/pulls/39",
+        },
+      ]);
+      expect(renderBacklog(doc)).toBe(src);
+    });
   });
 
   describe("canonical render", () => {

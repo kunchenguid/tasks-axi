@@ -125,6 +125,50 @@ describe("state commands", () => {
       }
     });
 
+    it("closes with a Forgejo pulls URL and preserves it byte-for-byte", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await doneCommand(
+          [
+            "cert-cleanup",
+            "--pr",
+            "https://forgejo.samesies.gay/eve/orchalycious/pulls/39",
+            "--no-prune",
+          ],
+          b.ctx,
+        );
+        expect(out).toContain(
+          "done cert-cleanup -> Done (pr https://forgejo.samesies.gay/eve/orchalycious/pulls/39)",
+        );
+        const read = b.read();
+        expect(read).toContain(
+          "https://forgejo.samesies.gay/eve/orchalycious/pulls/39",
+        );
+        expect(read).toContain("(merged 2026-07-01)");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects non-canonical pull URLs without mutating", async () => {
+      const b = makeBacklog();
+      try {
+        for (const url of [
+          "https://forgejo.samesies.gay/eve/orchalycious/pull/39",
+          "https://github.com/o/r/pulls/9",
+          "https://github.com/o/r/pull/9?w=1",
+          " https://github.com/o/r/pull/9 ",
+        ]) {
+          await expect(
+            doneCommand(["cert-cleanup", "--pr", url, "--no-prune"], b.ctx),
+          ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        }
+        expect(b.read()).toContain("- [ ] cert-cleanup");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("emits a machine-readable task and pruned count with --json", async () => {
       const b = makeBacklog();
       try {

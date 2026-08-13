@@ -1,4 +1,5 @@
 import { AxiError } from "./errors.js";
+import { isPrUrl } from "./pr-url.js";
 
 export const PUBLIC_FOLLOWUP_KIND = "public-followup";
 export const PUBLIC_FOLLOWUP_SCHEMA_VERSION = 1 as const;
@@ -209,7 +210,6 @@ const SHA256_RE = /^[a-f0-9]{64}$/;
 const DELIVERABLE_NAME_RE = /^[a-z][a-z0-9_]{0,63}$/;
 const SAFE_CODE_RE = /^[a-z][a-z0-9._-]{0,63}$/;
 const PROJECT_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$/;
-const PR_URL_RE = /^https:\/\/[^?#\s]+\/pull\/\d+$/;
 const REPORT_PATH_RE = /^data\/[A-Za-z0-9][A-Za-z0-9._-]*\/report\.md$/;
 const COMMIT_SHA_RE = /^[a-f0-9]{7,64}$/;
 const MAX_ENCODED_METADATA_LENGTH = 1_000_000;
@@ -1367,15 +1367,7 @@ function deliverablesAreSafeForExpected(
     return false;
   }
   for (const [name, value] of Object.entries(deliverables)) {
-    if (name === "pr_url") {
-      if (!PR_URL_RE.test(value)) return false;
-      try {
-        const url = new URL(value);
-        if (url.username !== "" || url.password !== "") return false;
-      } catch {
-        return false;
-      }
-    }
+    if (name === "pr_url" && !isPrUrl(value)) return false;
     if (name === "report_path" && !REPORT_PATH_RE.test(value)) return false;
     if (name === "commit_sha" && !COMMIT_SHA_RE.test(value)) return false;
     if (name === "error_code" && !SAFE_CODE_RE.test(value)) return false;

@@ -1,6 +1,7 @@
 import { AxiError } from "../errors.js";
 import type { Dep, Hold, HoldKind, State, Task, TaskLink } from "../model.js";
 import { HOLD_KINDS } from "../model.js";
+import { isPrUrl } from "../pr-url.js";
 import {
   PUBLIC_FOLLOWUP_KIND,
   assertPublicFollowupTaskState,
@@ -129,7 +130,6 @@ const TAIL_HOLD_KIND = new RegExp(
 );
 const TAIL_HOLD_UNTIL = new RegExp(`\\s*\\(hold-until:\\s*(${DATE})\\)\\s*$`);
 
-const PR_LINK = /https?:\/\/\S+?\/pull\/\d+/g;
 const REPORT_LINK = /\bdata\/\S+?\/report\.md\b/g;
 const GENERIC_URL = /https?:\/\/\S+/g;
 
@@ -166,10 +166,12 @@ export function deriveLinks(text: string): TaskLink[] {
     seen.add(url);
     links.push({ kind, url });
   };
-  for (const m of text.matchAll(PR_LINK)) add("pr", m[0]);
+  for (const m of text.matchAll(GENERIC_URL)) {
+    if (isPrUrl(trimUrl(m[0]))) add("pr", m[0]);
+  }
   for (const m of text.matchAll(REPORT_LINK)) add("report", m[0]);
   for (const m of text.matchAll(GENERIC_URL)) {
-    if (!/\/pull\/\d+/.test(m[0])) add("doc", m[0]);
+    if (!isPrUrl(trimUrl(m[0]))) add("doc", m[0]);
   }
   return links;
 }

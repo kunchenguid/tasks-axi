@@ -532,6 +532,11 @@ describe("MarkdownStore", () => {
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         await expect(
           b.store.update("cert-cleanup", {
+            addLinks: [{ kind: "pr", url: " https://github.com/o/r/pull/9 " }],
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await expect(
+          b.store.update("cert-cleanup", {
             addLinks: [{ kind: "report", url: "reports/cert/report.md" }],
           }),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });

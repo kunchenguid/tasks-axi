@@ -361,6 +361,48 @@ describe("public-followup commands", () => {
     }
   });
 
+  it("accepts a Forgejo pulls URL as a pr-merged deliverable", async () => {
+    const b = makeBacklog(EMPTY);
+    try {
+      await add(b);
+      await bind(b);
+      const landed = await acceptEvent(
+        b,
+        event("evt-forgejo-url", "rel-code", "work-code-q1", 1, {
+          deliverables: {
+            pr_url: "https://forgejo.samesies.gay/eve/orchalycious/pulls/39",
+          },
+        }),
+      );
+      expect(
+        landed.task.public_followup.work_relations[0].accepted_events[0]
+          .deliverables.pr_url,
+      ).toBe("https://forgejo.samesies.gay/eve/orchalycious/pulls/39");
+    } finally {
+      b.cleanup();
+    }
+  });
+
+  it("rejects a singular-route Forgejo PR URL before accepting work", async () => {
+    const b = makeBacklog(EMPTY);
+    try {
+      await add(b);
+      await bind(b);
+      await expect(
+        acceptEvent(
+          b,
+          event("evt-singular-url", "rel-code", "work-code-q1", 1, {
+            deliverables: {
+              pr_url: "https://forgejo.samesies.gay/eve/orchalycious/pull/39",
+            },
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    } finally {
+      b.cleanup();
+    }
+  });
+
   it("keeps a failed required relation actionable unless failure is expected", async () => {
     const b = makeBacklog(EMPTY);
     try {
