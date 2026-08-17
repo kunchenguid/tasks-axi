@@ -273,6 +273,13 @@ Contributions are welcome.
 Human-authored PRs targeting `main` are raised through the [`no-mistakes`](https://github.com/kunchenguid/no-mistakes) gate, which runs review/test/lint/CI before opening the PR.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow and repo conventions.
 
+## Fork improvements
+
+This is [yjuyjuy/tasks-axi](https://github.com/yjuyjuy/tasks-axi), a fork of [kunchenguid/tasks-axi](https://github.com/kunchenguid/tasks-axi).
+
+- **Priority-first ordering** ranks `list`, `ready`, and the home queue by priority instead of file position, so consumers see the top task without inspecting each one.
+- **Resumable session tokens** persist an opaque token on each task record, letting a dead or context-full lane be resumed by id rather than reconstructed.
+
 ## License
 
 [MIT](LICENSE) © Kun Chen
