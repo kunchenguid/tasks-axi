@@ -191,9 +191,7 @@ export async function doneCommand(
 
   return renderMutation({
     json,
-    confirm: already
-      ? `done ${id} already -> ${stateLabel(task.state)}${doneExtras(pr, report)}${prunedNote(pruned)}`
-      : `done ${id} -> ${stateLabel(task.state)}${doneExtras(pr, report)}${prunedNote(pruned)}`,
+    confirm: `done ${id}${already ? " already" : ""} -> ${stateLabel(task.state)}${doneExtras(pr, report)}${prunedNote(pruned)}`,
     ...(already ? { already: true } : {}),
     jsonPayload: {
       ok: true,

@@ -599,6 +599,65 @@ describe("public-followup commands", () => {
     }
   });
 
+  it("stays idempotent for a generic transition that is a pure no-op", async () => {
+    const b = makeBacklog(EMPTY);
+    try {
+      await makeReady(b);
+      const queuedSource = b.read();
+
+      // An active obligation is already queued, so `reopen` changes nothing.
+      const reopened = await reopenCommand(["public-final-ab"], b.ctx);
+      expect(reopened).toContain("ok: reopen public-final-ab already queued");
+      expect(reopened).toContain("already: true");
+      expect(b.read()).toBe(queuedSource);
+
+      // ...but any transition that would genuinely move it still fails closed.
+      await expect(
+        doneCommand(["public-final-ab", "--no-prune"], b.ctx),
+      ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      await expect(
+        startCommand(["public-final-ab"], b.ctx),
+      ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      expect(b.read()).toBe(queuedSource);
+
+      await begin(b);
+      await run(b, "record-delivery", [
+        "public-final-ab",
+        "--receipt-file",
+        jsonFile(b, "receipt.json", receipt()),
+        "--json",
+      ]);
+      const completed = await b.store.get("public-final-ab");
+      expect(completed?.state).toBe("done");
+      const doneSource = b.read();
+
+      const closed = await doneCommand(
+        ["public-final-ab", "--no-prune"],
+        b.ctx,
+      );
+      expect(closed).toContain("ok: done public-final-ab already -> Done");
+      expect(closed).toContain("already: true");
+      expect(b.read()).toBe(doneSource);
+      expect(await b.store.get("public-final-ab")).toEqual(completed);
+
+      // Backfilling metadata is a real content change, so it stays refused.
+      await expect(
+        doneCommand(
+          [
+            "public-final-ab",
+            "--no-prune",
+            "--pr",
+            "https://github.com/o/r/pull/777",
+          ],
+          b.ctx,
+        ),
+      ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      expect(b.read()).toBe(doneSource);
+    } finally {
+      b.cleanup();
+    }
+  });
+
   it("keeps same-backlog operational blockers as delivery gates", async () => {
     const b = makeBacklog(EMPTY);
     try {

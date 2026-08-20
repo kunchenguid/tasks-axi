@@ -967,15 +967,6 @@ export class MarkdownStore implements Store {
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
 
       const task = found.entry.task;
-      if (isPublicFollowupTask(task)) {
-        throw new AxiError(
-          "Public-followup state cannot change through generic transitions",
-          "VALIDATION_ERROR",
-          [
-            "Use `tasks-axi public-followup record-delivery` or `tasks-axi public-followup waive`",
-          ],
-        );
-      }
       const date = normalizeDate(opts.date ?? this.now(), "transition date");
 
       // The already/fresh decision is made HERE, on the freshly reread task
@@ -1018,6 +1009,20 @@ export class MarkdownStore implements Store {
           task.closed = undefined;
         }
         changed = true;
+      }
+
+      // A generic transition may never move or rewrite an obligation - only a
+      // posted receipt or a Captain waiver does. The guard keys off whether
+      // this call would actually mutate, so a pure no-op stays the idempotent
+      // success it is for every other verb.
+      if (changed && isPublicFollowupTask(task)) {
+        throw new AxiError(
+          "Public-followup state cannot change through generic transitions",
+          "VALIDATION_ERROR",
+          [
+            "Use `tasks-axi public-followup record-delivery` or `tasks-axi public-followup waive`",
+          ],
+        );
       }
 
       // A pure no-op must not rewrite the file: a dirty re-render would drop
