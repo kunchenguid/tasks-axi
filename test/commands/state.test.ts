@@ -358,11 +358,13 @@ describe("state commands", () => {
     it("preserves body edits made before an already-done note update", async () => {
       const b = makeBacklog();
       try {
-        const originalUpdate = b.store.update.bind(
+        // The already-done note backfill runs inside `transition` (the call
+        // that holds the lock), so the concurrent hand-edit is injected there.
+        const originalTransition = b.store.transition.bind(
           b.store,
-        ) as typeof b.store.update;
+        ) as typeof b.store.transition;
         let injected = false;
-        b.store.update = async (taskId, patch) => {
+        b.store.transition = async (taskId, to, opts) => {
           if (!injected) {
             injected = true;
             writeFileSync(
@@ -376,7 +378,7 @@ describe("state commands", () => {
               "utf8",
             );
           }
-          return originalUpdate(taskId, patch);
+          return originalTransition(taskId, to, opts);
         };
 
         await doneCommand(
@@ -392,6 +394,44 @@ describe("state commands", () => {
         const read = b.read();
         expect(read).toContain("concurrent audit note");
         expect(read).toContain("backfilled review evidence");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("lets exactly one of two concurrent closers claim the transition", async () => {
+      // Regression for the TOCTOU in issue #31: the already/fresh decision must
+      // be made inside the transition lock, not on a caller's pre-lock read.
+      // Deciding it before the lock let BOTH callers report a fresh close.
+      const b = makeBacklog();
+      try {
+        const outputs = await Promise.all([
+          doneCommand(
+            [
+              "cert-cleanup",
+              "--pr",
+              "https://github.com/o/r/pull/101",
+              "--json",
+              "--no-prune",
+            ],
+            b.ctx,
+          ),
+          doneCommand(
+            [
+              "cert-cleanup",
+              "--pr",
+              "https://github.com/o/r/pull/202",
+              "--json",
+              "--no-prune",
+            ],
+            b.ctx,
+          ),
+        ]);
+        const results = outputs.map((out) => JSON.parse(out));
+        const claimed = results.filter((r) => r.already === undefined);
+        const observed = results.filter((r) => r.already === true);
+        expect(claimed).toHaveLength(1);
+        expect(observed).toHaveLength(1);
       } finally {
         b.cleanup();
       }

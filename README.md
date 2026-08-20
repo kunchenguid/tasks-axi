@@ -126,6 +126,7 @@ The long task body is truncated by default — the whole point is that `list` st
 `--archive-body` preserves the replaced body in `note-archive.md` using the same dated markdown archive block style as done pruning.
 Every write leads with a terse `ok:` line confirming the write result, including the resulting task state when the command changes one (e.g. `ok: start lavish-share -> In flight`, `ok: done grok-harness-g7 -> Done (pr <url>)`, `ok: render -> normalized 3`), followed by state-aware next-step hints that never suggest an action the command just performed.
 Mutations are idempotent and report what changed (`already: true` on a no-op), so re-running one is safe.
+`start`, `done`, and `reopen` decide already-vs-fresh under the backlog lock, so when several processes race the same task exactly one reports the fresh transition and the rest report `already: true`.
 Running `done` again on an already Done task can still backfill a new `--pr`, `--report`, or `--note` without changing the original close date.
 `hold <id> --reason "<text>"` records an intentional pause without turning it into prose, and `unhold <id>` clears it.
 The reason must be single-line text without parentheses because parentheses are reserved for canonical markdown tags.
