@@ -26,17 +26,17 @@ import type {
   Dep,
   Hold,
   HoldKind,
+  State,
   Task,
   TaskInput,
-  TaskLink,
-  TaskPatch,
+  TransitionOpts,
 } from "../model.js";
 import { HOLD_KINDS } from "../model.js";
 import {
   PUBLIC_FOLLOWUP_KIND,
   clonePublicFollowup,
 } from "../public-followup.js";
-import type { Store } from "../store.js";
+import type { Store, TransitionResult } from "../store.js";
 import { getSuggestions } from "../suggestions.js";
 import { renderHelp, renderOutput } from "../toon.js";
 import { renderTaskDetail, renderTaskList, showFullTextHint } from "../view.js";
@@ -123,11 +123,13 @@ export async function startCommand(
   const positionals = requirePositionals(args, 1, 1, START_HELP.split("\n")[0]);
   const id = requireId(positionals[0], "id");
 
-  const current = await store.get(id);
-  if (!current) throw notFound(id, { globals: context?.suggestionGlobals });
-
-  const already = current.state === "in_flight";
-  const task = already ? current : await store.transition(id, "in_flight");
+  const { task, already } = await transitionOrNotFound(
+    store,
+    id,
+    "in_flight",
+    {},
+    context,
+  );
   const all = (await store.list({})).items;
   return renderMutation({
     json,
@@ -170,62 +172,39 @@ export async function doneCommand(
   const id = requireId(positionals[0], "id");
   const keep = parseNonNegativeIntegerFlag("--keep", keepRaw, config.doneKeep);
 
-  const current = await store.get(id);
-  if (!current) throw notFound(id, { globals: context?.suggestionGlobals });
-
   const opts: { pr?: string; report?: string; note?: string } = {};
   if (pr !== undefined) opts.pr = pr;
   if (report !== undefined) opts.report = report;
   if (note !== undefined) opts.note = note;
 
-  if (current.state === "done") {
-    const patch = doneMetadataPatch(pr, report, note);
-    const hasPatch = Object.keys(patch).length > 0;
-    let task = current;
-    let changed = false;
-    if (hasPatch) {
-      const result = await store.update(id, patch);
-      task = result.task;
-      changed = result.changed.length > 0;
-    }
-    const pruned = await pruneDone(store, keep, noPrune);
-    const all = (await store.list({})).items;
-    return renderMutation({
-      json,
-      confirm: `done ${id} already -> ${stateLabel(task.state)}${doneExtras(pr, report)}${prunedNote(pruned)}`,
-      already: true,
-      jsonPayload: {
-        ok: true,
-        action: "done",
-        already: true,
-        pruned,
-        task: taskToJson(task, all),
-      },
-      ...(changed
-        ? { detail: renderTaskDetail(task, all, false, showFullTextHint(task)) }
-        : {}),
-      suggestions: getSuggestions({
-        action: "done",
-        id,
-        state: task.state,
-        globals: context?.suggestionGlobals,
-      }),
-    });
-  }
-
-  const task = await store.transition(id, "done", opts);
+  // One locked call decides already-vs-fresh and backfills metadata, so two
+  // concurrent closers can never both report that they performed the close.
+  const { task, already, changed } = await transitionOrNotFound(
+    store,
+    id,
+    "done",
+    opts,
+    context,
+  );
   const pruned = await pruneDone(store, keep, noPrune);
   const all = (await store.list({})).items;
 
   return renderMutation({
     json,
-    confirm: `done ${id} -> ${stateLabel(task.state)}${doneExtras(pr, report)}${prunedNote(pruned)}`,
+    confirm: already
+      ? `done ${id} already -> ${stateLabel(task.state)}${doneExtras(pr, report)}${prunedNote(pruned)}`
+      : `done ${id} -> ${stateLabel(task.state)}${doneExtras(pr, report)}${prunedNote(pruned)}`,
+    ...(already ? { already: true } : {}),
     jsonPayload: {
       ok: true,
       action: "done",
+      ...(already ? { already: true } : {}),
       pruned,
       task: taskToJson(task, all),
     },
+    ...(already && changed
+      ? { detail: renderTaskDetail(task, all, false, showFullTextHint(task)) }
+      : {}),
     suggestions: getSuggestions({
       action: "done",
       id,
@@ -233,6 +212,27 @@ export async function doneCommand(
       globals: context?.suggestionGlobals,
     }),
   });
+}
+
+/**
+ * `transition`, with the NOT_FOUND error enriched with id suggestions. The
+ * store owns the state decision (it holds the lock); the command only renders.
+ */
+async function transitionOrNotFound(
+  store: TasksContext["store"],
+  id: string,
+  to: State,
+  opts: TransitionOpts,
+  context: TasksContext | undefined,
+): Promise<TransitionResult> {
+  try {
+    return await store.transition(id, to, opts);
+  } catch (error) {
+    if (error instanceof AxiError && error.code === "NOT_FOUND") {
+      throw notFound(id, { globals: context?.suggestionGlobals });
+    }
+    throw error;
+  }
 }
 
 /** The `(pr X, report Y)` parenthetical for a done confirmation, omitted when bare. */
@@ -265,20 +265,6 @@ async function pruneDone(
   return result.archived;
 }
 
-function doneMetadataPatch(
-  pr: string | undefined,
-  report: string | undefined,
-  note: string | undefined,
-): TaskPatch {
-  const patch: TaskPatch = {};
-  const addLinks: TaskLink[] = [];
-  if (pr !== undefined) addLinks.push({ kind: "pr", url: pr });
-  if (report !== undefined) addLinks.push({ kind: "report", url: report });
-  if (addLinks.length > 0) patch.addLinks = addLinks;
-  if (note !== undefined) patch.addBodyLines = [note];
-  return patch;
-}
-
 export async function reopenCommand(
   rawArgs: string[],
   context?: TasksContext,
@@ -294,11 +280,13 @@ export async function reopenCommand(
   );
   const id = requireId(positionals[0], "id");
 
-  const current = await store.get(id);
-  if (!current) throw notFound(id, { globals: context?.suggestionGlobals });
-
-  const already = current.state === "queued";
-  const task = already ? current : await store.transition(id, "queued");
+  const { task, already } = await transitionOrNotFound(
+    store,
+    id,
+    "queued",
+    {},
+    context,
+  );
   const all = (await store.list({})).items;
   return renderMutation({
     json,
