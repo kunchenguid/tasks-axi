@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.6](https://github.com/kunchenguid/tasks-axi/compare/tasks-axi-v0.2.5...tasks-axi-v0.2.6) (2026-08-21)
+
+
+### Bug Fixes
+
+* **cli:** accept canonical Forgejo pull request URLs ([#36](https://github.com/kunchenguid/tasks-axi/issues/36)) ([9a86c7c](https://github.com/kunchenguid/tasks-axi/commit/9a86c7c86a4617a5a4f00f28dcb9588b03897f8f))
+
 ## [0.2.5](https://github.com/kunchenguid/tasks-axi/compare/tasks-axi-v0.2.4...tasks-axi-v0.2.5) (2026-08-07)
 
 
