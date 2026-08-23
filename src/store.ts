@@ -31,6 +31,19 @@ export interface Capabilities {
   publicFollowups: boolean;
 }
 
+/**
+ * The outcome of a state transition. The `already` decision is made inside the
+ * backend's critical section on a freshly reread task, never on a caller's
+ * pre-lock read, so concurrent callers cannot both claim they performed it.
+ */
+export interface TransitionResult {
+  task: Task;
+  /** True when the task was already in the target state on the locked reread. */
+  already: boolean;
+  /** True when this call actually wrote something. */
+  changed: boolean;
+}
+
 export interface PruneOptions {
   state: State;
   keep: number;
@@ -67,7 +80,11 @@ export interface Store {
   list(query: TaskQuery): Promise<{ items: Task[]; total: number }>;
 
   // state + dependencies
-  transition(id: string, to: State, opts?: TransitionOpts): Promise<Task>;
+  transition(
+    id: string,
+    to: State,
+    opts?: TransitionOpts,
+  ): Promise<TransitionResult>;
   addDep(id: string, dep: Dep): Promise<boolean>;
   removeDep(id: string, dep: Dep): Promise<boolean>;
 

@@ -38,6 +38,7 @@ import type {
   Capabilities,
   PruneOptions,
   PruneResult,
+  TransitionResult,
   Store,
 } from "../store.js";
 import { atomicWrite, readFileSafe, withLock, withLocks } from "./lock.js";
@@ -957,7 +958,7 @@ export class MarkdownStore implements Store {
     id: string,
     to: State,
     opts: TransitionOpts = {},
-  ): Promise<Task> {
+  ): Promise<TransitionResult> {
     return withLock(this.path, () => {
       const loaded = this.loadForUpdate();
       const { doc } = loaded;
@@ -966,16 +967,13 @@ export class MarkdownStore implements Store {
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
 
       const task = found.entry.task;
-      if (isPublicFollowupTask(task)) {
-        throw new AxiError(
-          "Public-followup state cannot change through generic transitions",
-          "VALIDATION_ERROR",
-          [
-            "Use `tasks-axi public-followup record-delivery` or `tasks-axi public-followup waive`",
-          ],
-        );
-      }
       const date = normalizeDate(opts.date ?? this.now(), "transition date");
+
+      // The already/fresh decision is made HERE, on the freshly reread task
+      // inside the critical section. Deciding it from a caller's pre-lock read
+      // let two concurrent callers both claim they performed the transition.
+      const already = task.state === to;
+      let changed = false;
 
       // Record links / notes before stamping so closureVerb sees them.
       const transitionLinks: TaskLink[] = [];
@@ -986,32 +984,67 @@ export class MarkdownStore implements Store {
         transitionLinks.push({ kind: "report", url: opts.report });
       }
       for (const link of transitionLinks) {
-        task.title = appendTitleLink(task.title, link);
+        const title = appendTitleLink(task.title, link);
+        if (title !== task.title) {
+          task.title = title;
+          changed = true;
+        }
       }
-      if (opts.note) {
-        task.body = task.body ? `${task.body}\n${opts.note}` : opts.note;
+      if (opts.note && !bodyHasLine(task.body, opts.note)) {
+        task.body = addBodyLine(task.body, opts.note);
+        changed = true;
       }
       task.links = deriveLinks(task.title);
 
-      task.state = to;
-      if (to === "done") {
-        task.closed = date;
-      } else if (to === "in_flight") {
-        if (!task.created) task.created = date;
-        task.closed = undefined;
-      } else {
-        task.closed = undefined;
+      // An already-terminal task keeps its original closed date; only the
+      // supplied metadata is backfilled.
+      if (!already) {
+        task.state = to;
+        if (to === "done") {
+          task.closed = date;
+        } else if (to === "in_flight") {
+          if (!task.created) task.created = date;
+          task.closed = undefined;
+        } else {
+          task.closed = undefined;
+        }
+        changed = true;
       }
+
+      // A generic transition may never move or rewrite an obligation - only a
+      // posted receipt or a Captain waiver does. The guard keys off whether
+      // this call would actually mutate, so a pure no-op stays the idempotent
+      // success it is for every other verb.
+      if (changed && isPublicFollowupTask(task)) {
+        throw new AxiError(
+          "Public-followup state cannot change through generic transitions",
+          "VALIDATION_ERROR",
+          [
+            "Use `tasks-axi public-followup record-delivery` or `tasks-axi public-followup waive`",
+          ],
+        );
+      }
+
+      // A pure no-op must not rewrite the file: a dirty re-render would drop
+      // the item's trailing separator blank for no reason.
+      if (!changed) return { task, already, changed };
+
       task.updated = this.now();
 
-      // Move the entry into the target section.
-      found.section.entries.splice(found.index, 1);
-      const moved: TaskEntry = { kind: "task", task, raw: [], dirty: true };
-      // Done and started work surface at the top; reopened work appends to queued.
-      this.insert(this.section(doc, to), moved, to !== "queued");
+      if (already) {
+        // Backfill in place; re-sorting a task within its own section would
+        // reorder the backlog on what is only a metadata write.
+        found.entry.dirty = true;
+      } else {
+        // Move the entry into the target section.
+        found.section.entries.splice(found.index, 1);
+        const moved: TaskEntry = { kind: "task", task, raw: [], dirty: true };
+        // Done and started work surface at the top; reopened work appends to queued.
+        this.insert(this.section(doc, to), moved, to !== "queued");
+      }
 
       this.persist(loaded);
-      return task;
+      return { task, already, changed };
     });
   }
 
