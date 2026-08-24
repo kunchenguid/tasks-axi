@@ -265,7 +265,7 @@ pnpm lint          # eslint
 pnpm run build:skill -- --check   # fail if the generated skill is stale
 ```
 
-The installable skill is generated from the same description and help the CLI prints, so it can never drift.
+The generated installable skill is intentionally minimal and points agents to the live CLI for all commands, flags, and workflows. CLI output remains the single source of truth.
 
 ## Contributing
 

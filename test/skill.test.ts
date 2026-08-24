@@ -1,31 +1,30 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { TOP_HELP } from "../src/cli.js";
-import {
-  createSkillMarkdown,
-  extractCommandsBlock,
-  SKILL_DESCRIPTION,
-} from "../src/skill.js";
+import { DESCRIPTION } from "../src/cli.js";
+import { createSkillMarkdown, SKILL_DESCRIPTION } from "../src/skill.js";
 
 function normalizeLineEndings(value: string): string {
   return value.replace(/\r\n/g, "\n");
 }
 
 describe("skill generation", () => {
-  it("extracts the commands block from TOP_HELP", () => {
-    const block = extractCommandsBlock();
-    expect(block).toContain("commands[");
-    expect(block).toContain("add, list, show");
-    // the block is a slice of the canonical help, so it can never drift
-    expect(TOP_HELP).toContain(block);
+  it("keeps frontmatter identity and defers instructions to the CLI", () => {
+    const md = createSkillMarkdown();
+    expect(md.startsWith("---\nname: tasks-axi\n")).toBe(true);
+    expect(md).toContain(JSON.stringify(SKILL_DESCRIPTION));
+    expect(md).toContain("metadata:");
+    expect(md).toContain(DESCRIPTION);
+    expect(md).toContain("`npx -y tasks-axi`");
+    expect(md).toContain("`npx -y tasks-axi --help`");
+    expect(md).toContain("`npx -y tasks-axi <command> --help`");
   });
 
-  it("renders frontmatter and the shared guidance", () => {
+  it("does not bake CLI-owned command, flag, or workflow text", () => {
     const md = createSkillMarkdown();
-    expect(md).toContain("name: tasks-axi");
-    expect(md).toContain(JSON.stringify(SKILL_DESCRIPTION));
-    expect(md).toContain("npx -y tasks-axi");
-    expect(md).toContain("## Commands");
+    expect(md).not.toContain("## Commands");
+    expect(md).not.toContain("## Tips");
+    expect(md).not.toContain("## Workflow");
+    expect(md).not.toMatch(/^commands\[\d+\]:/m);
   });
 
   it("matches the committed skill file (guards against drift)", () => {

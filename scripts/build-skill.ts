@@ -1,5 +1,5 @@
-// Generates skills/tasks-axi/SKILL.md from the shared CLI guidance so the
-// installable skill never drifts from what `tasks-axi` prints.
+// Generates skills/tasks-axi/SKILL.md as a minimal stub that defers to the
+// live CLI for all actual guidance (see src/skill.ts).
 //
 //   pnpm run build:skill            # write the file
 //   pnpm run build:skill -- --check # fail (exit 1) if the committed file is stale
