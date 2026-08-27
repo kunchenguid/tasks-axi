@@ -5,7 +5,7 @@ import {
   truncateSync,
   unlinkSync,
 } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname } from "node:path";
 import { AxiError } from "../errors.js";
 import { validateDependencyId, validateId } from "../id.js";
 import type {
@@ -34,13 +34,31 @@ import {
   normalizePublicFollowup,
   type PublicFollowupMutation,
 } from "../public-followup.js";
+import {
+  CasRefusalError,
+  compareMoveRevisions,
+  moveRevisionSnapshot,
+  ownerRevision,
+  type MoveCasExpected,
+  type MoveRevisionSnapshot,
+  type OwnerRevision,
+} from "../revision.js";
 import type {
   Capabilities,
+  CasMoveResult,
   PruneOptions,
   PruneResult,
   Store,
 } from "../store.js";
-import { atomicWrite, readFileSafe, withLock, withLocks } from "./lock.js";
+import {
+  atomicWrite,
+  canonicalMutationPath,
+  readFileBytesSafe,
+  readFileSafe,
+  sameMutationOwner,
+  withLock,
+  withLocks,
+} from "./lock.js";
 import {
   type BacklogDoc,
   type Entry,
@@ -53,6 +71,11 @@ import {
   renderTaskLines,
 } from "./markdown-grammar.js";
 
+export type CasFailureStage =
+  | "before-write"
+  | "after-destination-write"
+  | "after-source-write";
+
 export interface MarkdownStoreOptions {
   path: string;
   /** Where pruned Done items are archived (default `<dir>/done-archive.md`). */
@@ -61,6 +84,8 @@ export interface MarkdownStoreOptions {
   noteArchivePath?: string;
   /** Injectable clock returning a YYYY-MM-DD stamp (for tests). */
   now?: () => string;
+  /** Test-only failure seam for proving CAS rollback at each write stage. */
+  casFailureInjector?: (stage: CasFailureStage) => void;
 }
 
 const ORDER: State[] = ["in_flight", "queued", "done"];
@@ -76,11 +101,18 @@ const DEP_REASON_EDGE_MARKER_RE =
 interface LoadedBacklogDoc {
   doc: BacklogDoc;
   source: string | undefined;
+  bytes: Buffer | undefined;
 }
 
 interface ArchiveRestorePoint {
   existed: boolean;
   size: number;
+}
+
+interface PreparedMove {
+  source: LoadedBacklogDoc;
+  destination: LoadedBacklogDoc;
+  moved: Task[];
 }
 
 function today(): string {
@@ -306,26 +338,30 @@ export class MarkdownStore implements Store {
   private readonly archivePath: string;
   private readonly noteArchivePath: string;
   private readonly now: () => string;
+  private readonly casFailureInjector?: (stage: CasFailureStage) => void;
 
   constructor(options: MarkdownStoreOptions) {
-    this.path = options.path;
-    this.archivePath =
-      options.archivePath ?? `${dirname(options.path)}/done-archive.md`;
-    this.noteArchivePath =
-      options.noteArchivePath ?? `${dirname(options.path)}/note-archive.md`;
-    if (resolve(this.archivePath) === resolve(this.path)) {
+    this.path = canonicalMutationPath(options.path);
+    this.archivePath = canonicalMutationPath(
+      options.archivePath ?? `${dirname(options.path)}/done-archive.md`,
+    );
+    this.noteArchivePath = canonicalMutationPath(
+      options.noteArchivePath ?? `${dirname(options.path)}/note-archive.md`,
+    );
+    if (sameMutationOwner(this.archivePath, this.path)) {
       throw new AxiError(
         "Archive path must not be the active backlog path",
         "VALIDATION_ERROR",
       );
     }
-    if (resolve(this.noteArchivePath) === resolve(this.path)) {
+    if (sameMutationOwner(this.noteArchivePath, this.path)) {
       throw new AxiError(
         "Note archive path must not be the active backlog path",
         "VALIDATION_ERROR",
       );
     }
     this.now = options.now ?? today;
+    this.casFailureInjector = options.casFailureInjector;
   }
 
   capabilities(): Capabilities {
@@ -339,6 +375,8 @@ export class MarkdownStore implements Store {
       customStates: true,
       serverMintsIds: false,
       publicFollowups: true,
+      ownerRevisions: true,
+      casMove: true,
     };
   }
 
@@ -355,8 +393,12 @@ export class MarkdownStore implements Store {
   }
 
   private loadForUpdate(): LoadedBacklogDoc {
-    const source = this.loadSource();
-    return { doc: parseBacklog(source ?? ""), source };
+    return this.loadBytesForUpdate(readFileBytesSafe(this.path));
+  }
+
+  private loadBytesForUpdate(bytes: Buffer | undefined): LoadedBacklogDoc {
+    const source = bytes?.toString("utf8");
+    return { doc: parseBacklog(source ?? ""), source, bytes };
   }
 
   private allTasks(doc: BacklogDoc): Task[] {
@@ -433,6 +475,43 @@ export class MarkdownStore implements Store {
     return { items, total };
   }
 
+  async readOwnerRevision(): Promise<OwnerRevision> {
+    return withLock(this.path, () =>
+      ownerRevision(this.path, readFileBytesSafe(this.path)),
+    );
+  }
+
+  async readMoveRevisions(targetStore: Store): Promise<MoveRevisionSnapshot> {
+    const target = this.requireMarkdownTarget(targetStore);
+    return withLocks([this.path, target.path], () =>
+      this.currentMoveRevisions(target),
+    );
+  }
+
+  private currentMoveRevisions(
+    target: MarkdownStore,
+    source: string | Uint8Array | undefined = readFileBytesSafe(this.path),
+    destination: string | Uint8Array | undefined = readFileBytesSafe(
+      target.path,
+    ),
+  ): MoveRevisionSnapshot {
+    return moveRevisionSnapshot(
+      ownerRevision(this.path, source),
+      ownerRevision(target.path, destination),
+    );
+  }
+
+  private requireMarkdownTarget(target: Store): MarkdownStore {
+    if (!(target instanceof MarkdownStore)) {
+      throw new CasRefusalError(
+        [{ owner: "operation", reason: "unsupported_backend" }],
+        undefined,
+        "Compare-and-swap move requires two markdown owners",
+      );
+    }
+    return target;
+  }
+
   // -------------------------------------------------------------------------
   // Document mutation helpers (operate on a freshly-loaded doc under lock)
   // -------------------------------------------------------------------------
@@ -478,7 +557,12 @@ export class MarkdownStore implements Store {
   }
 
   private assertUnchanged(loaded: LoadedBacklogDoc): void {
-    if (this.loadSource() !== loaded.source) {
+    const current = readFileBytesSafe(this.path);
+    const unchanged =
+      current === undefined
+        ? loaded.bytes === undefined
+        : loaded.bytes !== undefined && current.equals(loaded.bytes);
+    if (!unchanged) {
       throw new AxiError(
         "Backlog changed on disk; retry the command",
         "CONFLICT",
@@ -520,6 +604,25 @@ export class MarkdownStore implements Store {
         "Remove the duplicate from the destination backlog manually before retrying",
         `Source removal failed: ${originalMessage}`,
         `Destination rollback failed: ${rollbackMessage}`,
+      ],
+    );
+  }
+
+  private partialCasMoveError(
+    originalError: unknown,
+    rollbackErrors: unknown[],
+  ): AxiError {
+    const originalMessage =
+      originalError instanceof Error
+        ? originalError.message
+        : String(originalError);
+    return new AxiError(
+      "CAS move failed and could not fully restore both backlog owners",
+      "CONFLICT",
+      [
+        "Inspect both owner paths before retrying; do not assume the move committed",
+        `Write failure: ${originalMessage}`,
+        `Rollback failure: ${rollbackErrors.map((item) => String(item)).join("; ")}`,
       ],
     );
   }
@@ -824,54 +927,12 @@ export class MarkdownStore implements Store {
   async moveManyTo(ids: string[], target: MarkdownStore): Promise<Task[]> {
     const uniqueIds = [...new Set(ids)];
     return withLocks([this.path, target.path], () => {
-      const loaded = this.loadForUpdate();
-      const { doc } = loaded;
-
-      // Resolve every source entry up front so a missing id fails before any
-      // write and never leaves a half-applied move behind.
-      const founds = uniqueIds.map((id) => {
-        const found = this.findEntry(doc, id);
-        if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
-        return found;
-      });
-
-      const targetLoaded = target.loadForUpdate();
-      const { doc: targetDoc } = targetLoaded;
-      target.ensureSections(targetDoc);
-      for (const id of uniqueIds) {
-        if (target.findEntry(targetDoc, id)) {
-          throw new AxiError(
-            `Task "${id}" already exists in the destination backlog`,
-            "CONFLICT",
-          );
-        }
-      }
-
-      this.requireNoSplitDeps(doc, targetDoc, uniqueIds);
-
-      const moved: Task[] = [];
-      for (const found of founds) {
-        const task = target.taskFromInput(taskToInput(found.entry.task));
-        target.insert(
-          target.section(targetDoc, task.state),
-          { kind: "task", task, raw: [], dirty: true },
-          task.state === "in_flight",
-        );
-        moved.push(task);
-      }
-
-      // Remove the moved entries from the source by identity: splicing by index
-      // would shift once two moved items share a section.
-      const removeSet = new Set<Entry>(founds.map((f) => f.entry));
-      for (const section of doc.sections) {
-        section.entries = section.entries.filter((e) => !removeSet.has(e));
-      }
-
-      target.assertUnchanged(targetLoaded);
-      this.assertUnchanged(loaded);
-      target.persist(targetLoaded);
+      const prepared = this.prepareMove(uniqueIds, target);
+      target.assertUnchanged(prepared.destination);
+      this.assertUnchanged(prepared.source);
+      target.persist(prepared.destination);
       try {
-        this.persist(loaded);
+        this.persist(prepared.source);
       } catch (error) {
         try {
           for (const id of uniqueIds) target.removeCreatedTask(id);
@@ -884,8 +945,197 @@ export class MarkdownStore implements Store {
         }
         throw error;
       }
-      return moved;
+      return prepared.moved;
     });
+  }
+
+  /**
+   * Compare and swap both markdown owners under the same ordered lock set used
+   * for the writes. Revision parsing and validation deliberately happen after
+   * lock acquisition and fresh reads. Every refusal therefore returns evidence
+   * for the exact state that was refused, without exposing task contents.
+   */
+  async moveManyToCas(
+    ids: string[],
+    targetStore: Store,
+    expected: MoveCasExpected,
+  ): Promise<CasMoveResult> {
+    const target = this.requireMarkdownTarget(targetStore);
+    const uniqueIds = [...new Set(ids)];
+    return withLocks([this.path, target.path], () => {
+      const sourceBytes = readFileBytesSafe(this.path);
+      const destinationBytes = readFileBytesSafe(target.path);
+      const previous = this.currentMoveRevisions(
+        target,
+        sourceBytes,
+        destinationBytes,
+      );
+
+      if (sameMutationOwner(this.path, target.path)) {
+        throw new CasRefusalError(
+          [{ owner: "operation", reason: "same_owner" }],
+          previous,
+        );
+      }
+
+      const failures = compareMoveRevisions(expected, previous);
+      if (failures.length > 0) {
+        throw new CasRefusalError(failures, previous);
+      }
+
+      // Parse and prepare only after both expectations match. Even a corrupt
+      // owner can therefore return safe revision evidence for a CAS refusal.
+      const prepared = this.prepareMove(
+        uniqueIds,
+        target,
+        this.loadBytesForUpdate(sourceBytes),
+        target.loadBytesForUpdate(destinationBytes),
+      );
+      const sourceOutput = renderBacklog(prepared.source.doc);
+      const destinationOutput = renderBacklog(prepared.destination.doc);
+
+      target.assertUnchanged(prepared.destination);
+      this.assertUnchanged(prepared.source);
+      this.persistCasPair(
+        target,
+        prepared.source.bytes,
+        prepared.destination.bytes,
+        sourceOutput,
+        destinationOutput,
+      );
+
+      return {
+        tasks: prepared.moved,
+        previous,
+        current: this.currentMoveRevisions(
+          target,
+          sourceOutput,
+          destinationOutput,
+        ),
+      };
+    });
+  }
+
+  private prepareMove(
+    uniqueIds: string[],
+    target: MarkdownStore,
+    source = this.loadForUpdate(),
+    destination = target.loadForUpdate(),
+  ): PreparedMove {
+    const { doc } = source;
+
+    // Resolve every source entry up front so a missing id fails before any
+    // write and never leaves a half-applied move behind.
+    const founds = uniqueIds.map((id) => {
+      const found = this.findEntry(doc, id);
+      if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
+      return found;
+    });
+
+    const { doc: targetDoc } = destination;
+    target.ensureSections(targetDoc);
+    for (const id of uniqueIds) {
+      if (target.findEntry(targetDoc, id)) {
+        throw new AxiError(
+          `Task "${id}" already exists in the destination backlog`,
+          "CONFLICT",
+        );
+      }
+    }
+
+    this.requireNoSplitDeps(doc, targetDoc, uniqueIds);
+
+    const moved: Task[] = [];
+    for (const found of founds) {
+      const task = target.taskFromInput(taskToInput(found.entry.task));
+      target.insert(
+        target.section(targetDoc, task.state),
+        { kind: "task", task, raw: [], dirty: true },
+        task.state === "in_flight",
+      );
+      moved.push(task);
+    }
+
+    // Remove the moved entries from the source by identity: splicing by index
+    // would shift once two moved items share a section.
+    const removeSet = new Set<Entry>(founds.map((found) => found.entry));
+    for (const section of doc.sections) {
+      section.entries = section.entries.filter(
+        (entry) => !removeSet.has(entry),
+      );
+    }
+
+    return { source, destination, moved };
+  }
+
+  private persistCasPair(
+    target: MarkdownStore,
+    sourceBefore: Uint8Array | undefined,
+    destinationBefore: Uint8Array | undefined,
+    sourceOutput: string,
+    destinationOutput: string,
+  ): void {
+    let sourceWritten = false;
+    let destinationWritten = false;
+    try {
+      this.casFailureInjector?.("before-write");
+      atomicWrite(target.path, destinationOutput);
+      destinationWritten = true;
+      this.casFailureInjector?.("after-destination-write");
+      atomicWrite(this.path, sourceOutput);
+      sourceWritten = true;
+      this.casFailureInjector?.("after-source-write");
+    } catch (error) {
+      const rollbackErrors: unknown[] = [];
+      if (sourceWritten) {
+        try {
+          this.restoreCasOwner(this.path, sourceBefore, sourceOutput);
+        } catch (rollbackError) {
+          rollbackErrors.push(rollbackError);
+        }
+      }
+      if (destinationWritten) {
+        try {
+          this.restoreCasOwner(
+            target.path,
+            destinationBefore,
+            destinationOutput,
+          );
+        } catch (rollbackError) {
+          rollbackErrors.push(rollbackError);
+        }
+      }
+      if (rollbackErrors.length > 0) {
+        throw this.partialCasMoveError(error, rollbackErrors);
+      }
+      throw error;
+    }
+  }
+
+  private restoreCasOwner(
+    path: string,
+    before: Uint8Array | undefined,
+    written: string,
+  ): void {
+    const current = readFileBytesSafe(path);
+    if (
+      current === undefined ||
+      !current.equals(Buffer.from(written, "utf8"))
+    ) {
+      throw new AxiError(
+        `Cannot safely roll back changed CAS owner: ${path}`,
+        "CONFLICT",
+      );
+    }
+    if (before !== undefined) {
+      atomicWrite(path, before);
+      return;
+    }
+    try {
+      unlinkSync(path);
+    } catch (error) {
+      if (errno(error) !== "ENOENT") throw error;
+    }
   }
 
   /**

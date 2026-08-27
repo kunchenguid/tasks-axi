@@ -118,6 +118,13 @@ tasks-axi render                 # normalize the markdown in place
 tasks-axi mv hibit-cert-cleanup --to ../homemux/data/backlog.md
 # move a linked blocker/dependent set together
 tasks-axi mv blocker-b1 dependent-d2 --to ../homemux/data/backlog.md
+
+# compare-and-swap an exact cross-home handoff
+snapshot="$(tasks-axi revision --to ../worker/data/backlog.md --json)"
+# Extract revisions.source.revision and revisions.destination.revision from the JSON.
+tasks-axi mv delegated-q1 --to ../worker/data/backlog.md --cas \
+  --expected-source-revision <source-token> \
+  --expected-destination-revision <destination-token>
 ```
 
 Output is [TOON](https://toonformat.dev)-encoded and token-efficient.
@@ -134,6 +141,77 @@ Use `ready --include-held` to show dispatchable ready work and a separate `held`
 Use `list --state held` or `list --fields held,hold_reason,hold_kind,hold_until` when you need to scan active hold state directly.
 Pass `--json` to any mutation for a machine-readable result object (`{ "ok": true, "action": …, "task": { … } }` or operation-specific result fields) instead of TOON, so an agent can confirm a write deterministically without a follow-up read.
 For `mv`, a single task returns `id`, while a multi-task move returns first-occurrence-ordered, deduplicated `ids`, plus `from` and `to`.
+
+### Exact handoff compare-and-swap API
+
+`tasks-axi revision --to <path-or-dir> --json` is the authoritative read for an exact cross-file or cross-home handoff.
+It acquires the same ordered source and destination lock set used by a move, reads both owners, and returns this versioned schema:
+
+```json
+{
+  "ok": true,
+  "action": "revision",
+  "revisions": {
+    "schema_version": 1,
+    "source": {
+      "owner": "/canonical/source.md",
+      "revision": "tasks-axi:markdown:v1:<owner-sha256>:<state-sha256>"
+    },
+    "destination": {
+      "owner": "/canonical/destination.md",
+      "revision": "tasks-axi:markdown:v1:<owner-sha256>:<state-sha256>"
+    }
+  }
+}
+```
+
+Tokens are opaque and must be obtained from tasks-axi rather than computed by a caller.
+A v1 token binds the canonical owner identity, exact file bytes, and whether the owner is missing rather than empty.
+This makes source and destination tokens non-interchangeable even when both files have identical contents.
+
+Pass both tokens to the opt-in CAS form of `mv`:
+
+```sh
+tasks-axi mv <id> [<id>...] --to <path-or-dir> --cas \
+  --expected-source-revision <token> \
+  --expected-destination-revision <token>
+```
+
+The backend canonicalizes symlink aliases, acquires both mutation locks in stable order, freshly derives both current tokens while those locks are held, and validates both expectations before preparing or writing the move.
+A successful CAS move returns JSON even when `--json` is omitted and adds `cas.schema_version`, `cas.previous`, and `cas.current` to the normal `mv` result.
+It writes the complete connected set or restores both owner byte streams if an in-process write fails.
+The existing non-CAS `mv` form remains supported and unchanged.
+
+A missing, malformed, unsupported-version, wrong-owner, or stale expectation refuses with exit code 1 and always prints JSON:
+
+```json
+{
+  "ok": false,
+  "action": "mv",
+  "error": "Compare-and-swap move refused",
+  "code": "CAS_REFUSED",
+  "cas": {
+    "schema_version": 1,
+    "failures": [{ "owner": "source", "reason": "stale_revision" }],
+    "current": {
+      "schema_version": 1,
+      "source": {
+        "owner": "/canonical/source.md",
+        "revision": "<current-token>"
+      },
+      "destination": {
+        "owner": "/canonical/destination.md",
+        "revision": "<current-token>"
+      }
+    }
+  }
+}
+```
+
+`cas.failures` can report both owners in one refusal.
+Safe current evidence contains only canonical owner paths and opaque revisions, never task records or bodies.
+On refusal, prepare the intended states again, obtain a fresh two-owner snapshot, and retry the same CAS command.
+Do not retry with only one refreshed token.
 
 Run `tasks-axi --help` for the command list, or `tasks-axi <command> --help` for per-command usage.
 
@@ -203,6 +281,8 @@ The command refuses a move that would strand a dependency across the two files, 
 Moved tasks are re-rendered canonically, so their multi-paragraph bodies remain intact but a trailing blank separator before the next item or section is dropped.
 
 The read-modify-write window is guarded by an advisory lockfile, an atomic write (temp file + rename), and a fresh re-read on every invocation, so a hand-edit and a CLI-edit cannot clobber each other.
+Every markdown store canonicalizes its active owner path first, so direct tasks-axi mutations through a symlink alias contend on the same authoritative lock.
+The optional `mv --cas` boundary validates source and destination revision expectations only after acquiring both of those locks.
 Task state is carried by the section header, not by the bullet style: `## In flight`, `## Queued`, and `## Done` decide whether a recognized item is in flight, queued, or done.
 In flight parses both the legacy `- **id** - ...` form and firstmate's `- [ ] id - ...` checkbox form, while normalization renders both In flight and Queued items as `- [ ] id - ...` and Done items as `- [x] id - ...`.
 Untouched legacy lines are still preserved byte-for-byte; only mutated or explicitly normalized tasks are rewritten.

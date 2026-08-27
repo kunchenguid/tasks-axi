@@ -12,6 +12,7 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 - `src/store.ts` - the `Store` interface and `Capabilities`. Core contract: `create/get/update/remove/list/transition/addDep/removeDep/updatePublicFollowup`. `prune`/`render` are optional and capability-gated.
 - `src/model.ts` — the `Task` data model (report §5).
 - `src/pr-url.ts` — `isPrUrl`, the one canonical PR-URL seam (GitHub `/pull/<n>` on github.com, Forgejo `/pulls/<n>` on any lowercase DNS host) shared by prose link derivation, `--pr` validation, and public-followup `pr_url`; near-misses derive as `doc` links, never `pr`.
+- `src/revision.ts` - the v1 owner-bound markdown revision token and machine-readable CAS refusal schema used by `revision` and `mv --cas`.
 - `src/derive.ts` - worker `blocked` / `ready` / active `held` and public delivery readiness are derived in the CLI from `list` + the dep graph + hold date gates, never Store methods, so every backend gets them for free.
 - `src/backends/markdown*.ts` — the only P1 backend.
 - `src/public-followup.ts` - authoritative versioned schema, strict privacy-safe validation, canonical encoding, immutable-field checks, relation/event readiness, and terminal-state invariants for `kind=public-followup`; `src/commands/public-followup.ts` owns its dedicated CLI state machine.
@@ -36,9 +37,12 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
   Firstmate and other callers must use `tasks-axi public-followup` and `--json`, never parse or rewrite the comment.
   Generic worker readiness and lifecycle transitions cannot dispatch, complete, reopen, remove, or change the kind of an active obligation; only a posted receipt or Captain waiver completes it.
 - **Concurrency:** every mutation runs under `withLock` (advisory `<path>.lock`) and fails closed with a `LOCKED` error if another process holds the lock past the bounded timeout.
+  Markdown stores canonicalize active paths so symlink aliases share one mutation lock.
+  `revision --to` reads both owner tokens under the same ordered lock set as `mv --cas`; CAS validation is freshly derived inside those locks, and refusal returns only safe current owner/revision evidence.
+  CAS pair-write failures restore exact pre-write bytes; never weaken this to caller-computed or pre-lock token validation.
   If the lock looks stale, the error tells the user to remove `<path>.lock` only after confirming no `tasks-axi` process is running.
   Corruption-safety is guaranteed independently by atomic temp-file + rename writes, and a hand-edit landing between read and write is detected and refused.
-  Reads do not lock.
+  Ordinary reads do not lock.
 
 ## Conventions
 

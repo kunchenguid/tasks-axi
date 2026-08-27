@@ -1,5 +1,10 @@
 import type { PublicFollowupMutation } from "./public-followup.js";
 import type {
+  MoveCasExpected,
+  MoveRevisionSnapshot,
+  OwnerRevision,
+} from "./revision.js";
+import type {
   Dep,
   State,
   Task,
@@ -29,6 +34,10 @@ export interface Capabilities {
   serverMintsIds: boolean;
   /** Supports the durable, receipt-gated public-followup state machine. */
   publicFollowups: boolean;
+  /** Can return an authoritative revision for a mutation owner. */
+  ownerRevisions: boolean;
+  /** Supports a two-owner compare-and-swap move. */
+  casMove: boolean;
 }
 
 export interface PruneOptions {
@@ -42,6 +51,12 @@ export interface PruneResult {
   ids: string[];
 }
 
+export interface CasMoveResult {
+  tasks: Task[];
+  previous: MoveRevisionSnapshot;
+  current: MoveRevisionSnapshot;
+}
+
 /**
  * The single narrow seam every backend implements (report §8). The CLI layer
  * (arg parsing, TOON rendering, suggestions, help) never knows which backend
@@ -50,8 +65,8 @@ export interface PruneResult {
  * backend gets them for free.
  *
  * The core contract is create/get/update/remove/list/transition/addDep/
- * removeDep/updatePublicFollowup. `prune` and `render` are optional and
- * capability-gated.
+ * removeDep/updatePublicFollowup. Owner revisions, CAS moves, `prune`, and
+ * `render` are optional and capability-gated.
  */
 export interface Store {
   capabilities(): Capabilities;
@@ -76,6 +91,15 @@ export interface Store {
     id: string,
     mutation: PublicFollowupMutation,
   ): Promise<Task>;
+
+  // owner revisions + compare-and-swap (optional, capability-gated)
+  readOwnerRevision?(): Promise<OwnerRevision>;
+  readMoveRevisions?(target: Store): Promise<MoveRevisionSnapshot>;
+  moveManyToCas?(
+    ids: string[],
+    target: Store,
+    expected: MoveCasExpected,
+  ): Promise<CasMoveResult>;
 
   // maintenance (optional, capability-gated)
   prune?(options: PruneOptions): Promise<PruneResult>;

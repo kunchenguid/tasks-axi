@@ -1,16 +1,18 @@
 import {
   closeSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
+  realpathSync,
   renameSync,
   statSync,
   unlinkSync,
   writeFileSync,
   writeSync,
 } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { AxiError } from "../errors.js";
 
 /**
@@ -94,18 +96,76 @@ function lockedError(lockPath: string, staleMs: number): AxiError {
   );
 }
 
-/** Read a file's UTF-8 contents, or undefined when it does not exist. */
-export function readFileSafe(path: string): string | undefined {
+/**
+ * Resolve an owner path through every existing symlink component.
+ *
+ * Mutation stores keep this canonical path for their lifetime, so aliases of
+ * the same backlog share one lock and a destination symlink cannot turn a
+ * same-file move into two independently locked owners. Nonexistent trailing
+ * components are retained below the nearest real ancestor. Dangling symlinks
+ * are refused rather than replaced by an atomic rename.
+ */
+export function canonicalMutationPath(path: string): string {
+  const absolute = resolve(path);
   try {
-    return readFileSync(path, "utf8");
+    return realpathSync.native(absolute);
+  } catch (error) {
+    if (errno(error) !== "ENOENT") throw error;
+  }
+
+  try {
+    if (lstatSync(absolute).isSymbolicLink()) {
+      throw new AxiError(
+        `Cannot safely resolve dangling backlog symlink: ${absolute}`,
+        "VALIDATION_ERROR",
+        ["Repair or remove the dangling symlink, then retry"],
+      );
+    }
+  } catch (error) {
+    if (error instanceof AxiError) throw error;
+    if (errno(error) !== "ENOENT") throw error;
+  }
+
+  const parent = dirname(absolute);
+  if (parent === absolute) return absolute;
+  return join(canonicalMutationPath(parent), basename(absolute));
+}
+
+/** True when two canonical paths currently identify the same filesystem file. */
+export function sameMutationOwner(left: string, right: string): boolean {
+  if (left === right) return true;
+  try {
+    const leftStat = statSync(left);
+    const rightStat = statSync(right);
+    return (
+      leftStat.ino !== 0 &&
+      rightStat.ino !== 0 &&
+      leftStat.dev === rightStat.dev &&
+      leftStat.ino === rightStat.ino
+    );
+  } catch (error) {
+    if (errno(error) === "ENOENT") return false;
+    throw error;
+  }
+}
+
+/** Read a file's exact bytes, or undefined when it does not exist. */
+export function readFileBytesSafe(path: string): Buffer | undefined {
+  try {
+    return readFileSync(path);
   } catch (error) {
     if (errno(error) === "ENOENT") return undefined;
     throw error;
   }
 }
 
+/** Read a file's UTF-8 contents, or undefined when it does not exist. */
+export function readFileSafe(path: string): string | undefined {
+  return readFileBytesSafe(path)?.toString("utf8");
+}
+
 /** Write `content` atomically: temp file in the same dir, then rename over. */
-export function atomicWrite(path: string, content: string): void {
+export function atomicWrite(path: string, content: string | Uint8Array): void {
   mkdirSync(dirname(path), { recursive: true });
   const tmp = `${path}.tmp-${process.pid}-${Math.floor(
     performance.now() * 1000,

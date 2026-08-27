@@ -1,3 +1,4 @@
+import { encode } from "@toon-format/toon";
 import { runAxiCli } from "axi-sdk-js";
 import {
   requireFlagValue,
@@ -49,6 +50,9 @@ import {
   publicFollowupSubcommandHelp,
 } from "./commands/public-followup.js";
 import { SETUP_HELP, setupCommand } from "./commands/setup.js";
+import { REVISION_HELP, revisionCommand } from "./commands/revision.js";
+import { AxiError, exitCodeForError } from "./errors.js";
+import { CasRefusalError } from "./revision.js";
 import type { SuggestionGlobals } from "./suggestions.js";
 import { VERSION } from "./version.js";
 
@@ -63,10 +67,10 @@ type MainOptions = {
 };
 
 export const TOP_HELP = `usage: tasks-axi [command] [args] [flags]
-commands[19]:
-  (none)=dashboard, add, list, show, start, done, reopen, update, rm, block, unblock, hold, unhold, ready, public-followup, mv, prune, render, setup
-flags[4]:
-  --backend <name> (after command), --file <path> (after command), --json (mutations: machine-readable result), --help, -v/-V/--version
+commands[20]:
+  (none)=dashboard, add, list, show, start, done, reopen, update, rm, block, unblock, hold, unhold, ready, public-followup, revision, mv, prune, render, setup
+flags[5]:
+  --backend <name> (after command), --file <path> (after command), --json (machine-readable result where supported), --help, -v/-V/--version
 examples:
   tasks-axi
   tasks-axi add homemux-h7 "owns HomeMux end to end" --kind secondmate --start
@@ -77,6 +81,7 @@ examples:
   tasks-axi hold fm-x --reason "captain decision pending" --kind captain
   tasks-axi ready
   tasks-axi public-followup ready --json
+  tasks-axi revision --to ../worker/data/backlog.md --json
   tasks-axi setup hooks
 `;
 
@@ -103,6 +108,7 @@ const COMMANDS: Record<string, CommandFn> = {
   unhold: withContext(unholdCommand),
   ready: withContext(readyCommand),
   "public-followup": withContext(publicFollowupCommand),
+  revision: withContext(revisionCommand),
   mv: withContext(mvCommand),
   prune: withContext(pruneCommand),
   render: withContext(renderCommand),
@@ -129,6 +135,7 @@ const COMMAND_HELP: Record<string, string> = {
   unhold: UNHOLD_HELP,
   ready: READY_HELP,
   "public-followup": PUBLIC_FOLLOWUP_HELP,
+  revision: REVISION_HELP,
   mv: MV_HELP,
   prune: PRUNE_HELP,
   render: RENDER_HELP,
@@ -156,7 +163,36 @@ export async function main(options: MainOptions = {}): Promise<void> {
     home: withContext(homeCommand),
     commands: COMMANDS,
     getCommandHelp: (command) => COMMAND_HELP[command],
+    formatError: formatTasksError,
   });
+}
+
+function formatTasksError(error: unknown): {
+  output: string;
+  exitCode: number;
+} {
+  if (error instanceof CasRefusalError) {
+    return {
+      output: `${JSON.stringify(error.toJson(), null, 2)}\n`,
+      exitCode: 1,
+    };
+  }
+  if (error instanceof AxiError) {
+    const payload: Record<string, unknown> = {
+      error: error.message,
+      code: error.code,
+    };
+    if (error.suggestions.length > 0) payload.help = error.suggestions;
+    return {
+      output: `${encode(payload)}\n`,
+      exitCode: exitCodeForError(error),
+    };
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    output: `${encode({ error: message, code: "UNKNOWN" })}\n`,
+    exitCode: 1,
+  };
 }
 
 /** Strip the global --backend/--file flags and run the handler on the rest. */

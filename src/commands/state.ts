@@ -1,6 +1,6 @@
-import { isAbsolute, resolve } from "node:path";
-import { existsSync, statSync } from "node:fs";
+import { resolve } from "node:path";
 import { MarkdownStore } from "../backends/markdown.js";
+import { resolveBacklogTarget } from "../backlog-path.js";
 import {
   parseNonNegativeIntegerFlag,
   requireNoUnknownFlags,
@@ -36,6 +36,7 @@ import {
   PUBLIC_FOLLOWUP_KIND,
   clonePublicFollowup,
 } from "../public-followup.js";
+import { CasRefusalError } from "../revision.js";
 import type { Store } from "../store.js";
 import { getSuggestions } from "../suggestions.js";
 import { renderHelp, renderOutput } from "../toon.js";
@@ -108,10 +109,18 @@ Duplicate ids are ignored after their first occurrence.
 Refuses if a moved item's dependency or active dependent would be stranded in the other
 file - include the whole set, or move the missing endpoint there first.
 flags:
+  --cas   require an atomic v1 comparison of both owner revisions; output is JSON
+  --expected-source-revision <token>       required with --cas
+  --expected-destination-revision <token>  required with --cas
   --json   print the result as a JSON object
+Obtain both tokens with \`tasks-axi revision --to <path-or-dir> --json\`.
+CAS refusal is always machine-readable JSON with current safe revision evidence.
 examples:
   tasks-axi mv hibit-cert-cleanup --to ../homemux/data/backlog.md
-  tasks-axi mv blocker-b1 dependent-d2 --to ../homemux/data/backlog.md`;
+  tasks-axi mv blocker-b1 dependent-d2 --to ../homemux/data/backlog.md
+  tasks-axi mv delegated-q1 --to ../worker/data/backlog.md --cas \\
+    --expected-source-revision <source-token> \\
+    --expected-destination-revision <destination-token>`;
 
 export async function startCommand(
   rawArgs: string[],
@@ -642,16 +651,31 @@ export async function readyCommand(
   return renderOutput(blocks);
 }
 
-function resolveBacklogTarget(to: string): string {
-  const base = isAbsolute(to) ? to : resolve(process.cwd(), to);
-  if (existsSync(base) && statSync(base).isDirectory()) {
-    for (const candidate of ["data/backlog.md", "backlog.md"]) {
-      const full = resolve(base, candidate);
-      if (existsSync(full)) return full;
+interface TakenCasRevision {
+  present: boolean;
+  value?: string;
+}
+
+/** Take a CAS token without rejecting absence before the locked CAS boundary. */
+function takeCasRevisionFlag(args: string[], flag: string): TakenCasRevision {
+  const equalsPrefix = `${flag}=`;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg.startsWith(equalsPrefix)) {
+      args.splice(i, 1);
+      return { present: true, value: arg.slice(equalsPrefix.length) };
     }
-    return resolve(base, "data/backlog.md");
+    if (arg === flag) {
+      const next = args[i + 1];
+      if (next === undefined || next.startsWith("--")) {
+        args.splice(i, 1);
+        return { present: true };
+      }
+      args.splice(i, 2);
+      return { present: true, value: next };
+    }
   }
-  return base;
+  return { present: false };
 }
 
 function taskToInput(task: Task): TaskInput {
@@ -684,6 +708,17 @@ export async function mvCommand(
   const args = [...rawArgs];
 
   const json = takeBoolFlag(args, "--json");
+  const cas = takeBoolFlag(args, "--cas");
+  const expectedSource = takeCasRevisionFlag(
+    args,
+    "--expected-source-revision",
+  );
+  const expectedDestination = takeCasRevisionFlag(
+    args,
+    "--expected-destination-revision",
+  );
+  const casRequested =
+    cas || expectedSource.present || expectedDestination.present;
   const to = requireNonEmptySingleLineFlagValue("--to", takeFlag(args, "--to"));
   if (to === undefined) {
     throw new AxiError("--to <path-or-dir> is required", "VALIDATION_ERROR", [
@@ -700,45 +735,67 @@ export async function mvCommand(
   const ids = [...new Set(positionals.map((p) => requireId(p, "id")))];
 
   const targetPath = resolveBacklogTarget(to);
-  if (resolve(targetPath) === resolve(config.path)) {
-    throw new AxiError(
-      "--to resolves to the current backlog",
-      "VALIDATION_ERROR",
-    );
-  }
-
-  const tasks: Task[] = [];
-  for (const id of ids) {
-    const task = await store.get(id);
-    if (!task) throw notFound(id, { globals: context?.suggestionGlobals });
-    tasks.push(task);
-  }
-
   const target = new MarkdownStore({ path: targetPath });
-  for (const id of ids) {
-    if (await target.get(id)) {
+  let casResult:
+    | Awaited<ReturnType<NonNullable<Store["moveManyToCas"]>>>
+    | undefined;
+
+  if (casRequested) {
+    if (!store.moveManyToCas) {
+      throw new CasRefusalError(
+        [{ owner: "operation", reason: "unsupported_backend" }],
+        undefined,
+        "The active backend does not support compare-and-swap moves",
+      );
+    }
+    casResult = await store.moveManyToCas(ids, target, {
+      ...(expectedSource.value !== undefined
+        ? { source: expectedSource.value }
+        : {}),
+      ...(expectedDestination.value !== undefined
+        ? { destination: expectedDestination.value }
+        : {}),
+    });
+  } else {
+    if (resolve(targetPath) === resolve(config.path)) {
       throw new AxiError(
-        `Task "${id}" already exists in the destination backlog`,
-        "CONFLICT",
+        "--to resolves to the current backlog",
+        "VALIDATION_ERROR",
+      );
+    }
+
+    const tasks: Task[] = [];
+    for (const id of ids) {
+      const task = await store.get(id);
+      if (!task) throw notFound(id, { globals: context?.suggestionGlobals });
+      tasks.push(task);
+    }
+
+    for (const id of ids) {
+      if (await target.get(id)) {
+        throw new AxiError(
+          `Task "${id}" already exists in the destination backlog`,
+          "CONFLICT",
+        );
+      }
+    }
+
+    if (store instanceof MarkdownStore) {
+      await store.moveManyTo(ids, target);
+    } else if (ids.length === 1) {
+      await target.create(taskToInput(tasks[0]));
+      await store.remove(ids[0]);
+    } else {
+      throw new AxiError(
+        "Moving multiple tasks at once requires the markdown backend",
+        "UNSUPPORTED",
       );
     }
   }
 
-  if (store instanceof MarkdownStore) {
-    await store.moveManyTo(ids, target);
-  } else if (ids.length === 1) {
-    await target.create(taskToInput(tasks[0]));
-    await store.remove(ids[0]);
-  } else {
-    throw new AxiError(
-      "Moving multiple tasks at once requires the markdown backend",
-      "UNSUPPORTED",
-    );
-  }
-
   const single = ids.length === 1;
   return renderMutation({
-    json,
+    json: json || casRequested,
     confirm: single
       ? `mv ${ids[0]} -> ${targetPath}`
       : `mv ${ids.join(" ")} -> ${targetPath}`,
@@ -748,6 +805,15 @@ export async function mvCommand(
       ...(single ? { id: ids[0] } : { ids }),
       from: config.path,
       to: targetPath,
+      ...(casResult
+        ? {
+            cas: {
+              schema_version: casResult.previous.schema_version,
+              previous: casResult.previous,
+              current: casResult.current,
+            },
+          }
+        : {}),
     },
     suggestions: getSuggestions({
       action: "mv",

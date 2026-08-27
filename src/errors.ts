@@ -9,6 +9,7 @@ export type ErrorCode =
   | "NOT_FOUND"
   | "LOCKED"
   | "CONFLICT"
+  | "CAS_REFUSED"
   | "UNSUPPORTED"
   | "UNKNOWN";
 

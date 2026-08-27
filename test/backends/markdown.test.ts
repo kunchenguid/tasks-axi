@@ -1400,6 +1400,8 @@ describe("MarkdownStore", () => {
           deps: true,
           prune: true,
           customStates: true,
+          ownerRevisions: true,
+          casMove: true,
         });
       } finally {
         b.cleanup();
