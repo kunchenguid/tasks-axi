@@ -122,6 +122,9 @@ tasks-axi mv blocker-b1 dependent-d2 --to ../homemux/data/backlog.md
 
 Output is [TOON](https://toonformat.dev)-encoded and token-efficient.
 The long task body is truncated by default — the whole point is that `list` stays cheap; use `--full` only when you need the complete notes.
+A bare `tasks-axi list` is the dispatch view: only ready work (unblocked, unheld queued tasks), ranked by priority, one short `{id,state,priority}` line per task, so queue re-evaluations stay cheap.
+`--compact` forces those one-line rows under any flags, and `--all` restores the full backlog listing (every state, full schema).
+Any other list flag (`--state`, `--repo`, `--kind`, `--blocked`, `--limit`, `--fields`) keeps the full-schema listing exactly as before.
 `update --body` and `update --body-file` replace the body wholesale, so agents should inspect the current body first and write back the curated current state rather than appending a journal entry.
 `--archive-body` preserves the replaced body in `note-archive.md` using the same dated markdown archive block style as done pruning.
 Every write leads with a terse `ok:` line confirming the write result, including the resulting task state when the command changes one (e.g. `ok: start lavish-share -> In flight`, `ok: done grok-harness-g7 -> Done (pr <url>)`, `ok: render -> normalized 3`), followed by state-aware next-step hints that never suggest an action the command just performed.

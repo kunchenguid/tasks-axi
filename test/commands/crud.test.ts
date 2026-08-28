@@ -397,16 +397,105 @@ describe("crud commands", () => {
   });
 
   describe("list", () => {
-    it("emits a count line and the default compact schema", async () => {
+    it("bare list is the dispatch view: ready-only one-line rows", async () => {
       const b = makeBacklog();
       try {
         const out = await listCommand([], b.ctx);
         expect(out).toMatch(/count: \d+/);
         expect(out).toContain("tasks[");
-        expect(out).toContain("{id,state,kind,repo,priority,title}");
+        expect(out).toContain("{id,state,priority}");
+        expect(out).not.toContain("{id,state,kind,repo,priority,title}");
+        // only ready work: queued unblocked/unheld tasks, never done or in-flight
+        expect(out).not.toContain("owns-widget-h7");
+        expect(out).not.toContain("design-scout-d4");
+        expect(out).toContain("lease-adopt");
+        expect(out).toContain("cert-cleanup");
         expect(() => decode(out)).not.toThrow();
         // the long body is never in list
         expect(out).not.toContain("Follow-up note added later");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("bare list excludes blocked queued work", async () => {
+      const b = makeBacklog();
+      try {
+        await b.store.addDep("cert-cleanup", {
+          type: "blocked-by",
+          id: "owns-widget-h7",
+        });
+        const out = await listCommand([], b.ctx);
+        expect(out).not.toContain("cert-cleanup");
+        expect(out).toContain("lease-adopt");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("bare list excludes held queued work", async () => {
+      const b = makeBacklog();
+      try {
+        await b.store.update("cert-cleanup", {
+          hold: { reason: "captain gate", kind: "captain" },
+        });
+        const out = await listCommand([], b.ctx);
+        expect(out).not.toContain("cert-cleanup");
+        expect(out).toContain("lease-adopt");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("gives a definitive empty dispatch state", async () => {
+      const b = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      try {
+        const out = await listCommand([], b.ctx);
+        expect(out).toContain("count: 0");
+        expect(out).toContain("0 ready tasks in this backlog");
+        expect(() => decode(out)).not.toThrow();
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("bare list suggests dispatch follow-ups", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await listCommand([], b.ctx);
+        expect(out).toContain(
+          "Run `tasks-axi start <id>` to dispatch one of these",
+        );
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("--all restores the full backlog listing (every state, full schema)", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await listCommand(["--all"], b.ctx);
+        expect(out).toContain("{id,state,kind,repo,priority,title}");
+        expect(out).toContain("owns-widget-h7");
+        expect(out).toContain("design-scout-d4");
+        expect(() => decode(out)).not.toThrow();
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("--compact forces one-line rows under any flags", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await listCommand(
+          ["--compact", "--state", "queued"],
+          b.ctx,
+        );
+        expect(out).toContain("{id,state,priority}");
+        expect(out).not.toContain("{id,state,kind,repo,priority,title}");
+        // the state filter still applies
+        expect(out).toContain("lease-adopt");
+        expect(out).not.toContain("owns-widget-h7");
       } finally {
         b.cleanup();
       }
@@ -441,7 +530,7 @@ describe("crud commands", () => {
       const b = makeBacklog();
       try {
         await addCommand(["long-title-q1", "x".repeat(100)], b.ctx);
-        const out = await listCommand([], b.ctx);
+        const out = await listCommand(["--all"], b.ctx);
         expect(out).toContain("use show long-title-q1 --full");
         expect(out).not.toContain("use --full to see complete text");
       } finally {
@@ -580,12 +669,14 @@ describe("crud commands", () => {
       }
     });
 
-    it("shows the priority column by default", async () => {
+    it("shows the priority column in every list view", async () => {
       const b = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
       try {
         await addCommand(["p-q1", "ranked", "--priority", "3"], b.ctx);
-        const out = await listCommand([], b.ctx);
-        expect(out).toContain("{id,state,kind,repo,priority,title}");
+        const compact = await listCommand([], b.ctx);
+        expect(compact).toContain("{id,state,priority}");
+        const full = await listCommand(["--all"], b.ctx);
+        expect(full).toContain("{id,state,kind,repo,priority,title}");
       } finally {
         b.cleanup();
       }
@@ -672,7 +763,7 @@ describe("crud commands", () => {
         ).rejects.toMatchObject({
           code: "NOT_FOUND",
           suggestions: [
-            "Run `tasks-axi list --file='other backlog.md'` to see existing tasks",
+            "Run `tasks-axi list --all --file='other backlog.md'` to see existing tasks",
           ],
         });
       } finally {

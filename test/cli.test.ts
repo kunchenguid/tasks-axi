@@ -136,7 +136,7 @@ describe("CLI entrypoint", () => {
     expect(out).toContain("solo-q1");
     expect(out).not.toContain("cert-cleanup");
     expect(decodedHelp(out)).toContain(
-      `Run \`tasks-axi show <id> --file=${quoteSuggestionValue(other)}\` for full notes on a task`,
+      `Run \`tasks-axi start <id> --file=${quoteSuggestionValue(other)}\` to dispatch one of these`,
     );
   });
 
@@ -149,7 +149,7 @@ describe("CLI entrypoint", () => {
       stdout: c.stdout,
     });
     expect(decodedHelp(c.read())).toContain(
-      `Run \`tasks-axi show <id> --backend=markdown --file=${quoteSuggestionValue(other)}\` for full notes on a task`,
+      `Run \`tasks-axi start <id> --backend=markdown --file=${quoteSuggestionValue(other)}\` to dispatch one of these`,
     );
   });
 

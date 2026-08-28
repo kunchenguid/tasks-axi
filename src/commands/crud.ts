@@ -13,7 +13,7 @@ import { deriveLinks, extractTags } from "../backends/markdown-grammar.js";
 import { PR_URL_EXPECTED } from "../pr-url.js";
 import { renderMutation, stateLabel, taskToJson } from "../confirm.js";
 import { requireCtx, type TasksContext } from "../context.js";
-import { blockedIds, byPriorityDesc, heldTasks } from "../derive.js";
+import { blockedIds, byPriorityDesc, heldTasks, readyTasks } from "../derive.js";
 import { AxiError, notFound } from "../errors.js";
 import { parseFields } from "../fields.js";
 import { formatCountLine } from "../format.js";
@@ -37,6 +37,8 @@ import type { Store } from "../store.js";
 import { getSuggestions } from "../suggestions.js";
 import { renderHelp, renderOutput, renderScalar } from "../toon.js";
 import {
+  LIST_COMPACT,
+  LIST_DEFAULT,
   LIST_EXTRA_FIELDS,
   renderTaskDetail,
   renderTaskList,
@@ -58,12 +60,21 @@ examples:
   tasks-axi add "quick note" --mint`;
 
 export const LIST_HELP = `usage: tasks-axi list [flags]
+default (no flags): the dispatch view - only ready work (unblocked, unheld
+queued tasks), ranked by priority, one short {id,state,priority} line per task,
+so queue re-evaluations stay cheap. Any filter flag keeps the full-schema
+listing.
 flags:
+  --compact   one-line {id,state,priority} rows, composes with any flags
+  --all       every state, full default schema (the pre-compact default)
   --state <queued|in_flight|done|held>, --repo <name>, --kind <name>, --blocked
   --limit <n>, --fields <a,b,c>  (extra: ${Object.keys(LIST_EXTRA_FIELDS)
     .sort()
     .join(", ")})
 examples:
+  tasks-axi list
+  tasks-axi list --all
+  tasks-axi list --compact --state queued
   tasks-axi list --state queued
   tasks-axi list --repo no-mistakes --fields blocked_by,created
   tasks-axi list --blocked`;
@@ -386,10 +397,10 @@ export async function listCommand(
   const { store } = requireCtx(context);
   const args = [...rawArgs];
 
-  const { extraDefs } = parseFields(
-    takeFlag(args, "--fields"),
-    LIST_EXTRA_FIELDS,
-  );
+  const compact = takeBoolFlag(args, "--compact");
+  const allStates = takeBoolFlag(args, "--all");
+  const fieldsArg = takeFlag(args, "--fields");
+  const { extraDefs } = parseFields(fieldsArg, LIST_EXTRA_FIELDS);
   const state = parseListStateFlag(takeFlag(args, "--state"));
   const repo = requireNonEmptySingleLineFlagValue(
     "--repo",
@@ -406,6 +417,18 @@ export async function listCommand(
   );
   requirePositionals(args, 0, 0, LIST_HELP.split("\n")[0]);
 
+  // A bare `list` (or `list --compact`) is the dispatch view: only ready work.
+  // Any other flag keeps the full-schema backlog listing, so every existing
+  // flag combination keeps its current output.
+  const dispatchView =
+    !allStates &&
+    state === undefined &&
+    repo === undefined &&
+    kind === undefined &&
+    !onlyBlocked &&
+    limit === undefined &&
+    fieldsArg === undefined;
+
   // The full set is needed to derive `blocked` (a dep-graph projection), so the
   // list command filters in the CLI rather than pushing every filter to the
   // store. The store's own filtering is exercised by `home` and `ready`.
@@ -414,14 +437,18 @@ export async function listCommand(
   const held = new Set(heldTasks(all).map((t) => t.id));
 
   let matched = all;
-  if (state === "held") {
-    matched = matched.filter((t) => held.has(t.id));
-  } else if (state) {
-    matched = matched.filter((t) => t.state === state);
+  if (dispatchView) {
+    matched = readyTasks(all);
+  } else {
+    if (state === "held") {
+      matched = matched.filter((t) => held.has(t.id));
+    } else if (state) {
+      matched = matched.filter((t) => t.state === state);
+    }
+    if (repo) matched = matched.filter((t) => t.repo === repo);
+    if (kind) matched = matched.filter((t) => (t.kind ?? "task") === kind);
+    if (onlyBlocked) matched = matched.filter((t) => blocked.has(t.id));
   }
-  if (repo) matched = matched.filter((t) => t.repo === repo);
-  if (kind) matched = matched.filter((t) => (t.kind ?? "task") === kind);
-  if (onlyBlocked) matched = matched.filter((t) => blocked.has(t.id));
 
   // Rank by priority (highest first) always, even under --state/--repo/--kind
   // filters: ranked output is the point. A caller wanting raw file order reads
@@ -439,20 +466,22 @@ export async function listCommand(
     totalCount: total,
   });
 
+  const schema = compact || dispatchView ? LIST_COMPACT : LIST_DEFAULT;
+
   const blocks: string[] = [countLine];
   if (isEmpty) {
-    blocks.push(emptyState(state, repo, kind, onlyBlocked));
+    blocks.push(emptyState(dispatchView ? "ready" : state, repo, kind, onlyBlocked));
   } else {
-    blocks.push(renderTaskList("tasks", items, all, extraDefs));
+    blocks.push(renderTaskList("tasks", items, all, extraDefs, schema));
   }
   blocks.push(
     renderHelp(
       getSuggestions({
-        action: "list",
+        action: dispatchView ? "ready" : "list",
         isEmpty,
         globals: context?.suggestionGlobals,
         filters: {
-          ...(state !== undefined ? { state } : {}),
+          ...(!dispatchView && state !== undefined ? { state } : {}),
           ...(repo !== undefined ? { repo } : {}),
           ...(kind !== undefined ? { kind } : {}),
         },

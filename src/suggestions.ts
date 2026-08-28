@@ -42,7 +42,7 @@ const table: Entry[] = [
   {
     match: (c) => c.action === "home",
     lines: () => [
-      "Run `tasks-axi list` for the full backlog",
+      "Run `tasks-axi list --all` for the full backlog",
       "Run `tasks-axi ready` to see unblocked queued work",
       'Run `tasks-axi add <id> "<title>" --start` to add and start a task',
     ],
@@ -158,7 +158,7 @@ const table: Entry[] = [
   },
   {
     match: (c) => c.action === "rm",
-    lines: () => ["Run `tasks-axi list` to see remaining tasks"],
+    lines: () => ["Run `tasks-axi list --all` to see remaining tasks"],
   },
   {
     match: (c) => c.action === "prune",
@@ -168,11 +168,11 @@ const table: Entry[] = [
   },
   {
     match: (c) => c.action === "mv",
-    lines: () => ["Run `tasks-axi list` to see remaining tasks"],
+    lines: () => ["Run `tasks-axi list --all` to see remaining tasks"],
   },
   {
     match: (c) => c.action === "render",
-    lines: () => ["Run `tasks-axi list` to see the normalized backlog"],
+    lines: () => ["Run `tasks-axi list --all` to see the normalized backlog"],
   },
 ];
 

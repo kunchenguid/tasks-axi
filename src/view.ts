@@ -74,6 +74,13 @@ export const LIST_DEFAULT: FieldDef[] = [
   field("title"),
 ];
 
+/** One short line per task: id + state + priority (compact/dispatch view). */
+export const LIST_COMPACT: FieldDef[] = [
+  field("id"),
+  field("state"),
+  field("priority"),
+];
+
 /** Allow-list of additional list columns requestable with `--fields a,b,c`. */
 export const LIST_EXTRA_FIELDS: Record<string, FieldDef> = {
   blocked: field("blocked"),
@@ -118,6 +125,7 @@ export function renderTaskList(
   tasks: Task[],
   all: Task[],
   extra: FieldDef[] = [],
+  schema: FieldDef[] = LIST_DEFAULT,
 ): string {
   const rows = tasks.map((t) =>
     toRow(t, {
@@ -125,7 +133,7 @@ export function renderTaskList(
       truncationHint: showFullTextHint(t),
     }),
   );
-  return renderList(label, rows, [...LIST_DEFAULT, ...extra]);
+  return renderList(label, rows, [...schema, ...extra]);
 }
 
 export function renderTaskDetail(
