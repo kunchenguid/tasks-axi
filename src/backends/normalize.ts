@@ -182,7 +182,10 @@ export function addBodyLine(body: string | undefined, line: string): string {
   return body ? `${body}\n${line}` : line;
 }
 
-export function sameHold(left: Hold | undefined, right: Hold | undefined): boolean {
+export function sameHold(
+  left: Hold | undefined,
+  right: Hold | undefined,
+): boolean {
   return (
     left?.reason === right?.reason &&
     left?.kind === right?.kind &&

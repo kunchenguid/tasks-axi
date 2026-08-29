@@ -301,7 +301,9 @@ export class BeadsStore implements Store {
           if (code === 0) {
             resolvePromise(stdout);
           } else {
-            rejectPromise(this.bdError(args[0], stderr.trim() || stdout.trim()));
+            rejectPromise(
+              this.bdError(args[0], stderr.trim() || stdout.trim()),
+            );
           }
         });
       });
@@ -319,7 +321,9 @@ export class BeadsStore implements Store {
       return new AxiError(
         `beads backend: no beads database found in ${this.dir}`,
         "VALIDATION_ERROR",
-        [`Run \`bd init\` in ${this.dir}, or point [beads] dir at the workspace`],
+        [
+          `Run \`bd init\` in ${this.dir}, or point [beads] dir at the workspace`,
+        ],
       );
     }
     if (/database is locked|\block\b|\bbusy\b|another process/i.test(detail)) {
@@ -360,7 +364,10 @@ export class BeadsStore implements Store {
         parsed && typeof parsed === "object" && "error" in parsed
           ? String((parsed as { error: unknown }).error)
           : "unexpected non-array output";
-      throw new AxiError(`beads backend: bd list failed — ${message}`, "UNKNOWN");
+      throw new AxiError(
+        `beads backend: bd list failed — ${message}`,
+        "UNKNOWN",
+      );
     }
     const issues = parsed as BdIssue[];
     const tasks: Task[] = [];
@@ -379,11 +386,7 @@ export class BeadsStore implements Store {
     return this.cache;
   }
 
-  private taskOrder(
-    a: Task,
-    b: Task,
-    createdAt: Map<string, string>,
-  ): number {
+  private taskOrder(a: Task, b: Task, createdAt: Map<string, string>): number {
     const stateRank = (t: Task) => ORDER.indexOf(t.state);
     if (stateRank(a) !== stateRank(b)) return stateRank(a) - stateRank(b);
     if (a.state === "done") {
@@ -452,12 +455,15 @@ export class BeadsStore implements Store {
       if (dep.reason) reasons[depReasonKey(dep)] = dep.reason;
     }
     if (Object.keys(reasons).length > 0) ta.dep_reasons = reasons;
-    if (task.meta && Object.keys(task.meta).length > 0) ta.meta = { ...task.meta };
+    if (task.meta && Object.keys(task.meta).length > 0)
+      ta.meta = { ...task.meta };
     return ta;
   }
 
   private metadataArg(task: Task, extra?: Partial<TasksAxiMeta>): string {
-    return JSON.stringify({ tasks_axi: { ...this.metaPayload(task), ...extra } });
+    return JSON.stringify({
+      tasks_axi: { ...this.metaPayload(task), ...extra },
+    });
   }
 
   private async requireTask(id: string): Promise<Task> {
@@ -682,9 +688,10 @@ export class BeadsStore implements Store {
         patch.archiveBody && patch.body !== undefined && task.body !== nextBody
           ? task.body
           : undefined;
-      const archivedTask = supersededBody !== undefined
-        ? { ...cloneTask(task), body: supersededBody }
-        : undefined;
+      const archivedTask =
+        supersededBody !== undefined
+          ? { ...cloneTask(task), body: supersededBody }
+          : undefined;
 
       const changed: TaskUpdateChange[] = [];
       const markChanged = (field: TaskUpdateChange) => {
@@ -788,9 +795,17 @@ export class BeadsStore implements Store {
         // bd flips the status to `deferred` whenever --defer is set (verified
         // on bd 1.2.2); re-assert the current status in the same update so a
         // hold never changes the task's state.
-        args.push("--defer", task.hold?.until ?? "", "-s", BD_STATUS[task.state]);
+        args.push(
+          "--defer",
+          task.hold?.until ?? "",
+          "-s",
+          BD_STATUS[task.state],
+        );
       }
-      await this.runBd(args, changed.includes("body") ? (task.body ?? "") : undefined);
+      await this.runBd(
+        args,
+        changed.includes("body") ? (task.body ?? "") : undefined,
+      );
 
       if (archivedTask) {
         this.appendArchiveBlock(

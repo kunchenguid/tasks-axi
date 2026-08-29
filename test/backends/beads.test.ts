@@ -201,11 +201,15 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore CRUD", () => {
     "refuses public-followups as unsupported",
     async () => {
       await expect(
-        bl.store.create({ id: "pf-x1", title: "promise", kind: "public-followup" }),
+        bl.store.create({
+          id: "pf-x1",
+          title: "promise",
+          kind: "public-followup",
+        }),
       ).rejects.toMatchObject({ code: "UNSUPPORTED" });
-      await expect(
-        bl.store.updatePublicFollowup(),
-      ).rejects.toMatchObject({ code: "UNSUPPORTED" });
+      await expect(bl.store.updatePublicFollowup()).rejects.toMatchObject({
+        code: "UNSUPPORTED",
+      });
     },
     IT_TIMEOUT,
   );
@@ -313,7 +317,11 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore update", () => {
     "sets, renders, and clears structured holds",
     async () => {
       await bl.store.update("upd-u1", {
-        hold: { reason: "captain decision pending", kind: "captain", until: "2026-08-01" },
+        hold: {
+          reason: "captain decision pending",
+          kind: "captain",
+          until: "2026-08-01",
+        },
       });
       let task = await bl.store.get("upd-u1");
       expect(task?.hold).toEqual({
@@ -375,7 +383,10 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore update", () => {
       });
       let task = await bl.store.get("upd-u2");
       expect(task?.state).toBe("in_flight");
-      expect(task?.hold).toEqual({ reason: "captain gate", until: "2026-09-01" });
+      expect(task?.hold).toEqual({
+        reason: "captain gate",
+        until: "2026-09-01",
+      });
       const mirror = bl.mirror();
       const inFlight = mirror.indexOf("## In flight");
       const queued = mirror.indexOf("## Queued");
@@ -513,8 +524,12 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore maintenance and mirror", () => {
       expect(await bl.store.get("old-o1")).toBeNull();
       const archive = bl.archive();
       expect(archive).toContain("## Archived 2026-07-01");
-      expect(archive).toContain("- [x] old-o1 - finished old-o1 (done 2026-06-01)");
-      expect(archive).toContain("- [x] old-o2 - finished old-o2 (done 2026-06-02)");
+      expect(archive).toContain(
+        "- [x] old-o1 - finished old-o1 (done 2026-06-01)",
+      );
+      expect(archive).toContain(
+        "- [x] old-o2 - finished old-o2 (done 2026-06-02)",
+      );
       expect(bl.mirror()).not.toContain("old-o1");
     },
     IT_TIMEOUT,

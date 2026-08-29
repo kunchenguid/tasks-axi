@@ -44,7 +44,14 @@ export function makeBeadsBacklog(now = "2026-07-01"): TempBeadsBacklog {
   const dir = mkdtempSync(join(tmpdir(), "tasks-axi-beads-"));
   execFileSync(
     "bd",
-    ["init", "--non-interactive", "--skip-hooks", "--skip-agents", "--prefix", "tst"],
+    [
+      "init",
+      "--non-interactive",
+      "--skip-hooks",
+      "--skip-agents",
+      "--prefix",
+      "tst",
+    ],
     {
       cwd: dir,
       env: { ...process.env, BEADS_DIR: join(dir, ".beads") },
