@@ -72,6 +72,11 @@ import {
  * `tasks_axi.archived` in bd (hidden from tasks-axi, retained by beads).
  * Public-followups are unsupported: their compare-and-swap contract has no bd
  * primitive yet, and firstmate only needs them when Relay is enabled.
+ *
+ * Mutations serialize under the mirror-path advisory lock and fail closed
+ * with LOCKED on contention, like the markdown backend; reads stay lock-free.
+ * bd-native writers bypass this lock, so a raw `bd create --id X --force`
+ * racing tasks-axi can still silently overwrite an existing issue.
  */
 
 export interface BeadsStoreOptions {
@@ -317,7 +322,7 @@ export class BeadsStore implements Store {
         [`Run \`bd init\` in ${this.dir}, or point [beads] dir at the workspace`],
       );
     }
-    if (/lock|locked|busy|another process/i.test(detail)) {
+    if (/database is locked|\block\b|\bbusy\b|another process/i.test(detail)) {
       return new AxiError(
         `beads backend: the beads database is busy — ${firstLine}`,
         "LOCKED",
@@ -360,19 +365,25 @@ export class BeadsStore implements Store {
     const issues = parsed as BdIssue[];
     const tasks: Task[] = [];
     const rawIds = new Set<string>();
+    const createdAt = new Map<string, string>();
     for (const issue of issues) {
       if (!issue || typeof issue.id !== "string") continue;
       rawIds.add(issue.id);
+      createdAt.set(issue.id, issue.created_at ?? "");
       const ta = this.tasksAxiMeta(issue);
       if (ta.archived) continue;
       tasks.push(this.taskFromIssue(issue, ta));
     }
-    tasks.sort((a, b) => this.taskOrder(a, b, issues));
+    tasks.sort((a, b) => this.taskOrder(a, b, createdAt));
     this.cache = { tasks, byId: new Map(tasks.map((t) => [t.id, t])), rawIds };
     return this.cache;
   }
 
-  private taskOrder(a: Task, b: Task, issues: BdIssue[]): number {
+  private taskOrder(
+    a: Task,
+    b: Task,
+    createdAt: Map<string, string>,
+  ): number {
     const stateRank = (t: Task) => ORDER.indexOf(t.state);
     if (stateRank(a) !== stateRank(b)) return stateRank(a) - stateRank(b);
     if (a.state === "done") {
@@ -381,9 +392,9 @@ export class BeadsStore implements Store {
       const closedCmp = (b.closed ?? "").localeCompare(a.closed ?? "");
       if (closedCmp !== 0) return closedCmp;
     }
-    const createdAt = (t: Task) =>
-      issues.find((i) => i.id === t.id)?.created_at ?? "";
-    const createdCmp = createdAt(a).localeCompare(createdAt(b));
+    const createdCmp = (createdAt.get(a.id) ?? "").localeCompare(
+      createdAt.get(b.id) ?? "",
+    );
     if (createdCmp !== 0) return createdCmp;
     return a.id.localeCompare(b.id);
   }
@@ -536,10 +547,7 @@ export class BeadsStore implements Store {
       }),
     };
     const content = renderBacklog(doc);
-    mkdirSync(dirname(this.mirrorPath), { recursive: true });
-    await withLock(this.mirrorPath, () => {
-      atomicWrite(this.mirrorPath, content);
-    });
+    atomicWrite(this.mirrorPath, content);
     return cache;
   }
 
@@ -547,6 +555,19 @@ export class BeadsStore implements Store {
     mkdirSync(dirname(path), { recursive: true });
     const block = `\n## Archived ${this.now()}\n${lines.join("\n")}\n`;
     appendFileSync(path, block, "utf8");
+  }
+
+  /**
+   * Serialize a mutation under the mirror-path advisory lock and drop the
+   * list cache inside it, so check-then-act guards (duplicate ids, active
+   * dependents) run against fresh bd state. Fails closed with LOCKED on
+   * contention like the markdown backend; reads stay lock-free.
+   */
+  private mutate<T>(fn: () => Promise<T>): Promise<T> {
+    return withLock(this.mirrorPath, () => {
+      this.invalidate();
+      return fn();
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -596,174 +617,203 @@ export class BeadsStore implements Store {
 
   async create(input: TaskInput): Promise<Task> {
     const task = this.taskFromInput(input);
-    const cache = await this.loadAll();
-    if (cache.rawIds.has(task.id)) {
-      throw new AxiError(`Task "${task.id}" already exists`, "CONFLICT");
-    }
-    this.requireExistingDeps(cache, task.deps);
+    return this.mutate(async () => {
+      const cache = await this.loadAll();
+      if (cache.rawIds.has(task.id)) {
+        throw new AxiError(`Task "${task.id}" already exists`, "CONFLICT");
+      }
+      this.requireExistingDeps(cache, task.deps);
 
-    const args = [
-      "create",
-      "--title",
-      task.title,
-      "--id",
-      task.id,
-      "--force",
-      "-t",
-      "task",
-      "--silent",
-      "--metadata",
-      this.metadataArg(task),
-    ];
-    if (task.priority !== undefined) args.push("-p", String(task.priority));
-    if (task.hold?.until) args.push("--defer", task.hold.until);
-    if (task.body !== undefined) args.push("--body-file", "-");
-    await this.runBd(args, task.body);
+      const args = [
+        "create",
+        "--title",
+        task.title,
+        "--id",
+        task.id,
+        "--force",
+        "-t",
+        "task",
+        "--silent",
+        "--metadata",
+        this.metadataArg(task),
+      ];
+      if (task.priority !== undefined) args.push("-p", String(task.priority));
+      if (task.hold?.until) args.push("--defer", task.hold.until);
+      if (task.body !== undefined) args.push("--body-file", "-");
+      await this.runBd(args, task.body);
 
-    if (task.state !== "queued") {
-      await this.runBd(["update", task.id, "-s", BD_STATUS[task.state]]);
-    }
-    for (const dep of task.deps) {
-      await this.addBdDep(task.id, dep);
-    }
-    const fresh = await this.writeMirror();
-    return fresh.byId.get(task.id) ?? task;
+      // bd create has no status flag, and its --deps edge direction is the
+      // reverse of blocked-by (verified on bd 1.2.2), so state and deps need
+      // follow-up bd calls; a failure there leaves a partial task in bd.
+      try {
+        if (task.state !== "queued") {
+          await this.runBd(["update", task.id, "-s", BD_STATUS[task.state]]);
+        }
+        for (const dep of task.deps) {
+          await this.addBdDep(task.id, dep);
+        }
+      } catch (error) {
+        const cause =
+          error instanceof AxiError
+            ? error
+            : new AxiError(String(error), "UNKNOWN");
+        throw new AxiError(
+          `${cause.message} — task "${task.id}" was created in beads but is missing its state or dependencies`,
+          cause.code,
+          [
+            `Remove the partial task with \`tasks-axi rm ${task.id}\`, then retry`,
+            ...cause.suggestions,
+          ],
+        );
+      }
+      const fresh = await this.writeMirror();
+      return fresh.byId.get(task.id) ?? task;
+    });
   }
 
   async update(id: string, patch: TaskPatch): Promise<TaskUpdateResult> {
-    const current = await this.requireTask(id);
-    const task = cloneTask(current);
+    return this.mutate(async () => {
+      const current = await this.requireTask(id);
+      const task = cloneTask(current);
 
-    const nextBody =
-      patch.body !== undefined ? patch.body || undefined : task.body;
-    const supersededBody =
-      patch.archiveBody && patch.body !== undefined && task.body !== nextBody
-        ? task.body
+      const nextBody =
+        patch.body !== undefined ? patch.body || undefined : task.body;
+      const supersededBody =
+        patch.archiveBody && patch.body !== undefined && task.body !== nextBody
+          ? task.body
+          : undefined;
+      const archivedTask = supersededBody !== undefined
+        ? { ...cloneTask(task), body: supersededBody }
         : undefined;
-    const archivedTask = supersededBody !== undefined
-      ? { ...cloneTask(task), body: supersededBody }
-      : undefined;
 
-    const changed: TaskUpdateChange[] = [];
-    const markChanged = (field: TaskUpdateChange) => {
-      if (!changed.includes(field)) changed.push(field);
-    };
-    if (patch.title !== undefined) {
-      const title = normalizeTitle(patch.title);
-      if (task.title !== title) {
-        task.title = title;
-        markChanged("title");
+      const changed: TaskUpdateChange[] = [];
+      const markChanged = (field: TaskUpdateChange) => {
+        if (!changed.includes(field)) changed.push(field);
+      };
+      if (patch.title !== undefined) {
+        const title = normalizeTitle(patch.title);
+        if (task.title !== title) {
+          task.title = title;
+          markChanged("title");
+        }
       }
-    }
-    if (patch.body !== undefined && task.body !== nextBody) {
-      if (nextBody === undefined) {
-        delete task.body;
-      } else {
-        task.body = nextBody;
-      }
-      markChanged("body");
-    }
-    for (const line of patch.addBodyLines ?? []) {
-      if (line !== "" && !bodyHasLine(task.body, line)) {
-        task.body = addBodyLine(task.body, line);
+      if (patch.body !== undefined && task.body !== nextBody) {
+        if (nextBody === undefined) {
+          delete task.body;
+        } else {
+          task.body = nextBody;
+        }
         markChanged("body");
       }
-    }
-    if (patch.repo !== undefined) {
-      const repo = normalizeTagValue(patch.repo, "repo");
-      if (task.repo !== repo) {
-        if (repo === undefined) {
-          delete task.repo;
-        } else {
-          task.repo = repo;
+      for (const line of patch.addBodyLines ?? []) {
+        if (line !== "" && !bodyHasLine(task.body, line)) {
+          task.body = addBodyLine(task.body, line);
+          markChanged("body");
         }
-        markChanged("repo");
       }
-    }
-    if (patch.kind !== undefined) {
-      const kind = normalizeTagValue(patch.kind, "kind");
-      if (kind === PUBLIC_FOLLOWUP_KIND) {
-        throw unsupported("public-followups", "beads");
-      }
-      if (task.kind !== kind) {
-        if (kind === undefined) {
-          delete task.kind;
-        } else {
-          task.kind = kind;
+      if (patch.repo !== undefined) {
+        const repo = normalizeTagValue(patch.repo, "repo");
+        if (task.repo !== repo) {
+          if (repo === undefined) {
+            delete task.repo;
+          } else {
+            task.repo = repo;
+          }
+          markChanged("repo");
         }
-        markChanged("kind");
       }
-    }
-    let holdChanged = false;
-    if (patch.hold !== undefined) {
-      const hold = normalizeHold(patch.hold ?? undefined);
-      if (!sameHold(task.hold, hold)) {
-        if (hold) {
-          task.hold = hold;
-        } else {
-          delete task.hold;
+      if (patch.kind !== undefined) {
+        const kind = normalizeTagValue(patch.kind, "kind");
+        if (kind === PUBLIC_FOLLOWUP_KIND) {
+          throw unsupported("public-followups", "beads");
         }
-        holdChanged = true;
-        markChanged("hold");
+        if (task.kind !== kind) {
+          if (kind === undefined) {
+            delete task.kind;
+          } else {
+            task.kind = kind;
+          }
+          markChanged("kind");
+        }
       }
-    }
-    if (patch.priority !== undefined) {
-      const priority = normalizePriority(patch.priority);
-      if (task.priority !== priority) {
-        task.priority = priority;
-        markChanged("priority");
+      let holdChanged = false;
+      if (patch.hold !== undefined) {
+        const hold = normalizeHold(patch.hold ?? undefined);
+        if (!sameHold(task.hold, hold)) {
+          if (hold) {
+            task.hold = hold;
+          } else {
+            delete task.hold;
+          }
+          holdChanged = true;
+          markChanged("hold");
+        }
       }
-    }
-    if (patch.meta) {
-      const meta = { ...task.meta, ...patch.meta };
-      if (!sameMeta(task.meta, meta)) {
-        task.meta = meta;
-        markChanged("meta");
+      if (patch.priority !== undefined) {
+        const priority = normalizePriority(patch.priority);
+        if (task.priority !== priority) {
+          task.priority = priority;
+          markChanged("priority");
+        }
       }
-    }
-    for (const link of patch.addLinks ?? []) {
-      const title = appendTitleLink(task.title, link);
-      if (task.title !== title) {
-        task.title = title;
-        markChanged("links");
+      if (patch.meta) {
+        const meta = { ...task.meta, ...patch.meta };
+        if (!sameMeta(task.meta, meta)) {
+          task.meta = meta;
+          markChanged("meta");
+        }
       }
-    }
-    if (changed.length === 0) return { task: current, changed };
+      for (const link of patch.addLinks ?? []) {
+        const title = appendTitleLink(task.title, link);
+        if (task.title !== title) {
+          task.title = title;
+          markChanged("links");
+        }
+      }
+      if (changed.length === 0) return { task: current, changed };
 
-    task.links = deriveLinks(task.title);
-    task.updated = this.now();
+      task.links = deriveLinks(task.title);
+      task.updated = this.now();
 
-    const args = ["update", id, "--metadata", this.metadataArg(task)];
-    if (task.title !== current.title) args.push("--title", task.title);
-    if (changed.includes("body")) {
-      args.push("--body-file", "-");
-      if (task.body === undefined) args.push("--allow-empty-description");
-    }
-    if (task.priority !== undefined && task.priority !== current.priority) {
-      args.push("-p", String(task.priority));
-    }
-    if (holdChanged) args.push("--defer", task.hold?.until ?? "");
-    await this.runBd(args, changed.includes("body") ? (task.body ?? "") : undefined);
+      const args = ["update", id, "--metadata", this.metadataArg(task)];
+      if (task.title !== current.title) args.push("--title", task.title);
+      if (changed.includes("body")) {
+        args.push("--body-file", "-");
+        if (task.body === undefined) args.push("--allow-empty-description");
+      }
+      if (task.priority !== undefined && task.priority !== current.priority) {
+        args.push("-p", String(task.priority));
+      }
+      if (holdChanged) {
+        // bd flips the status to `deferred` whenever --defer is set (verified
+        // on bd 1.2.2); re-assert the current status in the same update so a
+        // hold never changes the task's state.
+        args.push("--defer", task.hold?.until ?? "", "-s", BD_STATUS[task.state]);
+      }
+      await this.runBd(args, changed.includes("body") ? (task.body ?? "") : undefined);
 
-    if (archivedTask) {
-      this.appendArchiveBlock(
-        this.noteArchivePath,
-        renderTaskLines(archivedTask),
-      );
-      markChanged("archive");
-    }
-    await this.writeMirror();
-    return { task, changed };
+      if (archivedTask) {
+        this.appendArchiveBlock(
+          this.noteArchivePath,
+          renderTaskLines(archivedTask),
+        );
+        markChanged("archive");
+      }
+      await this.writeMirror();
+      return { task, changed };
+    });
   }
 
   async remove(id: string): Promise<Task> {
-    const cache = await this.loadAll();
-    const task = cache.byId.get(id);
-    if (!task) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
-    this.requireNoActiveDependents(cache, id);
-    await this.runBd(["delete", id, "-f"]);
-    await this.writeMirror();
-    return task;
+    return this.mutate(async () => {
+      const cache = await this.loadAll();
+      const task = cache.byId.get(id);
+      if (!task) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
+      this.requireNoActiveDependents(cache, id);
+      await this.runBd(["delete", id, "-f"]);
+      await this.writeMirror();
+      return task;
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -775,50 +825,52 @@ export class BeadsStore implements Store {
     to: State,
     opts: TransitionOpts = {},
   ): Promise<Task> {
-    const current = await this.requireTask(id);
-    const task = cloneTask(current);
-    const date = normalizeDate(opts.date ?? this.now(), "transition date");
+    return this.mutate(async () => {
+      const current = await this.requireTask(id);
+      const task = cloneTask(current);
+      const date = normalizeDate(opts.date ?? this.now(), "transition date");
 
-    if (opts.pr !== undefined) {
-      task.title = appendTitleLink(task.title, { kind: "pr", url: opts.pr });
-    }
-    if (opts.report !== undefined) {
-      task.title = appendTitleLink(task.title, {
-        kind: "report",
-        url: opts.report,
-      });
-    }
-    if (opts.note) {
-      task.body = task.body ? `${task.body}\n${opts.note}` : opts.note;
-    }
-    task.links = deriveLinks(task.title);
+      if (opts.pr !== undefined) {
+        task.title = appendTitleLink(task.title, { kind: "pr", url: opts.pr });
+      }
+      if (opts.report !== undefined) {
+        task.title = appendTitleLink(task.title, {
+          kind: "report",
+          url: opts.report,
+        });
+      }
+      if (opts.note) {
+        task.body = task.body ? `${task.body}\n${opts.note}` : opts.note;
+      }
+      task.links = deriveLinks(task.title);
 
-    task.state = to;
-    if (to === "done") {
-      task.closed = date;
-    } else if (to === "in_flight") {
-      if (!task.created) task.created = date;
-      delete task.closed;
-    } else {
-      delete task.closed;
-    }
-    task.updated = this.now();
+      task.state = to;
+      if (to === "done") {
+        task.closed = date;
+      } else if (to === "in_flight") {
+        if (!task.created) task.created = date;
+        delete task.closed;
+      } else {
+        delete task.closed;
+      }
+      task.updated = this.now();
 
-    const args = [
-      "update",
-      id,
-      "-s",
-      BD_STATUS[to],
-      "--metadata",
-      this.metadataArg(task),
-    ];
-    if (task.title !== current.title) args.push("--title", task.title);
-    const bodyChanged = task.body !== current.body;
-    if (bodyChanged) args.push("--body-file", "-");
-    await this.runBd(args, bodyChanged ? (task.body ?? "") : undefined);
+      const args = [
+        "update",
+        id,
+        "-s",
+        BD_STATUS[to],
+        "--metadata",
+        this.metadataArg(task),
+      ];
+      if (task.title !== current.title) args.push("--title", task.title);
+      const bodyChanged = task.body !== current.body;
+      if (bodyChanged) args.push("--body-file", "-");
+      await this.runBd(args, bodyChanged ? (task.body ?? "") : undefined);
 
-    await this.writeMirror();
-    return task;
+      await this.writeMirror();
+      return task;
+    });
   }
 
   private async addBdDep(id: string, dep: Dep): Promise<void> {
@@ -832,46 +884,50 @@ export class BeadsStore implements Store {
 
   async addDep(id: string, dep: Dep): Promise<boolean> {
     const checkedDep = normalizeDep(id, dep);
-    const cache = await this.loadAll();
-    const task = cache.byId.get(id);
-    if (!task) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
-    if (
-      task.deps.some(
-        (d) => d.type === checkedDep.type && d.id === checkedDep.id,
-      )
-    ) {
-      return false;
-    }
-    this.requireExistingDeps(cache, [checkedDep]);
-    await this.addBdDep(id, checkedDep);
-    if (checkedDep.reason) {
-      const next = cloneTask(task);
-      next.deps.push(checkedDep);
-      await this.runBd(["update", id, "--metadata", this.metadataArg(next)]);
-    }
-    await this.writeMirror();
-    return true;
+    return this.mutate(async () => {
+      const cache = await this.loadAll();
+      const task = cache.byId.get(id);
+      if (!task) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
+      if (
+        task.deps.some(
+          (d) => d.type === checkedDep.type && d.id === checkedDep.id,
+        )
+      ) {
+        return false;
+      }
+      this.requireExistingDeps(cache, [checkedDep]);
+      await this.addBdDep(id, checkedDep);
+      if (checkedDep.reason) {
+        const next = cloneTask(task);
+        next.deps.push(checkedDep);
+        await this.runBd(["update", id, "--metadata", this.metadataArg(next)]);
+      }
+      await this.writeMirror();
+      return true;
+    });
   }
 
   async removeDep(id: string, dep: Dep): Promise<boolean> {
-    const cache = await this.loadAll();
-    const task = cache.byId.get(id);
-    if (!task) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
-    const remaining = task.deps.filter(
-      (d) => !(d.type === dep.type && d.id === dep.id),
-    );
-    if (remaining.length === task.deps.length) return false;
-    await this.runBd(["dep", "remove", id, dep.id]);
-    const removed = task.deps.find(
-      (d) => d.type === dep.type && d.id === dep.id,
-    );
-    if (removed?.reason) {
-      const next = cloneTask(task);
-      next.deps = remaining;
-      await this.runBd(["update", id, "--metadata", this.metadataArg(next)]);
-    }
-    await this.writeMirror();
-    return true;
+    return this.mutate(async () => {
+      const cache = await this.loadAll();
+      const task = cache.byId.get(id);
+      if (!task) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
+      const remaining = task.deps.filter(
+        (d) => !(d.type === dep.type && d.id === dep.id),
+      );
+      if (remaining.length === task.deps.length) return false;
+      await this.runBd(["dep", "remove", id, dep.id]);
+      const removed = task.deps.find(
+        (d) => d.type === dep.type && d.id === dep.id,
+      );
+      if (removed?.reason) {
+        const next = cloneTask(task);
+        next.deps = remaining;
+        await this.runBd(["update", id, "--metadata", this.metadataArg(next)]);
+      }
+      await this.writeMirror();
+      return true;
+    });
   }
 
   async updatePublicFollowup(): Promise<Task> {
@@ -883,34 +939,38 @@ export class BeadsStore implements Store {
   // -------------------------------------------------------------------------
 
   async prune(options: PruneOptions): Promise<PruneResult> {
-    const cache = await this.loadAll();
-    const candidates = cache.tasks.filter(
-      (task) => task.state === options.state,
-    );
-    const keep = Math.max(0, options.keep);
-    const surplus = candidates.slice(keep);
-    if (surplus.length === 0) return { archived: 0, ids: [] };
-
-    if (options.archive) {
-      this.appendArchiveBlock(
-        this.archivePath,
-        surplus.flatMap((task) => renderTaskLines(task)),
+    return this.mutate(async () => {
+      const cache = await this.loadAll();
+      const candidates = cache.tasks.filter(
+        (task) => task.state === options.state,
       );
-    }
-    for (const task of surplus) {
-      await this.runBd([
-        "update",
-        task.id,
-        "--metadata",
-        this.metadataArg(task, { archived: true }),
-      ]);
-    }
-    await this.writeMirror();
-    return { archived: surplus.length, ids: surplus.map((task) => task.id) };
+      const keep = Math.max(0, options.keep);
+      const surplus = candidates.slice(keep);
+      if (surplus.length === 0) return { archived: 0, ids: [] };
+
+      // Flag first, archive after: a mid-loop bd failure must never leave
+      // archive lines for tasks that are still active, and a retry must not
+      // duplicate lines for tasks already archived.
+      for (const task of surplus) {
+        await this.runBd([
+          "update",
+          task.id,
+          "--metadata",
+          this.metadataArg(task, { archived: true }),
+        ]);
+        if (options.archive) {
+          this.appendArchiveBlock(this.archivePath, renderTaskLines(task));
+        }
+      }
+      await this.writeMirror();
+      return { archived: surplus.length, ids: surplus.map((task) => task.id) };
+    });
   }
 
   async render(): Promise<number> {
-    const cache = await this.writeMirror();
-    return cache.tasks.length;
+    return this.mutate(async () => {
+      const cache = await this.writeMirror();
+      return cache.tasks.length;
+    });
   }
 }

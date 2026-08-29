@@ -361,6 +361,35 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore update", () => {
     },
     IT_TIMEOUT,
   );
+
+  it(
+    "keeps an in-flight task in flight when a hold sets or clears --until",
+    async () => {
+      await bl.store.create({
+        id: "upd-u2",
+        title: "held in flight",
+        state: "in_flight",
+      });
+      await bl.store.update("upd-u2", {
+        hold: { reason: "captain gate", until: "2026-09-01" },
+      });
+      let task = await bl.store.get("upd-u2");
+      expect(task?.state).toBe("in_flight");
+      expect(task?.hold).toEqual({ reason: "captain gate", until: "2026-09-01" });
+      const mirror = bl.mirror();
+      const inFlight = mirror.indexOf("## In flight");
+      const queued = mirror.indexOf("## Queued");
+      const line = mirror.indexOf("- [ ] upd-u2 - held in flight");
+      expect(line).toBeGreaterThan(inFlight);
+      expect(line).toBeLessThan(queued);
+
+      await bl.store.update("upd-u2", { hold: null });
+      task = await bl.store.get("upd-u2");
+      expect(task?.state).toBe("in_flight");
+      expect(task?.hold).toBeUndefined();
+    },
+    IT_TIMEOUT,
+  );
 });
 
 describe.skipIf(!BD_AVAILABLE)("BeadsStore transitions and deps", () => {

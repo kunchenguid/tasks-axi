@@ -5,12 +5,21 @@ import { join } from "node:path";
 import { BeadsStore } from "../src/backends/beads.js";
 import type { TasksContext } from "../src/context.js";
 
-/** True when a working `bd` CLI is on PATH; the beads suite skips without it. */
+/**
+ * True when a working `bd` CLI is on PATH; the beads suite skips without it.
+ * Set REQUIRE_BD (as Linux CI does) to fail loud instead of silently skipping.
+ */
 export const BD_AVAILABLE = (() => {
   try {
     execFileSync("bd", ["version"], { stdio: "ignore", timeout: 30_000 });
     return true;
   } catch {
+    if (process.env.REQUIRE_BD) {
+      throw new Error(
+        "REQUIRE_BD is set but no working `bd` CLI is on PATH; " +
+          "install @beads/bd or unset REQUIRE_BD",
+      );
+    }
     return false;
   }
 })();

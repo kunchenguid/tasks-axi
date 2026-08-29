@@ -280,6 +280,7 @@ Hand-edits to the mirror are overwritten; mutate through tasks-axi (or `bd`, the
 tasks-axi fields that beads has no column for (kind, repo, holds, canonical dates, dependency reasons) live in a `tasks_axi` object inside each issue's metadata; a hold with `--until` also sets bd's defer date.
 `prune` archives surplus Done tasks to `done-archive.md` and hides them from tasks-axi with a metadata flag while beads retains the full record.
 `ready`/`blocked`/`held` stay derived by the CLI from the dependency graph, so they are correct even where `bd ready` itself is not (bd 1.2.2 mis-reads blockers on issues whose id prefix differs from the database prefix).
+tasks-axi mutations serialize under an advisory lock on the mirror path and fail closed with a `LOCKED` error on contention, just like the markdown backend; raw `bd` writers bypass that lock, and `bd create --id <id> --force` silently overwrites an existing issue, so create ids through tasks-axi when both are in play.
 Public-followups and multi-task `mv` are not supported on this backend.
 
 ## Development
