@@ -33,12 +33,16 @@ export interface TempBeadsBacklog {
  */
 export function makeBeadsBacklog(now = "2026-07-01"): TempBeadsBacklog {
   const dir = mkdtempSync(join(tmpdir(), "tasks-axi-beads-"));
-  execFileSync("bd", ["init"], {
-    cwd: dir,
-    env: { ...process.env, BEADS_DIR: join(dir, ".beads") },
-    stdio: "ignore",
-    timeout: 120_000,
-  });
+  execFileSync(
+    "bd",
+    ["init", "--non-interactive", "--skip-hooks", "--skip-agents", "--prefix", "tst"],
+    {
+      cwd: dir,
+      env: { ...process.env, BEADS_DIR: join(dir, ".beads") },
+      stdio: "ignore",
+      timeout: 120_000,
+    },
+  );
   const mirrorPath = join(dir, "backlog.md");
   const store = new BeadsStore({ dir, mirrorPath, now: () => now });
   const ctx: TasksContext = {

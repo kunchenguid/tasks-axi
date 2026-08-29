@@ -28,6 +28,12 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The beads CLI lets the BeadsStore conformance suite run for real (it
+      # self-skips when bd is absent). One OS of real coverage suffices: the
+      # backend drives bd purely through --json subprocesses, so the suite is
+      # OS-independent. Pinned so a bd release cannot break CI on its own.
+      - if: runner.os == 'Linux'
+        run: npm install -g @beads/bd@1.2.2
       - run: pnpm run build
       - run: pnpm run lint
       - run: pnpm test
