@@ -1,7 +1,7 @@
 # tasks-axi — agent notes
 
 Agent-ergonomic task/backlog CLI in the `*-axi` family, built on `axi-sdk-js` and mirroring `gh-axi`.
-P1 ships only the markdown backend behind a `Store` seam; sqlite (P2) and remote trackers (P3) are deferred.
+Two backends ship behind the `Store` seam: markdown (P1) and beads; sqlite (P2) and remote trackers (P3) are deferred.
 
 ## Architecture
 
@@ -13,7 +13,8 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 - `src/model.ts` — the `Task` data model (report §5).
 - `src/pr-url.ts` — `isPrUrl`, the one canonical PR-URL seam (GitHub `/pull/<n>` on github.com, Forgejo `/pulls/<n>` on any lowercase DNS host) shared by prose link derivation, `--pr` validation, and public-followup `pr_url`; near-misses derive as `doc` links, never `pr`.
 - `src/derive.ts` - worker `blocked` / `ready` / active `held` and public delivery readiness are derived in the CLI from `list` + the dep graph + hold date gates, never Store methods, so every backend gets them for free.
-- `src/backends/markdown*.ts` — the only P1 backend.
+- `src/backends/markdown*.ts` — the P1 backend; `src/backends/normalize.ts` holds the backend-independent Task validation both backends share.
+- `src/backends/beads.ts` — the beads backend: `bd --json` subprocesses over a per-invocation list cache, `tasks_axi` metadata for fields beads lacks, and a canonical-markdown mirror rewritten after every mutation (see "The beads backend" in README.md). Real-bd tests in `test/backends/beads.test.ts` skip when `bd` is not installed.
 - `src/public-followup.ts` - authoritative versioned schema, strict privacy-safe validation, canonical encoding, immutable-field checks, relation/event readiness, and terminal-state invariants for `kind=public-followup`; `src/commands/public-followup.ts` owns its dedicated CLI state machine.
 - `src/commands/*` — one file per verb group; `src/view.ts` owns the read-side TOON projection; `src/confirm.ts` owns the write-side output (the `ok:` confirmation line, the `--json` payload, and `renderMutation`, which assembles both).
 - Shared helpers copied from the family: `args.ts`, `body.ts`, `format.ts`, `fields.ts`, `toon.ts`, `suggestions.ts`, `skill.ts` (minimal CLI-deferring stub generator).

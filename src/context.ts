@@ -1,3 +1,5 @@
+import { dirname } from "node:path";
+import { BeadsStore } from "./backends/beads.js";
 import { MarkdownStore } from "./backends/markdown.js";
 import { type ConfigOverrides, type ResolvedConfig, resolveConfig } from "./config.js";
 import { AxiError } from "./errors.js";
@@ -20,24 +22,35 @@ export function resolveTasksContext(
   suggestionGlobals?: SuggestionGlobals,
 ): TasksContext {
   const config = resolveConfig(overrides);
-
-  if (config.backend !== "markdown") {
-    throw new AxiError(
-      `Unsupported backend "${config.backend}" — P1 ships the markdown backend only`,
-      "UNSUPPORTED",
-      ['Set `backend = "markdown"` in .tasks.toml, or omit --backend'],
-    );
-  }
-
-  const store = new MarkdownStore({
-    path: config.path,
-    ...(config.archivePath ? { archivePath: config.archivePath } : {}),
-  });
+  const store = createStore(config);
   return {
     store,
     config,
     ...(suggestionGlobals ? { suggestionGlobals } : {}),
   };
+}
+
+function createStore(config: ResolvedConfig): Store {
+  if (config.backend === "markdown") {
+    return new MarkdownStore({
+      path: config.path,
+      ...(config.archivePath ? { archivePath: config.archivePath } : {}),
+    });
+  }
+  if (config.backend === "beads") {
+    // `path` doubles as the canonical-markdown mirror the beads backend keeps.
+    return new BeadsStore({
+      mirrorPath: config.path,
+      dir: config.beads?.dir ?? dirname(config.path),
+      ...(config.beads?.bin ? { bin: config.beads.bin } : {}),
+      ...(config.archivePath ? { archivePath: config.archivePath } : {}),
+    });
+  }
+  throw new AxiError(
+    `Unsupported backend "${config.backend}" — available backends: markdown, beads`,
+    "UNSUPPORTED",
+    ['Set `backend = "markdown"` or `backend = "beads"` in .tasks.toml, or omit --backend'],
+  );
 }
 
 /** Narrow an optional context to a present one (the resolver always sets it). */

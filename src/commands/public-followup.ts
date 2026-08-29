@@ -14,7 +14,7 @@ import {
   publicFollowupsByDeliveryState,
   readyPublicFollowups,
 } from "../derive.js";
-import { AxiError, notFound } from "../errors.js";
+import { AxiError, notFound, unsupported } from "../errors.js";
 import { formatCountLine } from "../format.js";
 import type { Task } from "../model.js";
 import {
@@ -104,6 +104,12 @@ export async function publicFollowupCommand(
   context?: TasksContext,
 ): Promise<string> {
   const [command, ...args] = rawArgs;
+  if (command && context) {
+    const capabilities = context.store.capabilities();
+    if (!capabilities.publicFollowups) {
+      throw unsupported("public-followups", capabilities.backend);
+    }
+  }
   switch (command) {
     case "add":
       return publicFollowupAdd(args, context);

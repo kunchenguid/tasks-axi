@@ -249,13 +249,38 @@ Body replacements with `--archive-body` append superseded bodies to `note-archiv
 
 ## Backends
 
-P1 ships the **markdown** backend only, behind a narrow `Store` interface so additional backends slot in without touching the CLI layer.
+Backends sit behind a narrow `Store` interface, so they slot in without touching the CLI layer.
 
 | Backend                | Status  |
 | ---------------------- | ------- |
 | markdown               | shipped |
+| beads                  | shipped |
 | sqlite                 | planned |
 | github / jira / linear | planned |
+
+### The beads backend
+
+`backend = "beads"` stores the backlog in a [beads](https://github.com/gastownhall/beads) issue database, driven through the `bd` CLI (`npm install -g @beads/bd`, then `bd init` in the workspace directory).
+Beads becomes the source of truth: dependency graph, priorities, full history, and every bd-native view (`bd show`, `bd graph`, `bd list`) work on the same tasks.
+
+```toml
+# .tasks.toml
+backend = "beads"
+
+[markdown]
+path = "data/backlog.md"   # the mirror location (see below)
+
+[beads]
+dir = "data"               # directory holding .beads/ (default: the mirror's directory)
+bin = "bd"                 # optional bd binary override
+```
+
+After every mutation the backend rewrites the configured markdown path as a **read-only canonical mirror** of the active backlog, byte-compatible with the markdown backend's format, so tools that read `backlog.md` directly keep working unchanged.
+Hand-edits to the mirror are overwritten; mutate through tasks-axi (or `bd`, then `tasks-axi render` to refresh the mirror).
+tasks-axi fields that beads has no column for (kind, repo, holds, canonical dates, dependency reasons) live in a `tasks_axi` object inside each issue's metadata; a hold with `--until` also sets bd's defer date.
+`prune` archives surplus Done tasks to `done-archive.md` and hides them from tasks-axi with a metadata flag while beads retains the full record.
+`ready`/`blocked`/`held` stay derived by the CLI from the dependency graph, so they are correct even where `bd ready` itself is not (bd 1.2.2 mis-reads blockers on issues whose id prefix differs from the database prefix).
+Public-followups and multi-task `mv` are not supported on this backend.
 
 ## Development
 

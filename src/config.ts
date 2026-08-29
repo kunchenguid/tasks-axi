@@ -12,17 +12,27 @@ import { AxiError } from "./errors.js";
  *   ~/.tasks-axi/config.toml > defaults (markdown, first existing
  *   backlog.md/data/backlog.md, otherwise backlog.md).
  *
- * P1 ships only the markdown backend; the Store seam keeps sqlite/remote
+ * The markdown and beads backends ship today; the Store seam keeps further
  * additions invisible to the CLI layer.
  */
 
 export interface ResolvedConfig {
   backend: string;
-  /** Markdown backlog path (resolved to an absolute path). */
+  /**
+   * Markdown backlog path (resolved to an absolute path). The beads backend
+   * uses it as the canonical-markdown mirror it rewrites after every mutation.
+   */
   path: string;
   /** Optional archive path for pruned tasks (resolved to an absolute path). */
   archivePath?: string;
   doneKeep: number;
+  /** Beads backend settings from the `[beads]` table. */
+  beads?: {
+    /** Workspace directory holding `.beads/` (resolved to an absolute path). */
+    dir?: string;
+    /** bd binary to execute (default "bd"). */
+    bin?: string;
+  };
 }
 
 export interface ConfigOverrides {
@@ -40,15 +50,20 @@ interface TomlConfig {
     archive?: string;
     done_keep?: number;
   };
+  beads?: {
+    dir?: string;
+    bin?: string;
+  };
 }
 
 const DEFAULT_KEEP = 10;
 const PATH_CANDIDATES = ["backlog.md", "data/backlog.md"];
-type ConfigTable = "root" | "markdown" | "unsupported";
+type ConfigTable = "root" | "markdown" | "beads" | "unsupported";
 
 /**
  * Minimal TOML reader for the tiny config surface we need: a top-level
- * `backend` key and a `[markdown]` table with `path` / `archive` / `done_keep`.
+ * `backend` key, a `[markdown]` table with `path` / `archive` / `done_keep`,
+ * and a `[beads]` table with `dir` / `bin`.
  * `archive` points at the file that receives pruned tasks.
  * Intentionally not a general TOML parser.
  */
@@ -62,7 +77,9 @@ export function parseConfigToml(src: string): TomlConfig {
 
     const section = line.match(/^\[([^\]]+)\]$/);
     if (section) {
-      table = section[1].trim() === "markdown" ? "markdown" : "unsupported";
+      const name = section[1].trim();
+      table =
+        name === "markdown" || name === "beads" ? name : "unsupported";
       continue;
     }
 
@@ -83,6 +100,12 @@ export function parseConfigToml(src: string): TomlConfig {
 
     if (table === "root") {
       config.backend = requireTomlString(value, source);
+      continue;
+    }
+    if (table === "beads") {
+      config.beads ??= {};
+      if (key === "dir") config.beads.dir = requireTomlString(value, source);
+      if (key === "bin") config.beads.bin = requireTomlString(value, source);
       continue;
     }
     config.markdown ??= {};
@@ -131,6 +154,9 @@ function configKeySource(
     (key === "path" || key === "archive" || key === "done_keep")
   ) {
     return `markdown.${key}`;
+  }
+  if (table === "beads" && (key === "dir" || key === "bin")) {
+    return `beads.${key}`;
   }
   return undefined;
 }
@@ -243,6 +269,18 @@ export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
   const config: ResolvedConfig = { backend, path, doneKeep };
   if (archive) {
     config.archivePath = isAbsolute(archive) ? archive : resolve(cwd, archive);
+  }
+  const beadsDir = projectToml.beads?.dir ?? homeToml.beads?.dir;
+  const beadsBin = projectToml.beads?.bin ?? homeToml.beads?.bin;
+  if (beadsDir !== undefined || beadsBin !== undefined) {
+    config.beads = {};
+    if (beadsDir !== undefined) {
+      const dir = validatePathValue(beadsDir, "beads.dir");
+      if (dir !== undefined) {
+        config.beads.dir = isAbsolute(dir) ? dir : resolve(cwd, dir);
+      }
+    }
+    if (beadsBin !== undefined) config.beads.bin = beadsBin;
   }
   return config;
 }
