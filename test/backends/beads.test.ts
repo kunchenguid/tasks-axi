@@ -55,9 +55,11 @@ function fakeBd(ignore: string[] = []) {
       if (args.includes("--title")) bead.title = args[args.indexOf("--title") + 1];
       if (args.includes("--description")) bead.description = args[args.indexOf("--description") + 1];
       if (args.includes("--status")) bead.status = args[args.indexOf("--status") + 1];
-      if (args.includes("--add-label")) bead.labels = ["tasks-axi-held"];
-      if (args.includes("--remove-label")) bead.labels = [];
-      if (args.includes("--defer")) bead.defer_until = args[args.indexOf("--defer") + 1];
+      if (!ignore.includes("update native")) {
+        if (args.includes("--add-label")) bead.labels = ["tasks-axi-held"];
+        if (args.includes("--remove-label")) bead.labels = [];
+        if (args.includes("--defer")) bead.defer_until = args[args.indexOf("--defer") + 1];
+      }
     } else if (command === "close") {
       const bead = beads.get(args[1]);
       if (bead && !ignore.includes(operation)) bead.status = "closed";
@@ -103,6 +105,10 @@ describe("BeadsStore", () => {
     await store.update("tasks-axi-beads", { body: "updated notes" });
     expect((await store.list({})).items.find((task) => task.id === "tasks-axi-beads")?.deps).toEqual([
       { type: "blocked-by", id: "blocker", reason: "waits on refactor" },
+    ]);
+    expect(await store.addDep("tasks-axi-beads", { type: "blocked-by", id: "blocker", reason: "updated reason" })).toBe(false);
+    expect((await store.get("tasks-axi-beads"))?.deps).toEqual([
+      { type: "blocked-by", id: "blocker", reason: "updated reason" },
     ]);
     expect(await store.removeDep("tasks-axi-beads", { type: "blocked-by", id: "blocker" })).toBe(true);
     expect((await store.get("tasks-axi-beads"))?.deps).toEqual([]);
@@ -156,6 +162,11 @@ describe("BeadsStore", () => {
     await store.update("held", { hold: { reason: "later", until: "2026-09-10" } });
     await store.update("held", { hold: { reason: "still held" } });
     expect(fake.beads.get("held")?.defer_until).toBe("");
+
+    const partial = fakeBd(["update native"]);
+    const partialStore = new BeadsStore({ path: "/tmp/project/.beads", run: partial.run });
+    await partialStore.create({ id: "partial", title: "partial" });
+    await expect(partialStore.update("partial", { hold: { reason: "later" } })).rejects.toThrow("did not persist hold");
 
     const silent = fakeBd(["update"]);
     const silentStore = new BeadsStore({ path: "/tmp/project/.beads", run: silent.run });

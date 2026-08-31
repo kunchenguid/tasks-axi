@@ -446,9 +446,19 @@ export class BeadsStore implements Store {
     if (patch.archiveBody && patch.body !== undefined && current.body) {
       await this.call("comments add", ["comments", "add", id, current.body, "--json"]);
     }
-    const task = await this.get(id);
-    if (!task) throw new AxiError(`beads update removed "${id}"`, "UNKNOWN");
-    return { task, changed };
+    const updated = await this.bead(id);
+    if (!updated) throw new AxiError(`beads update removed "${id}"`, "UNKNOWN");
+    if (changed.includes("hold")) {
+      const labels = Array.isArray(updated.bead.labels) ? updated.bead.labels.map(String) : [];
+      if (
+        !sameHold(updated.task.hold, next.hold) ||
+        labels.includes(HELD_LABEL) !== Boolean(next.hold) ||
+        date(updated.bead.defer_until) !== next.hold?.until
+      ) {
+        throw new AxiError(`beads update did not persist hold for "${id}"`, "UNKNOWN");
+      }
+    }
+    return { task: updated.task, changed };
   }
 
   async remove(id: string): Promise<Task> {
@@ -498,7 +508,15 @@ export class BeadsStore implements Store {
     if (!(await this.get(dep.id))) {
       throw new AxiError(`Task "${dep.id}" not found`, "NOT_FOUND");
     }
-    if (current.deps.some((item) => item.type === dep.type && item.id === dep.id)) return false;
+    const existing = current.deps.find((item) => item.type === dep.type && item.id === dep.id);
+    if (existing) {
+      if (existing.reason !== dep.reason) await this.setDepReason(id, dep, dep.reason);
+      const repaired = await this.get(id);
+      if (!repaired?.deps.some((item) => item.type === dep.type && item.id === dep.id && item.reason === dep.reason)) {
+        throw new AxiError(`beads dep add did not persist edge to "${dep.id}"`, "UNKNOWN");
+      }
+      return false;
+    }
     await this.call("dep add", ["dep", "add", id, dep.id, "--type", dependencyArgs(dep).type, "--json"]);
     await this.setDepReason(id, dep, dep.reason);
     const updated = await this.get(id);
