@@ -1,7 +1,7 @@
 # tasks-axi — agent notes
 
 Agent-ergonomic task/backlog CLI in the `*-axi` family, built on `axi-sdk-js` and mirroring `gh-axi`.
-P1 ships only the markdown backend behind a `Store` seam; sqlite (P2) and remote trackers (P3) are deferred.
+It ships markdown and Beads (`bd`) backends behind a `Store` seam; sqlite and remote trackers are deferred.
 
 ## Architecture
 
@@ -13,7 +13,8 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 - `src/model.ts` — the `Task` data model (report §5).
 - `src/pr-url.ts` — `isPrUrl`, the one canonical PR-URL seam (GitHub `/pull/<n>` on github.com, Forgejo `/pulls/<n>` on any lowercase DNS host) shared by prose link derivation, `--pr` validation, and public-followup `pr_url`; near-misses derive as `doc` links, never `pr`.
 - `src/derive.ts` - worker `blocked` / `ready` / active `held` and public delivery readiness are derived in the CLI from `list` + the dep graph + hold date gates, never Store methods, so every backend gets them for free.
-- `src/backends/markdown*.ts` — the only P1 backend.
+- `src/backends/markdown*.ts` — the byte-preserving Markdown backend.
+- `src/backends/beads.ts` — the `bd` CLI adapter; its header owns the ID, hold, and dependency-reason persistence mappings.
 - `src/public-followup.ts` - authoritative versioned schema, strict privacy-safe validation, canonical encoding, immutable-field checks, relation/event readiness, and terminal-state invariants for `kind=public-followup`; `src/commands/public-followup.ts` owns its dedicated CLI state machine.
 - `src/commands/*` — one file per verb group; `src/view.ts` owns the read-side TOON projection; `src/confirm.ts` owns the write-side output (the `ok:` confirmation line, the `--json` payload, and `renderMutation`, which assembles both).
 - Shared helpers copied from the family: `args.ts`, `body.ts`, `format.ts`, `fields.ts`, `toon.ts`, `suggestions.ts`, `skill.ts` (minimal CLI-deferring stub generator).
@@ -44,7 +45,7 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 
 - **Ids are caller-supplied join keys (D6)** validated by `ID_RE` (slug-shaped); `add --mint [--prefix]` generates a `slug-xx` id.
 - **prune archives, never deletes (D4)** - surplus Done tasks are appended to `markdown.archive` or default `done-archive.md`. It keeps N _recognized_ tasks; free-form Done lines are preserved and not counted.
-- **`done` auto-prunes** to `config.doneKeep` (default 10) and archives, unless `--no-prune`.
+- **`done` auto-prunes on the Markdown backend** to `config.doneKeep` (default 10) and archives, unless `--no-prune`.
 - **`done` on an already-Done task** stays idempotent but backfills supplied `--pr`, `--report`, and non-duplicate `--note` metadata without replacing the original closed date.
 - **Dependency mutations validate targets.** `add --blocked-by` and `block --by` reject missing blockers and self-blocks. Parsed dangling blockers are still treated as resolved for legacy hand-edited files.
 - **Blocking tasks are protected.** `rm` and single-id `mv` reject a task that still blocks active dependents; unblock or complete the dependents first.

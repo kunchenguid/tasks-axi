@@ -38,7 +38,13 @@ describe("parseConfigToml", () => {
 
   it("reads the [beads] table", () => {
     const cfg = parseConfigToml(
-      ['backend = "beads"', "[beads]", 'path = "/var/lib/beads/.beads"', 'binary = "bd"', 'prefix = "fm"'].join("\n"),
+      [
+        'backend = "beads"',
+        "[beads]",
+        'path = "/var/lib/beads/.beads"',
+        'binary = "bd"',
+        'prefix = "fm"',
+      ].join("\n"),
     );
     expect(cfg.backend).toBe("beads");
     expect(cfg.beads).toEqual({
@@ -73,9 +79,9 @@ describe("parseConfigToml", () => {
   });
 
   it("rejects a non-numeric done_keep value", () => {
-    expect(() =>
-      parseConfigToml("[markdown]\ndone_keep = many\n"),
-    ).toThrow(/done_keep/);
+    expect(() => parseConfigToml("[markdown]\ndone_keep = many\n")).toThrow(
+      /done_keep/,
+    );
   });
 
   it("rejects malformed assignments in the top-level scope", () => {
@@ -161,7 +167,13 @@ describe("resolveConfig", () => {
   it("resolves beads settings from the project toml", () => {
     writeFileSync(
       join(dir, ".tasks.toml"),
-      ['backend = "beads"', "[beads]", 'path = ".data/.beads"', 'binary = "custom-bd"', 'prefix = "fm"'].join("\n"),
+      [
+        'backend = "beads"',
+        "[beads]",
+        'path = ".data/.beads"',
+        'binary = "custom-bd"',
+        'prefix = "fm"',
+      ].join("\n"),
     );
     expect(resolveConfig({ cwd: dir, home, env: {} })).toMatchObject({
       backend: "beads",
@@ -178,14 +190,11 @@ describe("resolveConfig", () => {
     );
   });
 
-  it.each(["", "   "])(
-    "rejects an empty TASKS_AXI_FILE value %#",
-    (value) => {
-      expect(() =>
-        resolveConfig({ cwd: dir, home, env: { TASKS_AXI_FILE: value } }),
-      ).toThrow(/TASKS_AXI_FILE/);
-    },
-  );
+  it.each(["", "   "])("rejects an empty TASKS_AXI_FILE value %#", (value) => {
+    expect(() =>
+      resolveConfig({ cwd: dir, home, env: { TASKS_AXI_FILE: value } }),
+    ).toThrow(/TASKS_AXI_FILE/);
+  });
 
   it.each(["", "   "])(
     "rejects an empty markdown path from toml %#",
