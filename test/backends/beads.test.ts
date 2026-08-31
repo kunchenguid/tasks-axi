@@ -71,6 +71,25 @@ function fakeBd(ignore: string[] = []) {
   return { run, edges, beads };
 }
 
+function realDepShapeBd() {
+  const fake = fakeBd();
+  const run: BeadsRunner = async (binary, args, cwd) => {
+    if (args[0] === "dep" && args[1] === "list") {
+      const owner = args[2];
+      return {
+        stdout: JSON.stringify(
+          fake.edges
+            .filter((edge) => edge.issue_id === owner)
+            .map((edge) => ({ id: edge.depends_on_id, dependency_type: edge.type })),
+        ),
+        stderr: "",
+      };
+    }
+    return fake.run(binary, args, cwd);
+  };
+  return { ...fake, run };
+}
+
 describe("BeadsStore", () => {
   it("maps beads CRUD, transitions, metadata, and dependencies", async () => {
     const fake = fakeBd();
@@ -82,14 +101,14 @@ describe("BeadsStore", () => {
     });
 
     const created = await store.create({
-      id: "tasks-axi-beads",
+      id: "fm-tasks-axi-beads",
       title: "wire beads",
       body: "notes",
       kind: "ship",
       repo: "tasks-axi",
     });
     expect(created).toMatchObject({
-      id: "tasks-axi-beads",
+      id: "fm-tasks-axi-beads",
       title: "wire beads",
       body: "notes",
       kind: "ship",
@@ -97,32 +116,32 @@ describe("BeadsStore", () => {
       state: "queued",
     });
 
-    await store.create({ id: "blocker", title: "blocker" });
-    expect(await store.addDep("tasks-axi-beads", { type: "blocked-by", id: "blocker", reason: "waits on refactor" })).toBe(true);
-    expect((await store.get("tasks-axi-beads"))?.deps).toEqual([
-      { type: "blocked-by", id: "blocker", reason: "waits on refactor" },
+    await store.create({ id: "fm-blocker", title: "blocker" });
+    expect(await store.addDep("fm-tasks-axi-beads", { type: "blocked-by", id: "fm-blocker", reason: "waits on refactor" })).toBe(true);
+    expect((await store.get("fm-tasks-axi-beads"))?.deps).toEqual([
+      { type: "blocked-by", id: "fm-blocker", reason: "waits on refactor" },
     ]);
-    await store.update("tasks-axi-beads", { body: "updated notes" });
-    expect((await store.list({})).items.find((task) => task.id === "tasks-axi-beads")?.deps).toEqual([
-      { type: "blocked-by", id: "blocker", reason: "waits on refactor" },
+    await store.update("fm-tasks-axi-beads", { body: "updated notes" });
+    expect((await store.list({})).items.find((task) => task.id === "fm-tasks-axi-beads")?.deps).toEqual([
+      { type: "blocked-by", id: "fm-blocker", reason: "waits on refactor" },
     ]);
-    expect(await store.addDep("tasks-axi-beads", { type: "blocked-by", id: "blocker", reason: "updated reason" })).toBe(false);
-    expect((await store.get("tasks-axi-beads"))?.deps).toEqual([
-      { type: "blocked-by", id: "blocker", reason: "updated reason" },
+    expect(await store.addDep("fm-tasks-axi-beads", { type: "blocked-by", id: "fm-blocker", reason: "updated reason" })).toBe(false);
+    expect((await store.get("fm-tasks-axi-beads"))?.deps).toEqual([
+      { type: "blocked-by", id: "fm-blocker", reason: "updated reason" },
     ]);
-    expect(await store.removeDep("tasks-axi-beads", { type: "blocked-by", id: "blocker" })).toBe(true);
-    expect((await store.get("tasks-axi-beads"))?.deps).toEqual([]);
+    expect(await store.removeDep("fm-tasks-axi-beads", { type: "blocked-by", id: "fm-blocker" })).toBe(true);
+    expect((await store.get("fm-tasks-axi-beads"))?.deps).toEqual([]);
 
-    await store.update("tasks-axi-beads", { hold: { reason: "captain", kind: "captain" } });
-    expect((await store.get("tasks-axi-beads"))?.hold).toEqual({ reason: "captain", kind: "captain" });
-    const started = await store.transition("tasks-axi-beads", "in_flight");
+    await store.update("fm-tasks-axi-beads", { hold: { reason: "captain", kind: "captain" } });
+    expect((await store.get("fm-tasks-axi-beads"))?.hold).toEqual({ reason: "captain", kind: "captain" });
+    const started = await store.transition("fm-tasks-axi-beads", "in_flight");
     expect(started.state).toBe("in_flight");
-    const done = await store.transition("tasks-axi-beads", "done", {
+    const done = await store.transition("fm-tasks-axi-beads", "done", {
       pr: "https://github.com/o/r/pull/1",
     });
     expect(done).toMatchObject({ state: "done", links: [{ kind: "pr" }] });
     expect(await store.list({ state: "done" })).toMatchObject({ total: 1 });
-    expect(await store.remove("tasks-axi-beads")).toMatchObject({ id: "tasks-axi-beads" });
+    expect(await store.remove("fm-tasks-axi-beads")).toMatchObject({ id: "fm-tasks-axi-beads" });
   });
 
   it("reports capabilities and turns missing beads into a null get", async () => {
@@ -147,56 +166,78 @@ describe("BeadsStore", () => {
   it("validates and verifies dependency mutations", async () => {
     const fake = fakeBd(["dep add"]);
     const store = new BeadsStore({ path: "/tmp/project/.beads", run: fake.run });
-    await store.create({ id: "owner", title: "owner" });
-    await store.create({ id: "target", title: "target" });
+    await store.create({ id: "bd-owner", title: "owner" });
+    await store.create({ id: "bd-target", title: "target" });
 
-    await expect(store.addDep("owner", { type: "blocked-by", id: "owner" })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
-    await expect(store.addDep("owner", { type: "blocked-by", id: "missing" })).rejects.toMatchObject({ code: "NOT_FOUND" });
-    await expect(store.addDep("owner", { type: "blocked-by", id: "target" })).rejects.toThrow("did not persist edge");
+    await expect(store.addDep("bd-owner", { type: "blocked-by", id: "bd-owner" })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(store.addDep("bd-owner", { type: "blocked-by", id: "bd-missing" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(store.addDep("bd-owner", { type: "blocked-by", id: "bd-target" })).rejects.toThrow("did not persist edge");
+  });
+
+  it("rejects ids outside the configured beads prefix before creation", async () => {
+    const fake = fakeBd();
+    const store = new BeadsStore({ path: "/tmp/project/.beads", prefix: "fm", run: fake.run });
+
+    await expect(store.create({ id: "blocker", title: "blocker" })).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
+    expect(fake.beads.size).toBe(0);
+  });
+
+  it("decodes the target-only shape returned by real bd dep list", async () => {
+    const fake = realDepShapeBd();
+    const store = new BeadsStore({ path: "/tmp/project/.beads", prefix: "fm", run: fake.run });
+    await store.create({ id: "fm-owner", title: "owner" });
+    await store.create({ id: "fm-target", title: "target" });
+
+    await expect(store.addDep("fm-owner", { type: "blocked-by", id: "fm-target" })).resolves.toBe(true);
+    expect((await store.get("fm-owner"))?.deps).toEqual([
+      { type: "blocked-by", id: "fm-target" },
+    ]);
   });
 
   it("verifies transitions and clears dated holds", async () => {
     const fake = fakeBd();
     const store = new BeadsStore({ path: "/tmp/project/.beads", run: fake.run });
-    await store.create({ id: "held", title: "held" });
-    await store.update("held", { hold: { reason: "later", until: "2026-09-10" } });
-    await store.update("held", { hold: { reason: "still held" } });
-    expect(fake.beads.get("held")?.defer_until).toBe("");
+    await store.create({ id: "bd-held", title: "held" });
+    await store.update("bd-held", { hold: { reason: "later", until: "2026-09-10" } });
+    await store.update("bd-held", { hold: { reason: "still held" } });
+    expect(fake.beads.get("bd-held")?.defer_until).toBe("");
 
-    await store.create({ id: "native-defer", title: "native defer" });
-    const nativeDeferred = fake.beads.get("native-defer");
+    await store.create({ id: "bd-native-defer", title: "native defer" });
+    const nativeDeferred = fake.beads.get("bd-native-defer");
     if (nativeDeferred) nativeDeferred.defer_until = "2026-10-01";
-    await store.update("native-defer", { hold: null });
+    await store.update("bd-native-defer", { hold: null });
     expect(nativeDeferred?.defer_until).toBe("");
 
-    await store.create({ id: "label-drift", title: "label drift", hold: { reason: "later" } });
-    const labelDrift = fake.beads.get("label-drift");
+    await store.create({ id: "bd-label-drift", title: "label drift", hold: { reason: "later" } });
+    const labelDrift = fake.beads.get("bd-label-drift");
     if (labelDrift) labelDrift.labels = [];
-    await store.update("label-drift", { hold: { reason: "later" } });
+    await store.update("bd-label-drift", { hold: { reason: "later" } });
     expect(labelDrift?.labels).toEqual(["tasks-axi-held"]);
 
     const partial = fakeBd(["update native"]);
     const partialStore = new BeadsStore({ path: "/tmp/project/.beads", run: partial.run });
-    await partialStore.create({ id: "partial", title: "partial" });
-    await expect(partialStore.update("partial", { hold: { reason: "later" } })).rejects.toThrow("did not persist hold");
+    await partialStore.create({ id: "bd-partial", title: "partial" });
+    await expect(partialStore.update("bd-partial", { hold: { reason: "later" } })).rejects.toThrow("did not persist hold");
 
     const silent = fakeBd(["update"]);
     const silentStore = new BeadsStore({ path: "/tmp/project/.beads", run: silent.run });
-    await silentStore.create({ id: "task", title: "task" });
-    await expect(silentStore.transition("task", "in_flight")).rejects.toThrow("did not persist state");
+    await silentStore.create({ id: "bd-task", title: "task" });
+    await expect(silentStore.transition("bd-task", "in_flight")).rejects.toThrow("did not persist state");
   });
 
   it("persists native hold state during creation", async () => {
     const fake = fakeBd();
     const store = new BeadsStore({ path: "/tmp/project/.beads", run: fake.run });
     const task = await store.create({
-      id: "held-at-create",
+      id: "bd-held-at-create",
       title: "held",
       hold: { reason: "later", until: "2026-09-10" },
     });
 
     expect(task).toMatchObject({ state: "queued", hold: { reason: "later", until: "2026-09-10" } });
-    expect(fake.beads.get("held-at-create")).toMatchObject({
+    expect(fake.beads.get("bd-held-at-create")).toMatchObject({
       labels: ["tasks-axi-held"],
       defer_until: "2026-09-10",
     });

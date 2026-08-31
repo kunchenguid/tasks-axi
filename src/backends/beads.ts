@@ -2,8 +2,9 @@
  * Beads Store adapter.
  *
  * IDs are preserved 1:1: every create passes the caller's slug as `bd
- * create --id`. `--force` is added when it does not match the configured
- * Beads prefix, so no slug->id index is needed. Backend-only fields are kept
+ * create --id`. Beads itself rejects explicit IDs outside its configured
+ * prefix, so this adapter validates that constraint before invoking bd; no
+ * slug->id index is needed. Backend-only fields are kept
  * in a versioned base64url header in the Beads description. Holds map to the
  * `tasks-axi-held` label, with `hold.until` mirrored to native `--defer`;
  * `--defer ""` is the bd-supported clear operation. Dependency reasons have
@@ -244,17 +245,18 @@ export class BeadsStore implements Store {
 
   private async depsFor(ids: string[]): Promise<Map<string, Dep[]>> {
     const result = new Map<string, Dep[]>(ids.map((id) => [id, []]));
-    if (ids.length === 0) return result;
-    const items = jsonItems(
-      await this.call("dep list", ["dep", "list", ...ids, "--json"]),
-    );
-    for (const item of items) {
-      const owner = depOwner(item);
-      const target = depTarget(item);
-      const type = depType(item.type);
-      if (!owner || !target || !type || !result.has(owner)) continue;
-      result.get(owner)?.push({ type, id: target });
-    }
+    await Promise.all(ids.map(async (id) => {
+      const items = jsonItems(
+        await this.call("dep list", ["dep", "list", id, "--json"]),
+      );
+      for (const item of items) {
+        const owner = depOwner(item) ?? id;
+        const target = depTarget(item) ?? text(item.id);
+        const type = depType(item.type ?? item.dependency_type);
+        if (owner !== id || !target || !type) continue;
+        result.get(id)?.push({ type, id: target });
+      }
+    }));
     return result;
   }
 
@@ -320,6 +322,12 @@ export class BeadsStore implements Store {
   }
 
   async create(input: TaskInput): Promise<Task> {
+    if (!input.id.startsWith(`${this.prefix}-`)) {
+      throw new AxiError(
+        `Task id "${input.id}" must use the configured beads prefix "${this.prefix}-"`,
+        "VALIDATION_ERROR",
+      );
+    }
     const title = appendLinks(input.title, input.links);
     const meta: BeadsMeta = {
       ...(input.kind ? { kind: input.kind } : {}),
@@ -335,7 +343,6 @@ export class BeadsStore implements Store {
         : {}),
     };
     const args = ["create", title, "--id", input.id, "--type", "task"];
-    if (!input.id.startsWith(`${this.prefix}-`)) args.push("--force");
     if (input.body || Object.keys(meta).length > 0) {
       args.push("--description", encodeDescription(input.body, meta));
     }
