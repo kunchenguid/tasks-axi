@@ -123,7 +123,7 @@ tasks-axi mv blocker-b1 dependent-d2 --to ../homemux/data/backlog.md
 Output is [TOON](https://toonformat.dev)-encoded and token-efficient.
 The long task body is truncated by default — the whole point is that `list` stays cheap; use `--full` only when you need the complete notes.
 `update --body` and `update --body-file` replace the body wholesale, so agents should inspect the current body first and write back the curated current state rather than appending a journal entry.
-`--archive-body` preserves the replaced body in `note-archive.md` using the same dated markdown archive block style as done pruning.
+On the Markdown backend, `--archive-body` preserves the replaced body in `note-archive.md` using the same dated archive block style as done pruning; on Beads, it records the replaced body as a comment.
 Every write leads with a terse `ok:` line confirming the write result, including the resulting task state when the command changes one (e.g. `ok: start lavish-share -> In flight`, `ok: done grok-harness-g7 -> Done (pr <url>)`, `ok: render -> normalized 3`), followed by state-aware next-step hints that never suggest an action the command just performed.
 Mutations are idempotent and report what changed (`already: true` on a no-op), so re-running one is safe.
 Running `done` again on an already Done task can still backfill a new `--pr`, `--report`, or `--note` without changing the original close date.
@@ -133,12 +133,13 @@ Active holds are excluded from `ready`; a hold with `--until YYYY-MM-DD` becomes
 Use `ready --include-held` to show dispatchable ready work and a separate `held` group with the hold reason, kind, and until date.
 Use `list --state held` or `list --fields held,hold_reason,hold_kind,hold_until` when you need to scan active hold state directly.
 Pass `--json` to any mutation for a machine-readable result object (`{ "ok": true, "action": …, "task": { … } }` or operation-specific result fields) instead of TOON, so an agent can confirm a write deterministically without a follow-up read.
-For `mv`, a single task returns `id`, while a multi-task move returns first-occurrence-ordered, deduplicated `ids`, plus `from` and `to`.
+`prune`, `render`, and `mv` are Markdown-only maintenance commands. For `mv`, a single task returns `id`, while a multi-task move returns first-occurrence-ordered, deduplicated `ids`, plus `from` and `to`.
 
 Run `tasks-axi --help` for the command list, or `tasks-axi <command> --help` for per-command usage.
 
 ## Durable public follow-ups
 
+Durable public follow-ups are supported only by the Markdown backend.
 A promised public final is a first-class `kind=public-followup` obligation, not a worker task or a `blocked-by` edge.
 Create and mutate it only through the dedicated namespace:
 
@@ -232,7 +233,7 @@ Single-task `mv` has the same protection; use multi-task `mv` to move its active
 ## Configuration
 
 Backend and path are resolved in this order: `--backend` / `--file` flags passed after the command, then `TASKS_AXI_BACKEND` / `TASKS_AXI_FILE` env, then a project `.tasks.toml`, then `~/.tasks-axi/config.toml`, then the defaults.
-Without an explicit path, tasks-axi uses `backlog.md` when present, then `data/backlog.md` when present, and otherwise targets `backlog.md` for future writes.
+Without an explicit Markdown path, tasks-axi uses `backlog.md` when present, then `data/backlog.md` when present, and otherwise targets `backlog.md` for future writes. The Beads path defaults to `.beads`.
 
 ```toml
 # .tasks.toml in the project root
@@ -257,14 +258,13 @@ binary = "~/.local/bin/bd"
 prefix = "fm"
 ```
 
-`binary` and `prefix` are optional (`~/.local/bin/bd` and `bd` by default).
+`binary` and `prefix` are optional and default to `~/.local/bin/bd` and `bd`, respectively.
 Beads descriptions contain a reserved versioned tasks-axi metadata header for
 fields that are not native Beads fields; ordinary Beads issues remain readable
 as tasks. Beads supports dependency edges, comments, full-text search, and
 server-side ids, but not tasks-axi pruning or public-followup obligations.
 
-`archive` is optional; when omitted, pruned tasks are appended to `done-archive.md` next to the active backlog.
-Body replacements with `--archive-body` append superseded bodies to `note-archive.md` next to the active backlog.
+Markdown `archive` is optional; when omitted, pruned tasks are appended to `done-archive.md` next to the active backlog.
 
 ## Backends
 

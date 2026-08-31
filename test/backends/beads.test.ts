@@ -249,7 +249,10 @@ describe("BeadsStore", () => {
 
   it("validates create dependencies before persisting the owner", async () => {
     const fake = fakeBd();
-    const store = new BeadsStore({ path: "/tmp/project/.beads", run: fake.run });
+    const store = new BeadsStore({
+      path: "/tmp/project/.beads",
+      run: fake.run,
+    });
 
     await expect(
       store.create({
@@ -272,15 +275,16 @@ describe("BeadsStore", () => {
 
   it("verifies generic updates and deletion", async () => {
     const fake = fakeBd(["update", "delete"]);
-    const store = new BeadsStore({ path: "/tmp/project/.beads", run: fake.run });
+    const store = new BeadsStore({
+      path: "/tmp/project/.beads",
+      run: fake.run,
+    });
     await store.create({ id: "bd-task", title: "task" });
 
     await expect(store.update("bd-task", { title: "renamed" })).rejects.toThrow(
       "did not persist requested fields",
     );
-    await expect(store.remove("bd-task")).rejects.toThrow(
-      "did not remove",
-    );
+    await expect(store.remove("bd-task")).rejects.toThrow("did not remove");
   });
 
   it("protects blockers with target-only dependent records", async () => {
