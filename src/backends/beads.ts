@@ -743,6 +743,14 @@ export class BeadsStore implements Store {
       !current.deps.some((item) => item.type === dep.type && item.id === dep.id)
     )
       return false;
+    if (
+      current.deps.some((item) => item.type !== dep.type && item.id === dep.id)
+    ) {
+      throw new AxiError(
+        `Task "${id}" has multiple relationship types to "${dep.id}"`,
+        "VALIDATION_ERROR",
+      );
+    }
     await this.call("dep remove", ["dep", "remove", id, dep.id, "--json"]);
     await this.setDepReason(id, dep, undefined);
     const updated = await this.get(id);

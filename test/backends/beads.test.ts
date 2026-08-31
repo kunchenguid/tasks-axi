@@ -54,12 +54,19 @@ function fakeBd(ignore: string[] = []) {
       const issue = args[2];
       const target = args[3];
       if (args[1] === "add" && !ignore.includes(operation))
-        edges.push({ issue_id: issue, depends_on_id: target, type: "blocks" });
+        edges.push({
+          issue_id: issue,
+          depends_on_id: target,
+          type: args[args.indexOf("--type") + 1],
+        });
       if (args[1] === "remove") {
-        const index = edges.findIndex(
-          (edge) => edge.issue_id === issue && edge.depends_on_id === target,
-        );
-        if (index >= 0 && !ignore.includes(operation)) edges.splice(index, 1);
+        if (!ignore.includes(operation)) {
+          for (let index = edges.length - 1; index >= 0; index -= 1) {
+            const edge = edges[index];
+            if (edge.issue_id === issue && edge.depends_on_id === target)
+              edges.splice(index, 1);
+          }
+        }
       }
     } else if (command === "update") {
       const bead = beads.get(args[1]);
@@ -261,6 +268,29 @@ describe("BeadsStore", () => {
     await expect(
       store.addDep("bd-owner", { type: "blocked-by", id: "bd-target" }),
     ).rejects.toThrow("did not persist edge");
+  });
+
+  it("rejects ambiguous typed dependency removal without losing edges", async () => {
+    const fake = fakeBd();
+    const store = new BeadsStore({
+      path: "/tmp/project/.beads",
+      run: fake.run,
+    });
+    await store.create({ id: "bd-owner", title: "owner" });
+    await store.create({ id: "bd-target", title: "target" });
+    await store.addDep("bd-owner", { type: "blocked-by", id: "bd-target" });
+    await store.addDep("bd-owner", { type: "parent", id: "bd-target" });
+
+    await expect(
+      store.removeDep("bd-owner", {
+        type: "blocked-by",
+        id: "bd-target",
+      }),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect((await store.get("bd-owner"))?.deps).toEqual([
+      { type: "blocked-by", id: "bd-target" },
+      { type: "parent", id: "bd-target" },
+    ]);
   });
 
   it("validates create dependencies before persisting the owner", async () => {
