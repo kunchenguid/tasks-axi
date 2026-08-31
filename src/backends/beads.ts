@@ -82,11 +82,16 @@ function jsonItems(value: unknown): Bead[] {
 function decodeDescription(value: unknown): {
   body?: string;
   meta: BeadsMeta;
+  managed: boolean;
 } {
   const description = text(value) ?? "";
   const first = description.split("\n", 1)[0];
   if (!first.startsWith(META_PREFIX) || !first.endsWith(META_SUFFIX)) {
-    return { ...(description ? { body: description } : {}), meta: {} };
+    return {
+      ...(description ? { body: description } : {}),
+      meta: {},
+      managed: false,
+    };
   }
   try {
     const encoded = first.slice(META_PREFIX.length, -META_SUFFIX.length);
@@ -95,9 +100,14 @@ function decodeDescription(value: unknown): {
     return {
       ...(body ? { body } : {}),
       meta: record(meta) as BeadsMeta,
+      managed: true,
     };
   } catch {
-    return { ...(description ? { body: description } : {}), meta: {} };
+    return {
+      ...(description ? { body: description } : {}),
+      meta: {},
+      managed: false,
+    };
   }
 }
 
@@ -166,7 +176,7 @@ function taskFromBead(bead: Bead, deps: Dep[]): Task {
   if (kind) task.kind = kind;
   if (metadata.repo) task.repo = metadata.repo;
   const notes = text(bead.notes);
-  const body = decoded.body ?? notes;
+  const body = decoded.managed ? decoded.body : (decoded.body ?? notes);
   if (body) task.body = body;
   if (hold) task.hold = hold;
   if (typeof bead.priority === "number") task.priority = bead.priority;

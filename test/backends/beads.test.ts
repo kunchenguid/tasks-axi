@@ -111,6 +111,22 @@ function realDepShapeBd() {
 }
 
 describe("BeadsStore", () => {
+  it("keeps an explicitly cleared managed body empty", async () => {
+    const fake = fakeBd();
+    const store = new BeadsStore({
+      path: "/tmp/project/.beads",
+      prefix: "fm",
+      run: fake.run,
+    });
+
+    await store.create({ id: "fm-clear-body", title: "clear body" });
+    fake.beads.get("fm-clear-body")!.notes = "legacy notes";
+    await store.update("fm-clear-body", { repo: "tasks-axi" });
+    await store.update("fm-clear-body", { body: "" });
+
+    expect((await store.get("fm-clear-body"))?.body).toBeUndefined();
+  });
+
   it("maps beads CRUD, transitions, metadata, and dependencies", async () => {
     const fake = fakeBd();
     const store = new BeadsStore({
