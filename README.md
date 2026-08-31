@@ -265,6 +265,7 @@ as tasks. Beads supports dependency edges, comments, full-text search, and
 server-side ids, but not tasks-axi pruning or public-followup obligations.
 
 Markdown `archive` is optional; when omitted, pruned tasks are appended to `done-archive.md` next to the active backlog.
+Body replacements with `--archive-body` append superseded bodies to `note-archive.md` next to the active backlog.
 
 ## Backends
 
