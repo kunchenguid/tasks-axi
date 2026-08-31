@@ -331,6 +331,36 @@ describe("BeadsStore", () => {
     expect(fake.beads.has("bd-blocker")).toBe(true);
   });
 
+  it.each(["parent-child", "discovered-from"])(
+    "allows deletion across incoming %s relationships",
+    async (dependencyType) => {
+      const fake = fakeBd();
+      const run: BeadsRunner = async (binary, args, cwd) => {
+        if (
+          args[0] === "dep" &&
+          args[1] === "list" &&
+          args.includes("--direction") &&
+          args.includes("up")
+        ) {
+          return {
+            stdout: JSON.stringify([
+              { id: "bd-related", dependency_type: dependencyType },
+            ]),
+            stderr: "",
+          };
+        }
+        return fake.run(binary, args, cwd);
+      };
+      const store = new BeadsStore({ path: "/tmp/project/.beads", run });
+      await store.create({ id: "bd-target", title: "target" });
+      await store.create({ id: "bd-related", title: "related" });
+
+      await expect(store.remove("bd-target")).resolves.toMatchObject({
+        id: "bd-target",
+      });
+    },
+  );
+
   it("rejects ids outside the configured beads prefix before creation", async () => {
     const fake = fakeBd();
     const store = new BeadsStore({

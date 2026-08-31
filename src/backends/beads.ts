@@ -616,6 +616,7 @@ export class BeadsStore implements Store {
       ]),
     );
     for (const item of dependents) {
+      if (text(item.dependency_type ?? item.type) !== "blocks") continue;
       const dependent = await this.get(depOwner(item) ?? text(item.id) ?? "");
       if (dependent && dependent.state !== "done") {
         throw new AxiError(
