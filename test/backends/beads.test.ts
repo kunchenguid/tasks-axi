@@ -163,6 +163,20 @@ describe("BeadsStore", () => {
     expect(await store.get("missing")).toBeNull();
   });
 
+  it("recognizes bd's structured missing-issue response", async () => {
+    const store = new BeadsStore({
+      path: "/tmp/project/.beads",
+      run: async () => {
+        throw Object.assign(new Error("bd show failed"), {
+          stdout: JSON.stringify({ error: 'no issue found matching "bd-missing"' }),
+          stderr: "",
+        });
+      },
+    });
+
+    await expect(store.get("bd-missing")).resolves.toBeNull();
+  });
+
   it("validates and verifies dependency mutations", async () => {
     const fake = fakeBd(["dep add"]);
     const store = new BeadsStore({ path: "/tmp/project/.beads", run: fake.run });

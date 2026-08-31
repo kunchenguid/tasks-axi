@@ -233,7 +233,9 @@ export class BeadsStore implements Store {
         notFoundOk &&
         error &&
         typeof error === "object" &&
-        /not found|does not exist/i.test(String((error as { stderr?: string }).stderr ?? ""))
+        /not found|no issues? found|does not exist/i.test(
+          `${String((error as { stderr?: string }).stderr ?? "")} ${String((error as { stdout?: string }).stdout ?? "")}`,
+        )
       ) {
         return null;
       }
