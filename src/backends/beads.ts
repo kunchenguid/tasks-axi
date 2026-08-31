@@ -415,6 +415,23 @@ export class BeadsStore implements Store {
         "UNKNOWN",
       );
     }
+    const expectedLinks = deriveLinks(title);
+    if (
+      found.task.title !== title ||
+      found.task.body !== (input.body || undefined) ||
+      found.task.kind !== input.kind ||
+      found.task.repo !== input.repo ||
+      (input.priority !== undefined &&
+        found.task.priority !== input.priority) ||
+      JSON.stringify(found.task.links) !== JSON.stringify(expectedLinks) ||
+      JSON.stringify(found.task.meta) !== JSON.stringify(input.meta) ||
+      !sameHold(found.task.hold, input.hold)
+    ) {
+      throw new AxiError(
+        `beads create did not persist requested fields for "${input.id}"`,
+        "UNKNOWN",
+      );
+    }
     if (input.hold) {
       const labels = Array.isArray(found.bead.labels)
         ? found.bead.labels.map(String)

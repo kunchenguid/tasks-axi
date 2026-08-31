@@ -22,9 +22,11 @@ function fakeBd(ignore: string[] = []) {
       beads.set(id, {
         id,
         title,
-        description,
+        description: ignore.includes("create description") ? "" : description,
         status: "open",
-        priority: 2,
+        priority: args.includes("--priority")
+          ? Number(args[args.indexOf("--priority") + 1])
+          : 2,
         issue_type: "task",
         created_at: "2026-08-31T00:00:00Z",
         updated_at: "2026-08-31T00:00:00Z",
@@ -413,5 +415,27 @@ describe("BeadsStore", () => {
       labels: ["tasks-axi-held"],
       defer_until: "2026-09-10",
     });
+  });
+
+  it("rejects creates that omit requested persisted fields", async () => {
+    const fake = fakeBd(["create description"]);
+    const store = new BeadsStore({
+      path: "/tmp/project/.beads",
+      run: fake.run,
+    });
+
+    await expect(
+      store.create({
+        id: "bd-incomplete",
+        title: "incomplete",
+        body: "notes",
+        kind: "ship",
+        repo: "tasks-axi",
+        priority: 1,
+        links: [{ kind: "doc", url: "https://example.com/spec" }],
+        hold: { reason: "later" },
+        meta: { owner: "captain" },
+      }),
+    ).rejects.toThrow("did not persist requested fields");
   });
 });
