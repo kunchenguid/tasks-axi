@@ -79,7 +79,7 @@ function fakeBd(ignore: string[] = []) {
       const bead = beads.get(args[1]);
       if (bead && !ignore.includes(operation)) bead.status = "closed";
     } else if (command === "delete") {
-      beads.delete(args[1]);
+      if (!ignore.includes(operation)) beads.delete(args[1]);
     }
     return { stdout: "[]", stderr: "" };
   };
@@ -243,6 +243,70 @@ describe("BeadsStore", () => {
     await expect(
       store.addDep("bd-owner", { type: "blocked-by", id: "bd-target" }),
     ).rejects.toThrow("did not persist edge");
+  });
+
+  it("validates create dependencies before persisting the owner", async () => {
+    const fake = fakeBd();
+    const store = new BeadsStore({ path: "/tmp/project/.beads", run: fake.run });
+
+    await expect(
+      store.create({
+        id: "bd-owner",
+        title: "owner",
+        deps: [{ type: "blocked-by", id: "bd-missing" }],
+      }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(fake.beads.has("bd-owner")).toBe(false);
+
+    await expect(
+      store.create({
+        id: "bd-self",
+        title: "self",
+        deps: [{ type: "blocked-by", id: "bd-self" }],
+      }),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(fake.beads.has("bd-self")).toBe(false);
+  });
+
+  it("verifies generic updates and deletion", async () => {
+    const fake = fakeBd(["update", "delete"]);
+    const store = new BeadsStore({ path: "/tmp/project/.beads", run: fake.run });
+    await store.create({ id: "bd-task", title: "task" });
+
+    await expect(store.update("bd-task", { title: "renamed" })).rejects.toThrow(
+      "did not persist requested fields",
+    );
+    await expect(store.remove("bd-task")).rejects.toThrow(
+      "did not remove",
+    );
+  });
+
+  it("protects blockers with target-only dependent records", async () => {
+    const fake = fakeBd();
+    const run: BeadsRunner = async (binary, args, cwd) => {
+      if (
+        args[0] === "dep" &&
+        args[1] === "list" &&
+        args.includes("--direction") &&
+        args.includes("up")
+      ) {
+        return {
+          stdout: JSON.stringify([
+            { id: "bd-dependent", dependency_type: "blocks" },
+          ]),
+          stderr: "",
+        };
+      }
+      return fake.run(binary, args, cwd);
+    };
+    const store = new BeadsStore({ path: "/tmp/project/.beads", run });
+    await store.create({ id: "bd-blocker", title: "blocker" });
+    await store.create({ id: "bd-dependent", title: "dependent" });
+
+    await expect(store.remove("bd-blocker")).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
+    expect(fake.beads.has("bd-blocker")).toBe(true);
   });
 
   it("rejects ids outside the configured beads prefix before creation", async () => {

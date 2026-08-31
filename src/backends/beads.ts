@@ -352,6 +352,17 @@ export class BeadsStore implements Store {
         "VALIDATION_ERROR",
       );
     }
+    for (const dep of input.deps ?? []) {
+      if (input.id === dep.id) {
+        throw new AxiError(
+          `Task "${input.id}" cannot depend on itself`,
+          "VALIDATION_ERROR",
+        );
+      }
+      if (!(await this.get(dep.id))) {
+        throw new AxiError(`Task "${dep.id}" not found`, "NOT_FOUND");
+      }
+    }
     const title = appendLinks(input.title, input.links);
     const meta: BeadsMeta = {
       ...(input.kind ? { kind: input.kind } : {}),
@@ -547,6 +558,20 @@ export class BeadsStore implements Store {
         );
       }
     }
+    const persisted = updated.task;
+    const mismatched = changed.some((field) => {
+      if (field === "archive" || field === "hold") return false;
+      if (field === "links") return persisted.title !== next.title;
+      if (field === "meta")
+        return JSON.stringify(persisted.meta) !== JSON.stringify(next.meta);
+      return persisted[field] !== next[field];
+    });
+    if (mismatched) {
+      throw new AxiError(
+        `beads update did not persist requested fields for "${id}"`,
+        "UNKNOWN",
+      );
+    }
     return { task: updated.task, changed };
   }
 
@@ -564,7 +589,7 @@ export class BeadsStore implements Store {
       ]),
     );
     for (const item of dependents) {
-      const dependent = await this.get(depOwner(item) ?? "");
+      const dependent = await this.get(depOwner(item) ?? text(item.id) ?? "");
       if (dependent && dependent.state !== "done") {
         throw new AxiError(
           `Task "${id}" is still blocking active tasks`,
@@ -573,6 +598,9 @@ export class BeadsStore implements Store {
       }
     }
     await this.call("delete", ["delete", id, "--force", "--json"]);
+    if (await this.get(id)) {
+      throw new AxiError(`beads delete did not remove "${id}"`, "UNKNOWN");
+    }
     return current;
   }
 
