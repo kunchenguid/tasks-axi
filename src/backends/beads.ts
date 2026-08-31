@@ -6,7 +6,8 @@
  * Beads prefix, so no slug->id index is needed. Backend-only fields are kept
  * in a versioned base64url header in the Beads description. Holds map to the
  * `tasks-axi-held` label, with `hold.until` mirrored to native `--defer`;
- * `--defer ""` is the bd-supported clear operation.
+ * `--defer ""` is the bd-supported clear operation. Dependency reasons have
+ * no native bd field, so they are keyed by edge in the same reserved header.
  */
 
 import { execFile as execFileCallback } from "node:child_process";
@@ -53,6 +54,7 @@ interface BeadsMeta {
   repo?: string;
   hold?: Hold;
   meta?: Record<string, unknown>;
+  depReasons?: Record<string, string>;
 }
 
 type Bead = Record<string, unknown>;
@@ -134,6 +136,10 @@ function depTarget(item: Bead): string | undefined {
   return text(item.depends_on_id ?? item.to_id ?? item.blocker_id);
 }
 
+function depKey(dep: Dep): string {
+  return `${dep.type}:${dep.id}`;
+}
+
 function taskFromBead(bead: Bead, deps: Dep[]): Task {
   const decoded = decodeDescription(bead.description);
   const metadata = decoded.meta;
@@ -147,7 +153,10 @@ function taskFromBead(bead: Bead, deps: Dep[]): Task {
     title,
     state: stateOf(bead.status),
     links: deriveLinks(title),
-    deps,
+    deps: deps.map((dep) => {
+      const reason = text(metadata.depReasons?.[depKey(dep)]);
+      return reason ? { ...dep, reason } : dep;
+    }),
   };
   if (kind) task.kind = kind;
   if (metadata.repo) task.repo = metadata.repo;
@@ -259,6 +268,28 @@ export class BeadsStore implements Store {
     return { bead, task: taskFromBead(bead, deps.get(id) ?? []) };
   }
 
+  private async setDepReason(id: string, dep: Dep, reason: string | undefined): Promise<void> {
+    const found = await this.bead(id);
+    if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
+    const decoded = decodeDescription(found.bead.description);
+    const depReasons = { ...decoded.meta.depReasons };
+    const key = depKey(dep);
+    if (reason) depReasons[key] = reason;
+    else delete depReasons[key];
+    const metadata = {
+      ...decoded.meta,
+      ...(Object.keys(depReasons).length > 0 ? { depReasons } : {}),
+    };
+    if (Object.keys(depReasons).length === 0) delete metadata.depReasons;
+    await this.call("update", [
+      "update",
+      id,
+      "--description",
+      encodeDescription(decoded.body, metadata),
+      "--json",
+    ]);
+  }
+
   async get(id: string): Promise<Task | null> {
     const found = await this.bead(id);
     return found?.task ?? null;
@@ -295,6 +326,13 @@ export class BeadsStore implements Store {
       ...(input.repo ? { repo: input.repo } : {}),
       ...(input.hold ? { hold: input.hold } : {}),
       ...(input.meta ? { meta: input.meta } : {}),
+      ...(input.deps?.some((dep) => dep.reason)
+        ? {
+            depReasons: Object.fromEntries(
+              input.deps.filter((dep) => dep.reason).map((dep) => [depKey(dep), dep.reason as string]),
+            ),
+          }
+        : {}),
     };
     const args = ["create", title, "--id", input.id, "--type", "task"];
     if (!input.id.startsWith(`${this.prefix}-`)) args.push("--force");
@@ -327,8 +365,9 @@ export class BeadsStore implements Store {
   }
 
   async update(id: string, patch: TaskPatch): Promise<TaskUpdateResult> {
-    const current = await this.get(id);
-    if (!current) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
+    const found = await this.bead(id);
+    const current = found?.task;
+    if (!current || !found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
     const next: Task = {
       ...current,
       links: current.links.map((link) => ({ ...link })),
@@ -387,6 +426,9 @@ export class BeadsStore implements Store {
       ...(next.repo ? { repo: next.repo } : {}),
       ...(next.hold ? { hold: next.hold } : {}),
       ...(next.meta ? { meta: next.meta } : {}),
+      ...(decodeDescription(found.bead.description).meta.depReasons
+        ? { depReasons: decodeDescription(found.bead.description).meta.depReasons }
+        : {}),
     };
     const args = ["update", id];
     if (changed.includes("title") || changed.includes("links")) args.push("--title", next.title);
@@ -458,8 +500,9 @@ export class BeadsStore implements Store {
     }
     if (current.deps.some((item) => item.type === dep.type && item.id === dep.id)) return false;
     await this.call("dep add", ["dep", "add", id, dep.id, "--type", dependencyArgs(dep).type, "--json"]);
+    await this.setDepReason(id, dep, dep.reason);
     const updated = await this.get(id);
-    if (!updated?.deps.some((item) => item.type === dep.type && item.id === dep.id)) {
+    if (!updated?.deps.some((item) => item.type === dep.type && item.id === dep.id && item.reason === dep.reason)) {
       throw new AxiError(`beads dep add did not persist edge to "${dep.id}"`, "UNKNOWN");
     }
     return true;
@@ -470,6 +513,7 @@ export class BeadsStore implements Store {
     if (!current) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
     if (!current.deps.some((item) => item.type === dep.type && item.id === dep.id)) return false;
     await this.call("dep remove", ["dep", "remove", id, dep.id, "--json"]);
+    await this.setDepReason(id, dep, undefined);
     const updated = await this.get(id);
     if (!updated || updated.deps.some((item) => item.type === dep.type && item.id === dep.id)) {
       throw new AxiError(`beads dep remove did not remove edge to "${dep.id}"`, "UNKNOWN");

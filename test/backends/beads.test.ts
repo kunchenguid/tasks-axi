@@ -96,11 +96,16 @@ describe("BeadsStore", () => {
     });
 
     await store.create({ id: "blocker", title: "blocker" });
-    expect(await store.addDep("tasks-axi-beads", { type: "blocked-by", id: "blocker" })).toBe(true);
+    expect(await store.addDep("tasks-axi-beads", { type: "blocked-by", id: "blocker", reason: "waits on refactor" })).toBe(true);
     expect((await store.get("tasks-axi-beads"))?.deps).toEqual([
-      { type: "blocked-by", id: "blocker" },
+      { type: "blocked-by", id: "blocker", reason: "waits on refactor" },
+    ]);
+    await store.update("tasks-axi-beads", { body: "updated notes" });
+    expect((await store.list({})).items.find((task) => task.id === "tasks-axi-beads")?.deps).toEqual([
+      { type: "blocked-by", id: "blocker", reason: "waits on refactor" },
     ]);
     expect(await store.removeDep("tasks-axi-beads", { type: "blocked-by", id: "blocker" })).toBe(true);
+    expect((await store.get("tasks-axi-beads"))?.deps).toEqual([]);
 
     await store.update("tasks-axi-beads", { hold: { reason: "captain", kind: "captain" } });
     expect((await store.get("tasks-axi-beads"))?.hold).toEqual({ reason: "captain", kind: "captain" });
