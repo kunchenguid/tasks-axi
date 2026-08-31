@@ -23,7 +23,6 @@ import type {
 } from "../model.js";
 import { HOLD_KINDS } from "../model.js";
 import { PR_URL_EXPECTED } from "../pr-url.js";
-import { deriveLinks } from "../links.js";
 import {
   PUBLIC_FOLLOWUP_KIND,
   assertPublicFollowupMutation,
@@ -47,6 +46,7 @@ import {
   type Entry,
   type Section,
   type TaskEntry,
+  deriveLinks,
   extractTags,
   parseBacklog,
   renderBacklog,
