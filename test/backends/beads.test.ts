@@ -163,6 +163,12 @@ describe("BeadsStore", () => {
     await store.update("held", { hold: { reason: "still held" } });
     expect(fake.beads.get("held")?.defer_until).toBe("");
 
+    await store.create({ id: "native-defer", title: "native defer" });
+    const nativeDeferred = fake.beads.get("native-defer");
+    if (nativeDeferred) nativeDeferred.defer_until = "2026-10-01";
+    await store.update("native-defer", { hold: { reason: "indefinite" } });
+    expect(nativeDeferred?.defer_until).toBe("");
+
     const partial = fakeBd(["update native"]);
     const partialStore = new BeadsStore({ path: "/tmp/project/.beads", run: partial.run });
     await partialStore.create({ id: "partial", title: "partial" });

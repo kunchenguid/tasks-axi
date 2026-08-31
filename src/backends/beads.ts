@@ -439,7 +439,7 @@ export class BeadsStore implements Store {
     if (changed.includes("hold")) {
       args.push(next.hold ? "--add-label" : "--remove-label", HELD_LABEL);
       if (next.hold?.until) args.push("--defer", next.hold.until);
-      else if (current.hold?.until) args.push("--defer", "");
+      else if (date(found.bead.defer_until)) args.push("--defer", "");
     }
     args.push("--json");
     await this.call("update", args);
