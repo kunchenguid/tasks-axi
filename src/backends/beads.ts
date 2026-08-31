@@ -4,13 +4,15 @@
  * IDs are preserved 1:1: every create passes the caller's slug as `bd
  * create --id`. `--force` is added when it does not match the configured
  * Beads prefix, so no slug->id index is needed. Backend-only fields are kept
- * in a versioned base64url header in the Beads description.
+ * in a versioned base64url header in the Beads description. Holds map to the
+ * `tasks-axi-held` label, with `hold.until` mirrored to native `--defer`;
+ * `--defer ""` is the bd-supported clear operation.
  */
 
 import { execFile as execFileCallback } from "node:child_process";
 import { basename, dirname, resolve } from "node:path";
 import { promisify } from "node:util";
-import { deriveLinks } from "./markdown-grammar.js";
+import { deriveLinks } from "../links.js";
 import { AxiError, unsupported } from "../errors.js";
 import type {
   Dep,
@@ -307,6 +309,9 @@ export class BeadsStore implements Store {
     for (const dep of input.deps ?? []) await this.addDep(input.id, dep);
     const task = await this.get(input.id);
     if (!task) throw new AxiError(`beads create did not return "${input.id}"`, "UNKNOWN");
+    if (task.state !== input.state) {
+      throw new AxiError(`beads create did not persist state "${input.state}"`, "UNKNOWN");
+    }
     return task;
   }
 
@@ -381,7 +386,7 @@ export class BeadsStore implements Store {
     if (changed.includes("hold")) {
       args.push(next.hold ? "--add-label" : "--remove-label", HELD_LABEL);
       if (next.hold?.until) args.push("--defer", next.hold.until);
-      else if (!next.hold && current.hold?.until) args.push("--defer", "");
+      else if (current.hold?.until) args.push("--defer", "");
     }
     args.push("--json");
     await this.call("update", args);
@@ -425,15 +430,27 @@ export class BeadsStore implements Store {
     }
     const task = await this.get(id);
     if (!task) throw new AxiError(`beads transition removed "${id}"`, "UNKNOWN");
+    if (task.state !== to) {
+      throw new AxiError(`beads transition did not persist state "${to}"`, "UNKNOWN");
+    }
     return task;
   }
 
   async addDep(id: string, dep: Dep): Promise<boolean> {
     const current = await this.get(id);
     if (!current) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
+    if (id === dep.id) {
+      throw new AxiError(`Task "${id}" cannot depend on itself`, "VALIDATION_ERROR");
+    }
+    if (!(await this.get(dep.id))) {
+      throw new AxiError(`Task "${dep.id}" not found`, "NOT_FOUND");
+    }
     if (current.deps.some((item) => item.type === dep.type && item.id === dep.id)) return false;
     await this.call("dep add", ["dep", "add", id, dep.id, "--type", dependencyArgs(dep).type, "--json"]);
-    await this.get(id);
+    const updated = await this.get(id);
+    if (!updated?.deps.some((item) => item.type === dep.type && item.id === dep.id)) {
+      throw new AxiError(`beads dep add did not persist edge to "${dep.id}"`, "UNKNOWN");
+    }
     return true;
   }
 
@@ -442,7 +459,10 @@ export class BeadsStore implements Store {
     if (!current) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
     if (!current.deps.some((item) => item.type === dep.type && item.id === dep.id)) return false;
     await this.call("dep remove", ["dep", "remove", id, dep.id, "--json"]);
-    await this.get(id);
+    const updated = await this.get(id);
+    if (!updated || updated.deps.some((item) => item.type === dep.type && item.id === dep.id)) {
+      throw new AxiError(`beads dep remove did not remove edge to "${dep.id}"`, "UNKNOWN");
+    }
     return true;
   }
 

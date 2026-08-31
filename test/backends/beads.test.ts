@@ -6,11 +6,12 @@ import {
 
 type FakeBead = Record<string, unknown>;
 
-function fakeBd() {
+function fakeBd(ignore: string[] = []) {
   const beads = new Map<string, FakeBead>();
   const edges: Array<{ issue_id: string; depends_on_id: string; type: string }> = [];
   const run: BeadsRunner = async (_binary, args) => {
     const command = args[0];
+    const operation = command === "dep" ? `${command} ${args[1]}` : command;
     if (command === "create") {
       const id = args[args.indexOf("--id") + 1];
       const title = args[1];
@@ -40,28 +41,30 @@ function fakeBd() {
       }
       const issue = args[2];
       const target = args[3];
-      if (args[1] === "add") edges.push({ issue_id: issue, depends_on_id: target, type: "blocks" });
+      if (args[1] === "add" && !ignore.includes(operation)) edges.push({ issue_id: issue, depends_on_id: target, type: "blocks" });
       if (args[1] === "remove") {
         const index = edges.findIndex((edge) => edge.issue_id === issue && edge.depends_on_id === target);
-        if (index >= 0) edges.splice(index, 1);
+        if (index >= 0 && !ignore.includes(operation)) edges.splice(index, 1);
       }
     } else if (command === "update") {
       const bead = beads.get(args[1]);
       if (!bead) return { stdout: "[]", stderr: "" };
+      if (ignore.includes(operation)) return { stdout: "[]", stderr: "" };
       if (args.includes("--title")) bead.title = args[args.indexOf("--title") + 1];
       if (args.includes("--description")) bead.description = args[args.indexOf("--description") + 1];
       if (args.includes("--status")) bead.status = args[args.indexOf("--status") + 1];
       if (args.includes("--add-label")) bead.labels = ["tasks-axi-held"];
       if (args.includes("--remove-label")) bead.labels = [];
+      if (args.includes("--defer")) bead.defer_until = args[args.indexOf("--defer") + 1];
     } else if (command === "close") {
       const bead = beads.get(args[1]);
-      if (bead) bead.status = "closed";
+      if (bead && !ignore.includes(operation)) bead.status = "closed";
     } else if (command === "delete") {
       beads.delete(args[1]);
     }
     return { stdout: "[]", stderr: "" };
   };
-  return { run, edges };
+  return { run, edges, beads };
 }
 
 describe("BeadsStore", () => {
@@ -126,5 +129,30 @@ describe("BeadsStore", () => {
       publicFollowups: false,
     });
     expect(await store.get("missing")).toBeNull();
+  });
+
+  it("validates and verifies dependency mutations", async () => {
+    const fake = fakeBd(["dep add"]);
+    const store = new BeadsStore({ path: "/tmp/project/.beads", run: fake.run });
+    await store.create({ id: "owner", title: "owner" });
+    await store.create({ id: "target", title: "target" });
+
+    await expect(store.addDep("owner", { type: "blocked-by", id: "owner" })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(store.addDep("owner", { type: "blocked-by", id: "missing" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(store.addDep("owner", { type: "blocked-by", id: "target" })).rejects.toThrow("did not persist edge");
+  });
+
+  it("verifies transitions and clears dated holds", async () => {
+    const fake = fakeBd();
+    const store = new BeadsStore({ path: "/tmp/project/.beads", run: fake.run });
+    await store.create({ id: "held", title: "held" });
+    await store.update("held", { hold: { reason: "later", until: "2026-09-10" } });
+    await store.update("held", { hold: { reason: "still held" } });
+    expect(fake.beads.get("held")?.defer_until).toBe("");
+
+    const silent = fakeBd(["update"]);
+    const silentStore = new BeadsStore({ path: "/tmp/project/.beads", run: silent.run });
+    await silentStore.create({ id: "task", title: "task" });
+    await expect(silentStore.transition("task", "in_flight")).rejects.toThrow("did not persist state");
   });
 });

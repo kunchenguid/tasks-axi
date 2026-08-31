@@ -1,7 +1,8 @@
 import { AxiError } from "../errors.js";
-import type { Dep, Hold, HoldKind, State, Task, TaskLink } from "../model.js";
+import type { Dep, Hold, HoldKind, State, Task } from "../model.js";
 import { HOLD_KINDS } from "../model.js";
-import { isPrUrl } from "../pr-url.js";
+import { deriveLinks } from "../links.js";
+export { deriveLinks } from "../links.js";
 import {
   PUBLIC_FOLLOWUP_KIND,
   assertPublicFollowupTaskState,
@@ -126,9 +127,6 @@ const TAIL_HOLD_KIND = new RegExp(
 );
 const TAIL_HOLD_UNTIL = new RegExp(`\\s*\\(hold-until:\\s*(${DATE})\\)\\s*$`);
 
-const REPORT_LINK = /\bdata\/\S+?\/report\.md\b/g;
-const GENERIC_URL = /https?:\/\/\S+/g;
-
 const LEADING_KIND: Array<[RegExp, string]> = [
   [/^PERSISTENT SECONDMATE\b/, "secondmate"],
   [/^SHIP\b/, "ship"],
@@ -146,30 +144,6 @@ export function leadingKind(title: string): string | undefined {
 
 function titleHasLeadingKind(title: string, kind: string): boolean {
   return leadingKind(title) === kind;
-}
-
-function trimUrl(url: string): string {
-  return url.replace(/[).,;]+$/, "");
-}
-
-/** Derive typed links by scanning prose (links live in the prose, not as tags). */
-export function deriveLinks(text: string): TaskLink[] {
-  const links: TaskLink[] = [];
-  const seen = new Set<string>();
-  const add = (kind: TaskLink["kind"], raw: string) => {
-    const url = trimUrl(raw);
-    if (seen.has(url)) return;
-    seen.add(url);
-    links.push({ kind, url });
-  };
-  for (const m of text.matchAll(GENERIC_URL)) {
-    if (isPrUrl(trimUrl(m[0]))) add("pr", m[0]);
-  }
-  for (const m of text.matchAll(REPORT_LINK)) add("report", m[0]);
-  for (const m of text.matchAll(GENERIC_URL)) {
-    if (!isPrUrl(trimUrl(m[0]))) add("doc", m[0]);
-  }
-  return links;
 }
 
 export interface ExtractedTags {
