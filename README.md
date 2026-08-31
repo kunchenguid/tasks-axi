@@ -19,7 +19,7 @@ Every backlog mutation today regenerates markdown through the model, which is ex
 tasks-axi reduces that to the length of one short command plus a compact confirmation read back as cheap input.
 The long status line that the model used to rewrite on every status change is now a `body`.
 Note writes are inspect-then-update: read the current body with `show <id> --full`, then replace it deliberately with `update --body` or `update --body-file`.
-Pass `--archive-body` with a body replacement when the superseded body should be moved to cold history in `note-archive.md`.
+Pass `--archive-body` with a body replacement when the superseded body should be preserved in cold history.
 
 ## Quick Start
 
@@ -247,7 +247,8 @@ done_keep = 10
 
 To use a Beads graph, point the backend at its `.beads` directory. The
 adapter invokes `bd` in that directory's parent and preserves task ids by
-passing each slug to `bd create --id`.
+passing each slug to `bd create --id`. Caller-supplied ids must begin with the
+configured prefix followed by `-` (for example, `fm-task-q1`).
 
 ```toml
 backend = "beads"
