@@ -244,16 +244,36 @@ archive = "data/done-archive.md"
 done_keep = 10
 ```
 
+To use a Beads graph, point the backend at its `.beads` directory. The
+adapter invokes `bd` in that directory's parent and preserves task ids by
+passing each slug to `bd create --id`.
+
+```toml
+backend = "beads"
+
+[beads]
+path = "/opt/ra/firstmate/.beads"
+binary = "~/.local/bin/bd"
+prefix = "fm"
+```
+
+`binary` and `prefix` are optional (`~/.local/bin/bd` and `bd` by default).
+Beads descriptions contain a reserved versioned tasks-axi metadata header for
+fields that are not native Beads fields; ordinary Beads issues remain readable
+as tasks. Beads supports dependency edges, comments, full-text search, and
+server-side ids, but not tasks-axi pruning or public-followup obligations.
+
 `archive` is optional; when omitted, pruned tasks are appended to `done-archive.md` next to the active backlog.
 Body replacements with `--archive-body` append superseded bodies to `note-archive.md` next to the active backlog.
 
 ## Backends
 
-P1 ships the **markdown** backend only, behind a narrow `Store` interface so additional backends slot in without touching the CLI layer.
+The shipped backends sit behind a narrow `Store` interface so additional backends slot in without touching the CLI layer.
 
 | Backend                | Status  |
 | ---------------------- | ------- |
 | markdown               | shipped |
+| beads                  | shipped |
 | sqlite                 | planned |
 | github / jira / linear | planned |
 

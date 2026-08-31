@@ -36,6 +36,18 @@ describe("parseConfigToml", () => {
     });
   });
 
+  it("reads the [beads] table", () => {
+    const cfg = parseConfigToml(
+      ['backend = "beads"', "[beads]", 'path = "/var/lib/beads/.beads"', 'binary = "bd"', 'prefix = "fm"'].join("\n"),
+    );
+    expect(cfg.backend).toBe("beads");
+    expect(cfg.beads).toEqual({
+      path: "/var/lib/beads/.beads",
+      binary: "bd",
+      prefix: "fm",
+    });
+  });
+
   it("ignores unknown keys and tables", () => {
     const cfg = parseConfigToml('[sqlite]\npath = ".tasks.db"\npath: broken\n');
     expect(cfg.markdown).toBeUndefined();
@@ -144,6 +156,19 @@ describe("resolveConfig", () => {
   it("reads done_keep from the project toml", () => {
     writeFileSync(join(dir, ".tasks.toml"), "[markdown]\ndone_keep = 5\n");
     expect(resolveConfig({ cwd: dir, home, env: {} }).doneKeep).toBe(5);
+  });
+
+  it("resolves beads settings from the project toml", () => {
+    writeFileSync(
+      join(dir, ".tasks.toml"),
+      ['backend = "beads"', "[beads]", 'path = ".data/.beads"', 'binary = "custom-bd"', 'prefix = "fm"'].join("\n"),
+    );
+    expect(resolveConfig({ cwd: dir, home, env: {} })).toMatchObject({
+      backend: "beads",
+      beadsPath: join(dir, ".data/.beads"),
+      beadsBinary: "custom-bd",
+      beadsPrefix: "fm",
+    });
   });
 
   it("rejects negative done_keep from toml", () => {
