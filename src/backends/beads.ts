@@ -14,7 +14,7 @@
 import { execFile as execFileCallback } from "node:child_process";
 import { basename, dirname, resolve } from "node:path";
 import { promisify } from "node:util";
-import { deriveLinks } from "../links.js";
+import { deriveLinks } from "./markdown-grammar.js";
 import { AxiError, unsupported } from "../errors.js";
 import type {
   Dep,
