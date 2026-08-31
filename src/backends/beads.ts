@@ -405,9 +405,17 @@ export class BeadsStore implements Store {
       next.priority = patch.priority;
       mark("priority");
     }
-    if (patch.hold !== undefined && !sameHold(patch.hold ?? undefined, current.hold)) {
-      next.hold = patch.hold ?? undefined;
-      mark("hold");
+    if (patch.hold !== undefined) {
+      const requestedHold = patch.hold ?? undefined;
+      const labels = Array.isArray(found.bead.labels) ? found.bead.labels.map(String) : [];
+      if (
+        !sameHold(requestedHold, current.hold) ||
+        labels.includes(HELD_LABEL) !== Boolean(requestedHold) ||
+        date(found.bead.defer_until) !== requestedHold?.until
+      ) {
+        next.hold = requestedHold;
+        mark("hold");
+      }
     }
     if (patch.meta) {
       next.meta = { ...current.meta, ...patch.meta };

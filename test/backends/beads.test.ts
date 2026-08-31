@@ -166,8 +166,14 @@ describe("BeadsStore", () => {
     await store.create({ id: "native-defer", title: "native defer" });
     const nativeDeferred = fake.beads.get("native-defer");
     if (nativeDeferred) nativeDeferred.defer_until = "2026-10-01";
-    await store.update("native-defer", { hold: { reason: "indefinite" } });
+    await store.update("native-defer", { hold: null });
     expect(nativeDeferred?.defer_until).toBe("");
+
+    await store.create({ id: "label-drift", title: "label drift", hold: { reason: "later" } });
+    const labelDrift = fake.beads.get("label-drift");
+    if (labelDrift) labelDrift.labels = [];
+    await store.update("label-drift", { hold: { reason: "later" } });
+    expect(labelDrift?.labels).toEqual(["tasks-axi-held"]);
 
     const partial = fakeBd(["update native"]);
     const partialStore = new BeadsStore({ path: "/tmp/project/.beads", run: partial.run });
