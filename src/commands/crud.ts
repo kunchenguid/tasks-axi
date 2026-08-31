@@ -9,7 +9,8 @@ import {
   takeFlag,
 } from "../args.js";
 import { takeBody } from "../body.js";
-import { deriveLinks, extractTags } from "../backends/markdown-grammar.js";
+import { extractTags } from "../backends/markdown-grammar.js";
+import { deriveLinks } from "../links.js";
 import { PR_URL_EXPECTED } from "../pr-url.js";
 import { renderMutation, stateLabel, taskToJson } from "../confirm.js";
 import { requireCtx, type TasksContext } from "../context.js";
