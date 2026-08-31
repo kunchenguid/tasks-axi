@@ -302,17 +302,28 @@ export class BeadsStore implements Store {
       args.push("--description", encodeDescription(input.body, meta));
     }
     if (input.priority !== undefined) args.push("--priority", String(input.priority));
+    if (input.hold) {
+      args.push("--labels", HELD_LABEL);
+      if (input.hold.until) args.push("--defer", input.hold.until);
+    }
     args.push("--json");
     await this.call("create", args);
     if (input.state === "in_flight") await this.call("update", ["update", input.id, "--status", "in_progress", "--json"]);
     if (input.state === "done") await this.call("close", ["close", input.id, "--json"]);
     for (const dep of input.deps ?? []) await this.addDep(input.id, dep);
-    const task = await this.get(input.id);
-    if (!task) throw new AxiError(`beads create did not return "${input.id}"`, "UNKNOWN");
-    if (task.state !== input.state) {
-      throw new AxiError(`beads create did not persist state "${input.state}"`, "UNKNOWN");
+    const found = await this.bead(input.id);
+    if (!found) throw new AxiError(`beads create did not return "${input.id}"`, "UNKNOWN");
+    const expectedState = input.state ?? "queued";
+    if (found.task.state !== expectedState) {
+      throw new AxiError(`beads create did not persist state "${expectedState}"`, "UNKNOWN");
     }
-    return task;
+    if (input.hold) {
+      const labels = Array.isArray(found.bead.labels) ? found.bead.labels.map(String) : [];
+      if (!labels.includes(HELD_LABEL) || (input.hold.until && date(found.bead.defer_until) !== input.hold.until)) {
+        throw new AxiError(`beads create did not persist hold for "${input.id}"`, "UNKNOWN");
+      }
+    }
+    return found.task;
   }
 
   async update(id: string, patch: TaskPatch): Promise<TaskUpdateResult> {

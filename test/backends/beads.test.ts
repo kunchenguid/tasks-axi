@@ -27,6 +27,8 @@ function fakeBd(ignore: string[] = []) {
         issue_type: "task",
         created_at: "2026-08-31T00:00:00Z",
         updated_at: "2026-08-31T00:00:00Z",
+        ...(args.includes("--labels") ? { labels: args[args.indexOf("--labels") + 1].split(",") } : {}),
+        ...(args.includes("--defer") ? { defer_until: args[args.indexOf("--defer") + 1] } : {}),
       });
     } else if (command === "show") {
       const bead = beads.get(args[1]);
@@ -154,5 +156,21 @@ describe("BeadsStore", () => {
     const silentStore = new BeadsStore({ path: "/tmp/project/.beads", run: silent.run });
     await silentStore.create({ id: "task", title: "task" });
     await expect(silentStore.transition("task", "in_flight")).rejects.toThrow("did not persist state");
+  });
+
+  it("persists native hold state during creation", async () => {
+    const fake = fakeBd();
+    const store = new BeadsStore({ path: "/tmp/project/.beads", run: fake.run });
+    const task = await store.create({
+      id: "held-at-create",
+      title: "held",
+      hold: { reason: "later", until: "2026-09-10" },
+    });
+
+    expect(task).toMatchObject({ state: "queued", hold: { reason: "later", until: "2026-09-10" } });
+    expect(fake.beads.get("held-at-create")).toMatchObject({
+      labels: ["tasks-axi-held"],
+      defer_until: "2026-09-10",
+    });
   });
 });
