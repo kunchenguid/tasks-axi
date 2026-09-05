@@ -867,15 +867,14 @@ export class BeadsStore implements Store {
           BD_STATUS[task.state],
         );
       }
-      await this.runBd(
-        args,
-        changed.includes("body") ? (task.body ?? "") : undefined,
-      );
-
       if (archivedTask && supersededBody !== undefined) {
-        // The superseded body is preserved twice: in note-archive.md (the
-        // documented file contract shared with the markdown backend) and as a
-        // bd comment, so the history is visible from bd-native views too.
+        // Preserve first, destroy second. The superseded body is recorded
+        // twice - as a bd comment (visible from bd-native views) and in
+        // note-archive.md (the documented file contract shared with the
+        // markdown backend) - BEFORE the body-replacing update below, so a
+        // failure at any later point can never lose it. If the update then
+        // fails, the orphaned comment and archive entry are the deliberate
+        // safe failure mode: an extra preservation record beats a lost body.
         await this.runBd(
           ["comment", id, "--stdin"],
           `[tasks-axi] superseded body archived ${this.now()}:\n\n${supersededBody}`,
@@ -886,6 +885,10 @@ export class BeadsStore implements Store {
         );
         markChanged("archive");
       }
+      await this.runBd(
+        args,
+        changed.includes("body") ? (task.body ?? "") : undefined,
+      );
       const fresh = await this.writeMirror();
       this.verifyPersisted(task, fresh, "update");
       return { task, changed };
@@ -994,7 +997,9 @@ export class BeadsStore implements Store {
           `Task "${id}" already has a ${conflicting.type} edge to "${checkedDep.id}", and bd stores one relationship type per task pair`,
           "VALIDATION_ERROR",
           [
-            `Remove the existing edge first, e.g. \`bd dep remove ${id} ${checkedDep.id}\``,
+            conflicting.type === "blocked-by"
+              ? `Remove the existing edge first with \`tasks-axi unblock ${id} --by ${checkedDep.id}\``
+              : `Remove the existing edge first with \`bd dep remove ${id} ${checkedDep.id}\`, then run \`tasks-axi render\` to refresh the mirror`,
           ],
         );
       }

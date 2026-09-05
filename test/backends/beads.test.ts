@@ -10,7 +10,7 @@ import {
 } from "../beads-helpers.js";
 import { BeadsStore } from "../../src/backends/beads.js";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -317,6 +317,56 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore update", () => {
       }).toString("utf8");
       const [issue] = JSON.parse(shown) as { comment_count?: number }[];
       expect(issue.comment_count ?? 0).toBeGreaterThanOrEqual(1);
+    },
+    IT_TIMEOUT,
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "keeps the superseded body when its bd comment cannot be posted",
+    async () => {
+      await bl.store.create({
+        id: "upd-arch",
+        title: "archive ordering",
+        body: "body to preserve",
+      });
+      const wrapper = join(bl.dir, "bd-no-comment.cjs");
+      writeFileSync(
+        wrapper,
+        [
+          "#!/usr/bin/env node",
+          'const { spawnSync } = require("node:child_process");',
+          'if (process.argv[2] === "comment") {',
+          '  process.stderr.write("comment disabled\\n");',
+          "  process.exit(1);",
+          "}",
+          'const r = spawnSync("bd", process.argv.slice(2), { stdio: "inherit" });',
+          "process.exit(r.status ?? 1);",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      chmodSync(wrapper, 0o755);
+      const flaky = new BeadsStore({
+        dir: bl.dir,
+        mirrorPath: bl.mirrorPath,
+        bin: wrapper,
+        now: () => "2026-07-01",
+      });
+      const before = bl.noteArchive();
+      await expect(
+        flaky.update("upd-arch", {
+          body: "curated replacement",
+          archiveBody: true,
+        }),
+      ).rejects.toBeInstanceOf(AxiError);
+      const fresh = new BeadsStore({
+        dir: bl.dir,
+        mirrorPath: bl.mirrorPath,
+        now: () => "2026-07-01",
+      });
+      const task = await fresh.get("upd-arch");
+      expect(task?.body).toBe("body to preserve");
+      expect(bl.noteArchive()).toBe(before);
     },
     IT_TIMEOUT,
   );
