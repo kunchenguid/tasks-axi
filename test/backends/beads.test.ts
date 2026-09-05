@@ -9,6 +9,7 @@ import {
   type TempBeadsBacklog,
 } from "../beads-helpers.js";
 import { BeadsStore } from "../../src/backends/beads.js";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -297,7 +298,7 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore update", () => {
   );
 
   it(
-    "archives a superseded body on --archive-body",
+    "archives a superseded body on --archive-body, in the file and as a bd comment",
     async () => {
       const result = await bl.store.update("upd-u1", {
         body: "curated replacement",
@@ -309,6 +310,13 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore update", () => {
       const archive = bl.noteArchive();
       expect(archive).toContain("## Archived 2026-07-01");
       expect(archive).toContain("original body");
+      const shown = execFileSync("bd", ["show", "upd-u1", "--json"], {
+        cwd: bl.dir,
+        env: { ...process.env, BEADS_DIR: join(bl.dir, ".beads") },
+        timeout: 60_000,
+      }).toString("utf8");
+      const [issue] = JSON.parse(shown) as { comment_count?: number }[];
+      expect(issue.comment_count ?? 0).toBeGreaterThanOrEqual(1);
     },
     IT_TIMEOUT,
   );
@@ -486,6 +494,30 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore transitions and deps", () => {
         id: "flow-f2",
       });
       expect(removedAgain).toBe(false);
+      task = await bl.store.get("flow-f1");
+      expect(task?.deps).toEqual([]);
+    },
+    IT_TIMEOUT,
+  );
+
+  it(
+    "refuses a second relationship type to the same task pair",
+    async () => {
+      await bl.store.create({ id: "flow-f3", title: "shared target" });
+      await bl.store.addDep("flow-f1", { type: "parent", id: "flow-f3" });
+      await expect(
+        bl.store.addDep("flow-f1", { type: "blocked-by", id: "flow-f3" }),
+      ).rejects.toMatchObject({
+        code: "VALIDATION_ERROR",
+        message: expect.stringContaining("parent edge"),
+      });
+      let task = await bl.store.get("flow-f1");
+      expect(task?.deps).toEqual([{ type: "parent", id: "flow-f3" }]);
+      const removed = await bl.store.removeDep("flow-f1", {
+        type: "parent",
+        id: "flow-f3",
+      });
+      expect(removed).toBe(true);
       task = await bl.store.get("flow-f1");
       expect(task?.deps).toEqual([]);
     },

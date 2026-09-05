@@ -194,6 +194,26 @@ function cloneTask(task: Task): Task {
   return copy;
 }
 
+/** Key-order-independent JSON for read-back comparison of nested meta. */
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${JSON.stringify(k)}:${stableJson(v)}`);
+    return `{${entries.join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+/** Bodies round-trip with trailing newlines stripped (like markdown blocks). */
+function normalizedBody(body: string | undefined): string {
+  return (body ?? "").replace(/\n+$/, "");
+}
+
 export class BeadsStore implements Store {
   private readonly dir: string;
   private readonly mirrorPath: string;
@@ -234,7 +254,7 @@ export class BeadsStore implements Store {
       backend: "beads",
       deps: true,
       prune: true,
-      comments: false,
+      comments: true,
       fullTextSearch: false,
       realtimeSync: false,
       customStates: false,
@@ -576,6 +596,51 @@ export class BeadsStore implements Store {
     });
   }
 
+  /**
+   * Read-back verification: compare the freshly reloaded task against the
+   * state a mutation just computed, so a bd invocation that exits 0 without
+   * persisting the requested fields surfaces as a structured error instead of
+   * a silent divergence. `updated` is excluded (never persisted) and bodies
+   * compare with trailing newlines stripped, matching the read-side rule.
+   */
+  private verifyPersisted(
+    expected: Task,
+    cache: BeadsCache,
+    verb: string,
+  ): Task {
+    const persisted = cache.byId.get(expected.id);
+    if (!persisted) {
+      throw new AxiError(
+        `beads backend: bd ${verb} did not persist task "${expected.id}"`,
+        "UNKNOWN",
+        [`Inspect the issue with \`bd show ${expected.id} --json\``],
+      );
+    }
+    const mismatched: string[] = [];
+    if (persisted.title !== expected.title) mismatched.push("title");
+    if (persisted.state !== expected.state) mismatched.push("state");
+    if (normalizedBody(persisted.body) !== normalizedBody(expected.body)) {
+      mismatched.push("body");
+    }
+    if (persisted.kind !== expected.kind) mismatched.push("kind");
+    if (persisted.repo !== expected.repo) mismatched.push("repo");
+    if (persisted.priority !== expected.priority) mismatched.push("priority");
+    if (!sameHold(persisted.hold, expected.hold)) mismatched.push("hold");
+    if (persisted.created !== expected.created) mismatched.push("created");
+    if (persisted.closed !== expected.closed) mismatched.push("closed");
+    if (stableJson(persisted.meta ?? {}) !== stableJson(expected.meta ?? {})) {
+      mismatched.push("meta");
+    }
+    if (mismatched.length > 0) {
+      throw new AxiError(
+        `beads backend: bd ${verb} did not persist ${mismatched.join(", ")} for "${expected.id}"`,
+        "UNKNOWN",
+        [`Inspect the issue with \`bd show ${expected.id} --json\``],
+      );
+    }
+    return persisted;
+  }
+
   // -------------------------------------------------------------------------
   // CRUD
   // -------------------------------------------------------------------------
@@ -673,7 +738,7 @@ export class BeadsStore implements Store {
         );
       }
       const fresh = await this.writeMirror();
-      return fresh.byId.get(task.id) ?? task;
+      return this.verifyPersisted(task, fresh, "create");
     });
   }
 
@@ -807,14 +872,22 @@ export class BeadsStore implements Store {
         changed.includes("body") ? (task.body ?? "") : undefined,
       );
 
-      if (archivedTask) {
+      if (archivedTask && supersededBody !== undefined) {
+        // The superseded body is preserved twice: in note-archive.md (the
+        // documented file contract shared with the markdown backend) and as a
+        // bd comment, so the history is visible from bd-native views too.
+        await this.runBd(
+          ["comment", id, "--stdin"],
+          `[tasks-axi] superseded body archived ${this.now()}:\n\n${supersededBody}`,
+        );
         this.appendArchiveBlock(
           this.noteArchivePath,
           renderTaskLines(archivedTask),
         );
         markChanged("archive");
       }
-      await this.writeMirror();
+      const fresh = await this.writeMirror();
+      this.verifyPersisted(task, fresh, "update");
       return { task, changed };
     });
   }
@@ -883,7 +956,8 @@ export class BeadsStore implements Store {
       if (bodyChanged) args.push("--body-file", "-");
       await this.runBd(args, bodyChanged ? (task.body ?? "") : undefined);
 
-      await this.writeMirror();
+      const fresh = await this.writeMirror();
+      this.verifyPersisted(task, fresh, "transition");
       return task;
     });
   }
@@ -909,6 +983,20 @@ export class BeadsStore implements Store {
         )
       ) {
         return false;
+      }
+      // bd stores at most one relationship type per task pair and refuses a
+      // second; surface that as a clear conflict instead of a raw bd error.
+      const conflicting = task.deps.find(
+        (d) => d.id === checkedDep.id && d.type !== checkedDep.type,
+      );
+      if (conflicting) {
+        throw new AxiError(
+          `Task "${id}" already has a ${conflicting.type} edge to "${checkedDep.id}", and bd stores one relationship type per task pair`,
+          "VALIDATION_ERROR",
+          [
+            `Remove the existing edge first, e.g. \`bd dep remove ${id} ${checkedDep.id}\``,
+          ],
+        );
       }
       this.requireExistingDeps(cache, [checkedDep]);
       await this.addBdDep(id, checkedDep);
