@@ -371,6 +371,58 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore update", () => {
     IT_TIMEOUT,
   );
 
+  it.skipIf(process.platform === "win32")(
+    "surfaces a bd update that exits 0 without persisting as a structured error",
+    async () => {
+      await bl.store.create({
+        id: "upd-ver",
+        title: "read-back subject",
+        body: "unchanged body",
+      });
+      // A bd whose `update` succeeds without writing anything: the read-back
+      // must name the diverged fields instead of reporting a silent success.
+      const wrapper = join(bl.dir, "bd-noop-update.cjs");
+      writeFileSync(
+        wrapper,
+        [
+          "#!/usr/bin/env node",
+          'const { spawnSync } = require("node:child_process");',
+          'if (process.argv[2] === "update") process.exit(0);',
+          'const r = spawnSync("bd", process.argv.slice(2), { stdio: "inherit" });',
+          "process.exit(r.status ?? 1);",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      chmodSync(wrapper, 0o755);
+      const silent = new BeadsStore({
+        dir: bl.dir,
+        mirrorPath: bl.mirrorPath,
+        bin: wrapper,
+        now: () => "2026-07-01",
+      });
+      await expect(
+        silent.update("upd-ver", { title: "renamed", body: "new body" }),
+      ).rejects.toMatchObject({
+        code: "UNKNOWN",
+        message: expect.stringMatching(
+          /bd update did not persist title, body for "upd-ver"/,
+        ),
+      });
+      await expect(
+        silent.transition("upd-ver", "in_flight"),
+      ).rejects.toMatchObject({
+        code: "UNKNOWN",
+        message: expect.stringContaining("bd transition did not persist"),
+      });
+      const task = await bl.store.get("upd-ver");
+      expect(task?.title).toBe("read-back subject");
+      expect(task?.body).toBe("unchanged body");
+      expect(task?.state).toBe("queued");
+    },
+    IT_TIMEOUT,
+  );
+
   it(
     "sets, renders, and clears structured holds",
     async () => {
