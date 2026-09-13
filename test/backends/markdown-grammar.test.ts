@@ -339,14 +339,41 @@ describe("markdown grammar", () => {
       ]);
     });
 
+    it("derives a GitLab merge request URL as the single pr link", () => {
+      const links = deriveLinks(
+        "merged https://gitlab.com/arizona-crossmedia/visto-tecnologia/visto/go-ng/-/merge_requests/215",
+      );
+      expect(links).toEqual([
+        {
+          kind: "pr",
+          url: "https://gitlab.com/arizona-crossmedia/visto-tecnologia/visto/go-ng/-/merge_requests/215",
+        },
+      ]);
+    });
+
     it("keeps non-canonical PR-ish URLs as doc links, never pr", () => {
       for (const url of [
         "https://forgejo.samesies.gay/eve/orchalycious/pull/39",
         "https://github.com/o/r/pulls/42",
         "https://forgejo.samesies.gay/o/r/pulls/39?tab=files",
+        "https://gitlab.com/o/r/merge_requests/42",
       ]) {
         expect(deriveLinks(`see ${url}`)).toEqual([{ kind: "doc", url }]);
       }
+    });
+
+    it("round-trips a done bullet with a GitLab merge request URL byte-exactly", () => {
+      const src =
+        "## Queued\n\n## Done\n- [x] gl-done-q1 - merged https://gitlab.com/o/r/-/merge_requests/42 (merged 2026-09-13)\n";
+      const doc = parseBacklog(src);
+      const task = tasksOf(doc)[0];
+      expect(task.links).toEqual([
+        {
+          kind: "pr",
+          url: "https://gitlab.com/o/r/-/merge_requests/42",
+        },
+      ]);
+      expect(renderBacklog(doc)).toBe(src);
     });
 
     it("round-trips a done bullet with a Forgejo pull URL byte-exactly", () => {
