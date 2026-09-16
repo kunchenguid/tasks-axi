@@ -32,7 +32,7 @@ export const PR_URL_EXPECTED =
   "a canonical pull request URL: https://<host>/<owner>/<repo>/pull/<n> (GitHub), " +
   "https://<host>/<owner>/<repo>/pulls/<n> (Forgejo/Gitea), " +
   "https://<host>/<workspace>/<repo>/pull-requests/<n> or " +
-  "https://<host>/projects/<key>/repos/<repo>/pull-requests/<n> (Bitbucket)";
+  "https://<host>/projects|users/<key>/repos/<repo>/pull-requests/<n> (Bitbucket)";
 
 function isDotSegment(segment: string): boolean {
   return segment === "." || segment === "..";
