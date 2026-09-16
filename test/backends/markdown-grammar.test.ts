@@ -339,9 +339,20 @@ describe("markdown grammar", () => {
       ]);
     });
 
+    it("derives GitHub Enterprise and Bitbucket PR URLs as pr links", () => {
+      for (const url of [
+        "https://github.example.com/o/r/pull/42",
+        "https://bitbucket.org/workspace/repo/pull-requests/12",
+        "https://bitbucket.example.com/projects/PROJ/repos/repo/pull-requests/3",
+      ]) {
+        expect(deriveLinks(`merged ${url}`)).toEqual([{ kind: "pr", url }]);
+      }
+    });
+
     it("keeps non-canonical PR-ish URLs as doc links, never pr", () => {
       for (const url of [
-        "https://forgejo.samesies.gay/eve/orchalycious/pull/39",
+        "https://github.com/o/r/pull-requests/42",
+        "https://bitbucket.org/o/r/pull-requests/12/overview",
         "https://github.com/o/r/pulls/42",
         "https://forgejo.samesies.gay/o/r/pulls/39?tab=files",
       ]) {

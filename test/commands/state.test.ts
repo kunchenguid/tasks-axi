@@ -150,11 +150,47 @@ describe("state commands", () => {
       }
     });
 
+    it.each([
+      "https://github.example.com/o/r/pull/42",
+      "https://bitbucket.org/workspace/repo/pull-requests/12",
+      "https://bitbucket.example.com/projects/PROJ/repos/repo/pull-requests/3",
+    ])("closes with %s and preserves it byte-for-byte", async (url) => {
+      const b = makeBacklog();
+      try {
+        const out = await doneCommand(
+          ["cert-cleanup", "--pr", url, "--no-prune"],
+          b.ctx,
+        );
+        expect(out).toContain(`done cert-cleanup -> Done (pr ${url})`);
+        const read = b.read();
+        expect(read).toContain(url);
+        expect(read).toContain("(merged 2026-07-01)");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("names every accepted shape when rejecting a pull URL", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          doneCommand(
+            ["cert-cleanup", "--pr", "https://github.com/o/r/pulls/9"],
+            b.ctx,
+          ),
+        ).rejects.toThrow(
+          /\/pull\/<n> \(GitHub\).*\/pulls\/<n> \(Forgejo\/Gitea\).*\/pull-requests\/<n> \(Bitbucket\)/,
+        );
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects non-canonical pull URLs without mutating", async () => {
       const b = makeBacklog();
       try {
         for (const url of [
-          "https://forgejo.samesies.gay/eve/orchalycious/pull/39",
+          "https://github.com/o/r/pull-requests/9",
           "https://github.com/o/r/pulls/9",
           "https://github.com/o/r/pull/9?w=1",
           " https://github.com/o/r/pull/9 ",
