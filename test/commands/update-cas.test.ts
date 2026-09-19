@@ -44,9 +44,7 @@ function cli(args: string[]): Promise<CliResult> {
     child.stdout.on("data", (chunk) => (stdout += String(chunk)));
     child.stderr.on("data", (chunk) => (stderr += String(chunk)));
     child.on("error", reject);
-    child.on("close", (status) =>
-      resolve({ status, stdout: stdout + stderr }),
-    );
+    child.on("close", (status) => resolve({ status, stdout: stdout + stderr }));
   });
 }
 
@@ -54,7 +52,9 @@ describe("update --expect-body-sha256", () => {
   it("writes when the hash matches and reports the hash a reader will see", async () => {
     const b = makeBacklog(BACKLOG);
     try {
-      const shown = JSON.parse(await showCommand(["claim-q1", "--json"], b.ctx));
+      const shown = JSON.parse(
+        await showCommand(["claim-q1", "--json"], b.ctx),
+      );
       expect(shown.body_sha256).toBe(sha("Status: open"));
       const callerText = "Claim: bot-a\n\n";
       expect(sha(callerText)).not.toBe(shown.body_sha256);
@@ -159,7 +159,9 @@ describe("update --expect-body-sha256", () => {
   it("hashes an absent body as the empty string", async () => {
     const b = makeBacklog(BACKLOG);
     try {
-      const shown = JSON.parse(await showCommand(["empty-q3", "--json"], b.ctx));
+      const shown = JSON.parse(
+        await showCommand(["empty-q3", "--json"], b.ctx),
+      );
       expect(shown.body).toBeNull();
       expect(shown.body_sha256).toBe(EMPTY_BODY_SHA256);
     } finally {

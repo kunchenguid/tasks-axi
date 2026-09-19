@@ -662,7 +662,9 @@ export class MarkdownStore implements Store {
         throw new AxiError(
           `Task "${id}" body changed; expected body hash does not match`,
           "CONFLICT",
-          [`Run \`tasks-axi show ${id} --json\`, then retry with its body_sha256`],
+          [
+            `Run \`tasks-axi show ${id} --json\`, then retry with its body_sha256`,
+          ],
         );
       }
       const nextBody =
