@@ -40,6 +40,7 @@ import type {
   PruneResult,
   Store,
 } from "../store.js";
+import { bodySha256 } from "../body.js";
 import { atomicWrite, readFileSafe, withLock, withLocks } from "./lock.js";
 import {
   type BacklogDoc,
@@ -654,6 +655,16 @@ export class MarkdownStore implements Store {
           ["Create a successor obligation when the public promise changes"],
         );
       }
+      if (
+        patch.expectBodySha256 !== undefined &&
+        bodySha256(task.body) !== patch.expectBodySha256
+      ) {
+        throw new AxiError(
+          `Task "${id}" body changed; expected body hash does not match`,
+          "CONFLICT",
+          [`Run \`tasks-axi show ${id} --json\`, then retry with its body_sha256`],
+        );
+      }
       const nextBody =
         patch.body !== undefined ? patch.body || undefined : task.body;
       const supersededBody =
@@ -777,7 +788,8 @@ export class MarkdownStore implements Store {
         }
         throw error;
       }
-      return { task, changed };
+      const persisted = this.findEntry(this.loadForUpdate().doc, id);
+      return { task: persisted?.entry.task ?? task, changed };
     });
   }
 
