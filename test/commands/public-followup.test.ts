@@ -19,7 +19,11 @@ import {
   clonePublicFollowup,
   encodePublicFollowup,
 } from "../../src/public-followup.js";
-import { makeBacklog, type TempBacklog } from "../helpers.js";
+import {
+  makeBacklog,
+  withoutCollectionTransfer,
+  type TempBacklog,
+} from "../helpers.js";
 
 const EMPTY =
   "# Backlog\n\n## In flight\n\n## Queued\n- [ ] ordinary-q1 - ordinary work\n\n## Done\n";
@@ -234,6 +238,61 @@ describe("public-followup commands", () => {
     } finally {
       b.cleanup();
       target.cleanup();
+    }
+  });
+
+  it("refuses to move any obligation without an atomic transfer", async () => {
+    for (const finish of [
+      undefined,
+      async (b: TempBacklog) => {
+        await run(b, "waive", [
+          "public-final-ab",
+          "--reason",
+          "No safe historical context remains",
+          "--approved-by",
+          "captain",
+          "--json",
+        ]);
+      },
+    ]) {
+      const b = makeBacklog(EMPTY);
+      const target = makeBacklog(
+        "# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n",
+      );
+      try {
+        await add(b);
+        await finish?.(b);
+        const before = b.read();
+        await expect(
+          mvCommand(
+            ["public-final-ab", "--to", target.path],
+            withoutCollectionTransfer(b.ctx),
+          ),
+        ).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: expect.stringContaining("carries a public obligation"),
+          // The refusal follows from the backend, so the guidance must not
+          // point at obligation transitions that cannot lift it.
+          suggestions: expect.arrayContaining([
+            expect.stringContaining("collectionTransfer"),
+          ]),
+        });
+        const refusal = await mvCommand(
+          ["public-final-ab", "--to", target.path],
+          withoutCollectionTransfer(b.ctx),
+        ).catch((error: { suggestions?: string[] }) => error);
+        expect(
+          (refusal as { suggestions?: string[] }).suggestions?.join(" "),
+        ).not.toMatch(/record-delivery|waive/);
+        // Refused before any write, whatever the delivery state.
+        expect(readFileSync(target.path, "utf8")).not.toContain(
+          "public-final-ab",
+        );
+        expect(b.read()).toBe(before);
+      } finally {
+        b.cleanup();
+        target.cleanup();
+      }
     }
   });
 

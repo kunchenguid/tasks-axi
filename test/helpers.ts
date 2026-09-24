@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MarkdownStore } from "../src/backends/markdown.js";
 import type { TasksContext } from "../src/context.js";
+import type { Store } from "../src/store.js";
 
 export const FIXTURE = readFileSync(
   new URL("./fixtures/backlog.md", import.meta.url),
@@ -79,4 +80,33 @@ export function makeBacklog(
     },
     cleanup: () => rmSync(dir, { recursive: true, force: true }),
   };
+}
+
+/**
+ * A context whose store keeps every core verb but drops the atomic transfer,
+ * standing in for a backend that cannot move a set of tasks in one transaction.
+ * Each verb is re-bound explicitly because spreading a class instance would
+ * leave the prototype methods behind.
+ */
+export function withoutCollectionTransfer(ctx: TasksContext): TasksContext {
+  const store: Store = {
+    ...ctx.store,
+    capabilities: () => ({
+      ...ctx.store.capabilities(),
+      backend: "stub",
+      collectionTransfer: false,
+    }),
+    create: (input) => ctx.store.create(input),
+    get: (id) => ctx.store.get(id),
+    update: (id, patch) => ctx.store.update(id, patch),
+    remove: (id) => ctx.store.remove(id),
+    list: (query) => ctx.store.list(query),
+    transition: (id, to, opts) => ctx.store.transition(id, to, opts),
+    addDep: (id, dep) => ctx.store.addDep(id, dep),
+    removeDep: (id, dep) => ctx.store.removeDep(id, dep),
+    updatePublicFollowup: (id, mutation) =>
+      ctx.store.updatePublicFollowup(id, mutation),
+  };
+  delete store.transferMany;
+  return { ...ctx, store };
 }

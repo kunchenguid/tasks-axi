@@ -27,6 +27,8 @@ export interface Capabilities {
   customStates: boolean;
   /** Does the server assign its own ids (remote trackers)? */
   serverMintsIds: boolean;
+  /** Can it move a connected set of tasks into another collection atomically? */
+  collectionTransfer: boolean;
   /** Supports the durable, receipt-gated public-followup state machine. */
   publicFollowups: boolean;
 }
@@ -50,8 +52,8 @@ export interface PruneResult {
  * backend gets them for free.
  *
  * The core contract is create/get/update/remove/list/transition/addDep/
- * removeDep/updatePublicFollowup. `prune` and `render` are optional and
- * capability-gated.
+ * removeDep/updatePublicFollowup. `transferMany`, `prune` and `render` are
+ * optional and capability-gated.
  */
 export interface Store {
   capabilities(): Capabilities;
@@ -76,6 +78,15 @@ export interface Store {
     id: string,
     mutation: PublicFollowupMutation,
   ): Promise<Task>;
+
+  /**
+   * Move a connected set of tasks into `destination` in one transaction, gated
+   * on the `collectionTransfer` capability: either every task lands in the
+   * destination and leaves this store, or none do. Backends that cannot honour
+   * that all-or-nothing guarantee omit it, and the command layer falls back to
+   * a single-task copy-then-remove rather than risking a half-applied move.
+   */
+  transferMany?(ids: string[], destination: Store): Promise<Task[]>;
 
   // maintenance (optional, capability-gated)
   prune?(options: PruneOptions): Promise<PruneResult>;

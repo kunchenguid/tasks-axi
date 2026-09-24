@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { MarkdownStore } from "../../src/backends/markdown.js";
 import { readyTasks } from "../../src/derive.js";
 import { AxiError } from "../../src/errors.js";
+import type { Store } from "../../src/store.js";
 import {
   FIRSTMATE_FIXTURE,
   makeBacklog,
@@ -1400,7 +1401,46 @@ describe("MarkdownStore", () => {
           deps: true,
           prune: true,
           customStates: true,
+          collectionTransfer: true,
         });
+      } finally {
+        b.cleanup();
+      }
+    });
+  });
+
+  describe("transferMany", () => {
+    it("moves a set into another markdown backlog", async () => {
+      const b = makeBacklog();
+      const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      try {
+        const moved = await b.store.transferMany(
+          ["cert-cleanup"],
+          target.store,
+        );
+        expect(moved.map((task) => task.id)).toEqual(["cert-cleanup"]);
+        expect(b.read()).not.toContain("cert-cleanup");
+        expect(target.read()).toContain("cert-cleanup");
+      } finally {
+        b.cleanup();
+        target.cleanup();
+      }
+    });
+
+    it("refuses a foreign destination before writing anything", async () => {
+      const b = makeBacklog();
+      const before = b.read();
+      const foreign = {
+        capabilities: () => ({ ...b.store.capabilities(), backend: "stub" }),
+      } as unknown as Store;
+      try {
+        await expect(
+          b.store.transferMany(["cert-cleanup"], foreign),
+        ).rejects.toMatchObject({
+          code: "UNSUPPORTED",
+          message: expect.stringContaining("stub"),
+        });
+        expect(b.read()).toBe(before);
       } finally {
         b.cleanup();
       }

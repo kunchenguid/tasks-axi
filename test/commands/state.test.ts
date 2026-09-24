@@ -13,7 +13,21 @@ import {
   unholdCommand,
 } from "../../src/commands/state.js";
 import { listCommand } from "../../src/commands/crud.js";
-import { makeBacklog } from "../helpers.js";
+import { AxiError } from "../../src/errors.js";
+import type { TasksContext } from "../../src/context.js";
+import { makeBacklog, withoutCollectionTransfer } from "../helpers.js";
+
+/** The same stub, but whose `remove` refuses the way an active obligation does. */
+function withRefusingRemove(ctx: TasksContext, error: Error): TasksContext {
+  const base = withoutCollectionTransfer(ctx);
+  return {
+    ...base,
+    store: {
+      ...base.store,
+      remove: () => Promise.reject(error),
+    },
+  };
+}
 
 describe("state commands", () => {
   it("rejects malformed primary ids before store lookup", async () => {
@@ -1221,6 +1235,227 @@ describe("state commands", () => {
         b.cleanup();
         target.cleanup();
       }
+    });
+
+    describe("a backend without collectionTransfer", () => {
+      it("still moves a single task through the core verbs", async () => {
+        const b = makeBacklog();
+        const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+        try {
+          const ctx = withoutCollectionTransfer(b.ctx);
+          await mvCommand(["cert-cleanup", "--to", target.path], ctx);
+          expect(b.read()).not.toContain("cert-cleanup");
+          expect(readFileSync(target.path, "utf8")).toContain("cert-cleanup");
+        } finally {
+          b.cleanup();
+          target.cleanup();
+        }
+      });
+
+      it("applies the split-dependency guard the atomic path enforces", async () => {
+        const src = [
+          "# Backlog",
+          "",
+          "## In flight",
+          "",
+          "## Queued",
+          "- [ ] root-a - root (repo: alpha)",
+          "- [ ] leaf-b - leaf (repo: alpha) blocked-by: root-a - needs root",
+          "",
+          "## Done",
+          "",
+        ].join("\n");
+        const b = makeBacklog(src);
+        const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+        const before = b.read();
+        try {
+          await expect(
+            mvCommand(
+              ["root-a", "--to", target.path],
+              withoutCollectionTransfer(b.ctx),
+            ),
+          ).rejects.toMatchObject({
+            code: "VALIDATION_ERROR",
+            message: expect.stringContaining("still blocking active tasks"),
+          });
+          expect(b.read()).toBe(before);
+          expect(readFileSync(target.path, "utf8")).not.toContain("root-a");
+        } finally {
+          b.cleanup();
+          target.cleanup();
+        }
+      });
+
+      it("refuses to strand a moved task's own blocker", async () => {
+        const src = [
+          "# Backlog",
+          "",
+          "## In flight",
+          "",
+          "## Queued",
+          "- [ ] root-a - root (repo: alpha)",
+          "- [ ] leaf-b - leaf (repo: alpha) blocked-by: root-a - needs root",
+          "",
+          "## Done",
+          "",
+        ].join("\n");
+        const b = makeBacklog(src);
+        const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+        try {
+          await expect(
+            mvCommand(
+              ["leaf-b", "--to", target.path],
+              withoutCollectionTransfer(b.ctx),
+            ),
+          ).rejects.toMatchObject({
+            code: "VALIDATION_ERROR",
+            message: expect.stringContaining("would be stranded"),
+          });
+          expect(b.read()).toContain("leaf-b");
+        } finally {
+          b.cleanup();
+          target.cleanup();
+        }
+      });
+
+      it("rolls the destination copy back when the source refuses removal", async () => {
+        const b = makeBacklog();
+        const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+        const before = b.read();
+        try {
+          await expect(
+            mvCommand(
+              ["cert-cleanup", "--to", target.path],
+              withRefusingRemove(
+                b.ctx,
+                new AxiError(
+                  "Active public-followup obligations cannot be removed",
+                  "VALIDATION_ERROR",
+                ),
+              ),
+            ),
+          ).rejects.toMatchObject({
+            code: "VALIDATION_ERROR",
+            message: expect.stringContaining(
+              "Active public-followup obligations cannot be removed",
+            ),
+          });
+          // Neither collection changed: the staged copy was compensated away.
+          expect(readFileSync(target.path, "utf8")).not.toContain(
+            "cert-cleanup",
+          );
+          expect(b.read()).toBe(before);
+        } finally {
+          b.cleanup();
+          target.cleanup();
+        }
+      });
+
+      it("names both failures when the rollback cannot run either", async () => {
+        const b = makeBacklog();
+        const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+        const base = withoutCollectionTransfer(b.ctx);
+        const ctx: TasksContext = {
+          ...base,
+          store: {
+            ...base.store,
+            remove: () => {
+              // The destination goes away between the copy and the rollback.
+              rmSync(target.dir, { recursive: true, force: true });
+              return Promise.reject(
+                new AxiError(
+                  "Active public-followup obligations cannot be removed",
+                  "VALIDATION_ERROR",
+                ),
+              );
+            },
+          },
+        };
+        try {
+          await expect(
+            mvCommand(["cert-cleanup", "--to", target.path], ctx),
+          ).rejects.toMatchObject({
+            code: "CONFLICT",
+            message: expect.stringContaining("partially completed"),
+            suggestions: expect.arrayContaining([
+              expect.stringContaining(
+                "Active public-followup obligations cannot be removed",
+              ),
+            ]),
+          });
+        } finally {
+          b.cleanup();
+          target.cleanup();
+        }
+      });
+
+      it("names the contract violation when the capability lacks its method", async () => {
+        const b = makeBacklog();
+        const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+        const before = b.read();
+        const base = withoutCollectionTransfer(b.ctx);
+        const ctx: TasksContext = {
+          ...base,
+          store: {
+            ...base.store,
+            capabilities: () => ({
+              ...base.store.capabilities(),
+              collectionTransfer: true,
+            }),
+          },
+        };
+        try {
+          await expect(
+            mvCommand(["cert-cleanup", "--to", target.path], ctx),
+          ).rejects.toMatchObject({
+            code: "UNSUPPORTED",
+            message: expect.stringContaining("does not implement transferMany"),
+          });
+          // No silent downgrade to the non-atomic path: nothing was written.
+          expect(b.read()).toBe(before);
+          expect(readFileSync(target.path, "utf8")).not.toContain(
+            "cert-cleanup",
+          );
+        } finally {
+          b.cleanup();
+          target.cleanup();
+        }
+      });
+
+      it("refuses a multi-task move by naming the missing capability", async () => {
+        const src = [
+          "# Backlog",
+          "",
+          "## In flight",
+          "",
+          "## Queued",
+          "- [ ] pair-a - first (repo: alpha)",
+          "- [ ] pair-b - second (repo: alpha)",
+          "",
+          "## Done",
+          "",
+        ].join("\n");
+        const b = makeBacklog(src);
+        const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+        const before = b.read();
+        try {
+          await expect(
+            mvCommand(
+              ["pair-a", "pair-b", "--to", target.path],
+              withoutCollectionTransfer(b.ctx),
+            ),
+          ).rejects.toMatchObject({
+            code: "UNSUPPORTED",
+            message: expect.stringContaining("collectionTransfer"),
+          });
+          // The refusal happens before any write, so neither file changed.
+          expect(b.read()).toBe(before);
+          expect(readFileSync(target.path, "utf8")).not.toContain("pair-a");
+        } finally {
+          b.cleanup();
+          target.cleanup();
+        }
+      });
     });
   });
 });

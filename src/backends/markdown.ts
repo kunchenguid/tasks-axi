@@ -6,7 +6,12 @@ import {
   unlinkSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { AxiError } from "../errors.js";
+import {
+  AxiError,
+  partialMoveError,
+  stillBlockingError,
+  strandedDepError,
+} from "../errors.js";
 import { validateDependencyId, validateId } from "../id.js";
 import type {
   Dep,
@@ -338,6 +343,7 @@ export class MarkdownStore implements Store {
       realtimeSync: false,
       customStates: true,
       serverMintsIds: false,
+      collectionTransfer: true,
       publicFollowups: true,
     };
   }
@@ -498,30 +504,6 @@ export class MarkdownStore implements Store {
     if (!found) return;
     found.section.entries.splice(found.index, 1);
     this.persist(loaded);
-  }
-
-  private partialMoveError(
-    id: string,
-    originalError: unknown,
-    rollbackError: unknown,
-  ): AxiError {
-    const originalMessage =
-      originalError instanceof Error
-        ? originalError.message
-        : String(originalError);
-    const rollbackMessage =
-      rollbackError instanceof Error
-        ? rollbackError.message
-        : String(rollbackError);
-    return new AxiError(
-      `Move of "${id}" partially completed; task now exists in both backlogs`,
-      "CONFLICT",
-      [
-        "Remove the duplicate from the destination backlog manually before retrying",
-        `Source removal failed: ${originalMessage}`,
-        `Destination rollback failed: ${rollbackMessage}`,
-      ],
-    );
   }
 
   private taskFromInput(input: TaskInput): Task {
@@ -812,6 +794,22 @@ export class MarkdownStore implements Store {
   }
 
   /**
+   * `Store.transferMany`. A markdown backlog can only be moved into another
+   * markdown backlog, because the all-or-nothing guarantee comes from locking
+   * both files at once; any other destination is refused before a write rather
+   * than degraded into a copy-then-remove that could strand a dependency edge.
+   */
+  async transferMany(ids: string[], destination: Store): Promise<Task[]> {
+    if (!(destination instanceof MarkdownStore)) {
+      throw new AxiError(
+        `The markdown backend can only transfer tasks into another markdown backlog, not "${destination.capabilities().backend}"`,
+        "UNSUPPORTED",
+      );
+    }
+    return this.moveManyTo(ids, destination);
+  }
+
+  /**
    * Move a connected set of tasks to another backlog in one transaction: either
    * every task lands in the destination and leaves the source, or none do (no
    * intermediate state that loses a link is ever written to disk). Each moved
@@ -876,11 +874,7 @@ export class MarkdownStore implements Store {
         try {
           for (const id of uniqueIds) target.removeCreatedTask(id);
         } catch (rollbackError) {
-          throw this.partialMoveError(
-            uniqueIds.join(", "),
-            error,
-            rollbackError,
-          );
+          throw partialMoveError(uniqueIds.join(", "), error, rollbackError);
         }
         throw error;
       }
@@ -916,15 +910,7 @@ export class MarkdownStore implements Store {
             task.deps.some((dep) => dep.type === "blocked-by" && dep.id === id),
         )
         .map((task) => task.id);
-      if (stranded.length > 0) {
-        throw new AxiError(
-          `Task "${id}" is still blocking active tasks: ${stranded.join(", ")}`,
-          "VALIDATION_ERROR",
-          [
-            `Move them together, or unblock them first, e.g. \`tasks-axi unblock ${stranded[0]} --by ${id}\``,
-          ],
-        );
-      }
+      if (stranded.length > 0) throw stillBlockingError(id, stranded);
     }
 
     // (b) A moved item's blocker must travel with it or already exist in the
@@ -937,14 +923,7 @@ export class MarkdownStore implements Store {
       for (const dep of found.entry.task.deps) {
         if (movedSet.has(dep.id)) continue;
         if (this.findEntry(targetDoc, dep.id)) continue;
-        const label = dep.type === "blocked-by" ? "blocker" : "dependency";
-        throw new AxiError(
-          `Cannot move "${id}": its ${label} "${dep.id}" would be stranded (not in the moved set and absent from the destination)`,
-          "VALIDATION_ERROR",
-          [
-            `Add "${dep.id}" to the same \`mv\`, or move it to the destination first`,
-          ],
-        );
+        throw strandedDepError(id, dep);
       }
     }
   }

@@ -1,6 +1,5 @@
 import { isAbsolute, resolve } from "node:path";
 import { existsSync, statSync } from "node:fs";
-import { MarkdownStore } from "../backends/markdown.js";
 import {
   parseNonNegativeIntegerFlag,
   requireNoUnknownFlags,
@@ -12,14 +11,20 @@ import {
   takeFlag,
 } from "../args.js";
 import { renderMutation, stateLabel, taskToJson } from "../confirm.js";
-import { requireCtx, type TasksContext } from "../context.js";
+import { createStore, requireCtx, type TasksContext } from "../context.js";
 import {
   blockedIds,
   heldTasks,
   readyPublicFollowups,
   readyTasks,
 } from "../derive.js";
-import { AxiError, notFound } from "../errors.js";
+import {
+  AxiError,
+  notFound,
+  partialMoveError,
+  stillBlockingError,
+  strandedDepError,
+} from "../errors.js";
 import { formatCountLine } from "../format.js";
 import { validateDependencyId } from "../id.js";
 import type {
@@ -642,6 +647,85 @@ export async function readyCommand(
   return renderOutput(blocks);
 }
 
+/**
+ * The backend-neutral form of the markdown backend's internal split-dependency
+ * guard, expressed with core Store verbs so the non-atomic transfer path
+ * enforces the same invariant: no move may leave a dependency edge pointing
+ * across the two collections.
+ */
+async function requireNoSplitDeps(
+  source: Store,
+  target: Store,
+  ids: string[],
+  tasks: Task[],
+): Promise<void> {
+  const movedSet = new Set(ids);
+
+  // (a) An active dependent left behind would point at a now-absent blocker.
+  const { items: remaining } = await source.list({});
+  for (const id of ids) {
+    const stranded = remaining
+      .filter(
+        (task) =>
+          !movedSet.has(task.id) &&
+          task.state !== "done" &&
+          task.deps.some((dep) => dep.type === "blocked-by" && dep.id === id),
+      )
+      .map((task) => task.id);
+    if (stranded.length > 0) throw stillBlockingError(id, stranded);
+  }
+
+  // (b) A moved task's own edges must travel with it or already exist there.
+  for (const task of tasks) {
+    for (const dep of task.deps) {
+      if (movedSet.has(dep.id)) continue;
+      if (await target.get(dep.id)) continue;
+      throw strandedDepError(task.id, dep);
+    }
+  }
+}
+
+/**
+ * Relocating a durable public obligation is only safe on a backend that can
+ * move it atomically, so a copy-then-remove fallback declines outright rather
+ * than half-moving it or failing confusingly mid-write. The atomic path carries
+ * obligations happily because it never has a half-applied state to fall into.
+ */
+function requireNoPublicObligation(task: Task, backend: string): void {
+  if (!task.public_followup) return;
+  throw new AxiError(
+    `Task "${task.id}" carries a public obligation, which the "${backend}" backend cannot relocate safely without the atomic collectionTransfer capability. Closing the obligation out does not lift this: the refusal follows from the backend, not from the delivery state`,
+    "VALIDATION_ERROR",
+    [
+      `Run the move against a backend that supports collectionTransfer`,
+      `Or recreate the obligation in the destination deliberately (\`tasks-axi public-followup add --help\`) and close the original`,
+    ],
+  );
+}
+
+/**
+ * Undo the destination copy a non-atomic transfer already wrote, after the
+ * source removal was refused. Compensating here keeps both collections exactly
+ * as they were, which the reverse order (remove first) could not: that would
+ * trade a duplicate for a lost task. This is the backstop for backend-specific
+ * preconditions the command layer cannot see on the model; if the compensation
+ * itself fails the operator is told about both the refusal and the copy left
+ * behind.
+ */
+async function undoStagedCopy(
+  target: Store,
+  id: string,
+  targetPath: string,
+  cause: unknown,
+): Promise<never> {
+  try {
+    await target.remove(id);
+  } catch (rollbackError) {
+    throw partialMoveError(id, cause, rollbackError, targetPath);
+  }
+  throw cause;
+}
+
 function resolveBacklogTarget(to: string): string {
   const base = isAbsolute(to) ? to : resolve(process.cwd(), to);
   if (existsSync(base) && statSync(base).isDirectory()) {
@@ -714,7 +798,11 @@ export async function mvCommand(
     tasks.push(task);
   }
 
-  const target = new MarkdownStore({ path: targetPath });
+  const target = createStore({
+    backend: config.backend,
+    path: targetPath,
+    doneKeep: config.doneKeep,
+  });
   for (const id of ids) {
     if (await target.get(id)) {
       throw new AxiError(
@@ -724,15 +812,34 @@ export async function mvCommand(
     }
   }
 
-  if (store instanceof MarkdownStore) {
-    await store.moveManyTo(ids, target);
+  const capabilities = store.capabilities();
+  if (capabilities.collectionTransfer) {
+    if (!store.transferMany) {
+      throw new AxiError(
+        `The "${capabilities.backend}" backend declares the collectionTransfer capability but does not implement transferMany`,
+        "UNSUPPORTED",
+      );
+    }
+    await store.transferMany(ids, target);
   } else if (ids.length === 1) {
+    // Without an atomic transfer the copy and the removal are two writes, so a
+    // multi-task move could strand a dependency edge halfway. One task is still
+    // safe to relocate, but only after the same split-dependency check the
+    // atomic path performs internally — otherwise the weaker path would quietly
+    // accept moves the stronger one refuses.
+    await requireNoSplitDeps(store, target, ids, tasks);
+    requireNoPublicObligation(tasks[0], capabilities.backend);
     await target.create(taskToInput(tasks[0]));
-    await store.remove(ids[0]);
+    try {
+      await store.remove(ids[0]);
+    } catch (error) {
+      await undoStagedCopy(target, ids[0], targetPath, error);
+    }
   } else {
     throw new AxiError(
-      "Moving multiple tasks at once requires the markdown backend",
+      `The "${capabilities.backend}" backend cannot move several tasks at once (missing capability: collectionTransfer)`,
       "UNSUPPORTED",
+      [`Move one task at a time: \`tasks-axi mv ${ids[0]} --to ${to}\``],
     );
   }
 
