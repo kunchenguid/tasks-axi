@@ -94,6 +94,7 @@ tasks-axi add lavish-foo-q9 "fix summary toggle" --kind ship --repo lavish-axi -
 tasks-axi start firstmate-lease-adopt
 tasks-axi done sm-idle-handoff-q8 --pr https://github.com/owner/repo/pull/42
 tasks-axi done fj-task-q1 --pr https://forgejo.example.com/owner/repo/pulls/39
+tasks-axi done gl-task-q1 --pr https://gitlab.com/owner/repo/-/merge_requests/42
 tasks-axi reopen some-task
 
 # dependencies, holds, and the ready queue

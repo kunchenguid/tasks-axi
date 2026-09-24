@@ -150,6 +150,31 @@ describe("state commands", () => {
       }
     });
 
+    it("closes with a GitLab merge request URL and preserves it byte-for-byte", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await doneCommand(
+          [
+            "cert-cleanup",
+            "--pr",
+            "https://gitlab.com/arizona-crossmedia/visto-tecnologia/visto/go-ng/-/merge_requests/215",
+            "--no-prune",
+          ],
+          b.ctx,
+        );
+        expect(out).toContain(
+          "done cert-cleanup -> Done (pr https://gitlab.com/arizona-crossmedia/visto-tecnologia/visto/go-ng/-/merge_requests/215)",
+        );
+        const read = b.read();
+        expect(read).toContain(
+          "https://gitlab.com/arizona-crossmedia/visto-tecnologia/visto/go-ng/-/merge_requests/215",
+        );
+        expect(read).toContain("(merged 2026-07-01)");
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects non-canonical pull URLs without mutating", async () => {
       const b = makeBacklog();
       try {
@@ -158,6 +183,8 @@ describe("state commands", () => {
           "https://github.com/o/r/pulls/9",
           "https://github.com/o/r/pull/9?w=1",
           " https://github.com/o/r/pull/9 ",
+          "https://gitlab.com/o/r/merge_requests/9",
+          "https://gitlab.com/o/r/-/merge_requests/9?w=1",
         ]) {
           await expect(
             doneCommand(["cert-cleanup", "--pr", url, "--no-prune"], b.ctx),
