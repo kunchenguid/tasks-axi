@@ -8,6 +8,9 @@ describe("isPrUrl", () => {
     "https://github.com/some-owner/some.repo/pull/1",
     "https://forgejo.samesies.gay/eve/orchalycious/pulls/39",
     "https://codeberg.org/forgejo/forgejo/pulls/1234",
+    "https://gitlab.com/group/project/-/merge_requests/215",
+    "https://gitlab.com/group/subgroup/project/-/merge_requests/215",
+    "https://gitlab.example.internal/team/sub/deeper/project/-/merge_requests/7",
   ])("accepts canonical PR URL %s", (url) => {
     expect(isPrUrl(url)).toBe(true);
   });
@@ -46,6 +49,18 @@ describe("isPrUrl", () => {
     "https://forgejo.samesies.gay/o%2Fx/r/pulls/39",
     "https://forgejo.samesies.gay/../r/pulls/39",
     "https://forgejo.samesies.gay/o/../pulls/39",
+    // GitLab merge request shape
+    "https://gitlab.com/group/project/-/merge_requests/abc",
+    "https://gitlab.com/group/project/-/merge_requests/0",
+    "https://gitlab.com/group/project/-/merge_requests/215/",
+    "https://gitlab.com/group/project/-/merge_requests/215?tab=diffs",
+    "https://gitlab.com/group/project/-/merge_requests/215/diffs",
+    "https://gitlab.com/group/project/merge_requests/215",
+    "https://gitlab.com/project/-/merge_requests/215",
+    "https://gitlab.com/group/-/project/-/merge_requests/215",
+    "https://gitlab.com/group/../-/merge_requests/215",
+    "https://gitlab.com/group/project/-/issues/215",
+    "https://GitLab.com/group/project/-/merge_requests/215",
   ])("rejects non-canonical URL %j", (url) => {
     expect(isPrUrl(url)).toBe(false);
   });
