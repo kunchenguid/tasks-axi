@@ -52,6 +52,7 @@ import {
   renderBacklog,
   renderTaskLines,
 } from "./markdown-grammar.js";
+import { isV2, parseV2, renderV2, v2PinnedDone, v2ToDoc, type MaybeV2Doc } from "./markdown-v2.js";
 
 export interface MarkdownStoreOptions {
   path: string;
@@ -350,13 +351,17 @@ export class MarkdownStore implements Store {
     return readFileSafe(this.path);
   }
 
+  private parse(source: string): BacklogDoc {
+    return isV2(source) ? v2ToDoc(parseV2(source)) : parseBacklog(source);
+  }
+
   private load(): BacklogDoc {
-    return parseBacklog(this.loadSource() ?? "");
+    return this.parse(this.loadSource() ?? "");
   }
 
   private loadForUpdate(): LoadedBacklogDoc {
     const source = this.loadSource();
-    return { doc: parseBacklog(source ?? ""), source };
+    return { doc: this.parse(source ?? ""), source };
   }
 
   private allTasks(doc: BacklogDoc): Task[] {
@@ -489,7 +494,8 @@ export class MarkdownStore implements Store {
 
   private persist(loaded: LoadedBacklogDoc): void {
     this.assertUnchanged(loaded);
-    atomicWrite(this.path, renderBacklog(loaded.doc));
+    const doc = loaded.doc as MaybeV2Doc;
+    atomicWrite(this.path, doc.v2 ? renderV2(doc) : renderBacklog(doc));
   }
 
   private removeCreatedTask(id: string): void {
@@ -1166,8 +1172,10 @@ export class MarkdownStore implements Store {
       if (!section) return { archived: 0, ids: [] };
 
       const taskIndices: number[] = [];
+      const pinned = v2PinnedDone(doc as MaybeV2Doc);
       section.entries.forEach((entry, index) => {
         if (entry.kind !== "task") return;
+        if (pinned.has(entry.task.id)) return;
         if (
           isPublicFollowupTask(entry.task) &&
           entry.task.public_followup &&
