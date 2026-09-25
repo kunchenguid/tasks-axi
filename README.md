@@ -249,13 +249,42 @@ Body replacements with `--archive-body` append superseded bodies to `note-archiv
 
 ## Backends
 
-P1 ships the **markdown** backend only, behind a narrow `Store` interface so additional backends slot in without touching the CLI layer.
+Backends sit behind a narrow `Store` interface, so they slot in without touching the CLI layer.
 
 | Backend                | Status  |
 | ---------------------- | ------- |
 | markdown               | shipped |
+| beads                  | shipped |
 | sqlite                 | planned |
 | github / jira / linear | planned |
+
+### The beads backend
+
+`backend = "beads"` stores the backlog in a [beads](https://github.com/gastownhall/beads) issue database, driven through the `bd` CLI (`npm install -g @beads/bd`, then `bd init` in the workspace directory).
+Beads becomes the source of truth: dependency graph, priorities, full history, and every bd-native view (`bd show`, `bd graph`, `bd list`) work on the same tasks.
+
+```toml
+# .tasks.toml
+backend = "beads"
+
+[markdown]
+path = "data/backlog.md"   # the mirror location (see below)
+
+[beads]
+dir = "data"               # directory holding .beads/ (default: the mirror's directory)
+bin = "bd"                 # optional bd binary override
+```
+
+After every mutation the backend rewrites the configured markdown path as a **read-only canonical mirror** of the active backlog, byte-compatible with the markdown backend's format, so tools that read `backlog.md` directly keep working unchanged.
+Hand-edits to the mirror are overwritten; mutate through tasks-axi (or `bd`, then `tasks-axi render` to refresh the mirror).
+tasks-axi fields that beads has no column for (kind, repo, holds, canonical dates, dependency reasons) live in a `tasks_axi` object inside each issue's metadata; a hold with `--until` also sets bd's defer date.
+`prune` archives surplus Done tasks to `done-archive.md` and hides them from tasks-axi with a metadata flag while beads retains the full record.
+`--archive-body` preserves the superseded body both in `note-archive.md` (the shared file contract) and as a bd comment on the issue, so the history stays visible from bd-native views.
+`create`, `update`, and every state transition are verified by reading the task back from bd and comparing the persisted fields, so a bd invocation that exits 0 without applying the change surfaces as a structured error instead of silent divergence.
+bd stores one relationship type per task pair, so adding a `blocked-by` edge to an id that already carries a `parent` or `discovered-from` edge (or vice versa) fails with a `VALIDATION_ERROR` naming the existing edge; remove that edge first.
+`ready`/`blocked`/`held` stay derived by the CLI from the dependency graph, so they are correct even where `bd ready` itself is not (bd 1.2.2 mis-reads blockers on issues whose id prefix differs from the database prefix).
+tasks-axi mutations serialize under an advisory lock on the mirror path and fail closed with a `LOCKED` error on contention, just like the markdown backend; raw `bd` writers bypass that lock, and `bd create --id <id> --force` silently overwrites an existing issue, so create ids through tasks-axi when both are in play.
+Public-followups and multi-task `mv` are not supported on this backend.
 
 ## Development
 

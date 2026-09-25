@@ -1,7 +1,7 @@
 # tasks-axi — agent notes
 
 Agent-ergonomic task/backlog CLI in the `*-axi` family, built on `axi-sdk-js` and mirroring `gh-axi`.
-P1 ships only the markdown backend behind a `Store` seam; sqlite (P2) and remote trackers (P3) are deferred.
+Two backends ship behind the `Store` seam: markdown (P1) and beads; sqlite (P2) and remote trackers (P3) are deferred.
 
 ## Architecture
 
@@ -13,7 +13,8 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 - `src/model.ts` — the `Task` data model (report §5).
 - `src/pr-url.ts` — `isPrUrl`, the one canonical PR-URL seam (GitHub `/pull/<n>` on github.com, Forgejo `/pulls/<n>` on any lowercase DNS host) shared by prose link derivation, `--pr` validation, and public-followup `pr_url`; near-misses derive as `doc` links, never `pr`.
 - `src/derive.ts` - worker `blocked` / `ready` / active `held` and public delivery readiness are derived in the CLI from `list` + the dep graph + hold date gates, never Store methods, so every backend gets them for free.
-- `src/backends/markdown*.ts` — the only P1 backend.
+- `src/backends/markdown*.ts` — the P1 backend; `src/backends/normalize.ts` holds the backend-independent Task validation both backends share.
+- `src/backends/beads.ts` — the beads backend: `bd --json` subprocesses over a per-invocation list cache, `tasks_axi` metadata for fields beads lacks, and a canonical-markdown mirror rewritten after every mutation (see "The beads backend" in README.md). Real-bd tests in `test/backends/beads.test.ts` skip when `bd` is not installed.
 - `src/public-followup.ts` - authoritative versioned schema, strict privacy-safe validation, canonical encoding, immutable-field checks, relation/event readiness, and terminal-state invariants for `kind=public-followup`; `src/commands/public-followup.ts` owns its dedicated CLI state machine.
 - `src/commands/*` — one file per verb group; `src/view.ts` owns the read-side TOON projection; `src/confirm.ts` owns the write-side output (the `ok:` confirmation line, the `--json` payload, and `renderMutation`, which assembles both).
 - Shared helpers copied from the family: `args.ts`, `body.ts`, `format.ts`, `fields.ts`, `toon.ts`, `suggestions.ts`, `skill.ts` (minimal CLI-deferring stub generator).
@@ -89,6 +90,7 @@ Any argv shape other than exactly one version flag falls through to `runAxiCli`,
   In a fresh clone, run `pnpm install --frozen-lockfile` before manual pack or publish.
   Verify with `npm pack --dry-run` (no source/test cruft; bin is `dist/bin/tasks-axi.js` with its shebang preserved by tsc).
 - **CI is a 3-OS matrix** (ubuntu/macos/windows) running install → build → lint → test → `build:skill --check`. The `Require no-mistakes` and `Guard generated files` checks gate every PR to `main`.
+- **`action_required` on every check = the fork-PR approval gate, not a red build.** On a fork PR (a contributor without write access), GitHub parks all three workflow runs in `action_required` with zero jobs executed until a repo maintainer clicks "Approve and run workflows"; no commit, workflow edit, or API call from the contributor side can clear it. Before chasing it as a failure, confirm no check-runs exist on the head SHA, then reproduce CI locally (`pnpm run build && pnpm run lint && REQUIRE_BD=1 pnpm test && pnpm run build:skill -- --check`, with `bd` pinned to the CI version) and hand the approval to the maintainer.
 - **The `Require no-mistakes` gate is a thin caller of a shared composite action.** `.github/workflows/no-mistakes-required.yml` delegates enforcement to `kunchenguid/no-mistakes/.github/actions/require-no-mistakes`, pinned to an immutable commit SHA and never `@main` (main is editable by the very PR the gate judges). Enforcement logic and its tests live upstream in the no-mistakes repo - change enforcement there rather than hand-copying a script between siblings, and bump this repo's pin in a deliberate separate PR. This repo still owns its `on:`, `paths-ignore`, `concurrency`, `permissions`, job name, and author-exemption `if:`.
 - The shared action binds the attestation to the PR's current head, so a PR whose body no-mistakes did not rewrite for that head goes red. That is the attestation contract, not a flake: push through `git push no-mistakes` so the body is refreshed. `on.pull_request.types` deliberately omits `synchronize` - the verdict is a pure function of the PR body, and a push-triggered run pins a failure to a head whose body the same pipeline run is about to fix.
 

@@ -727,8 +727,28 @@ export async function mvCommand(
   if (store instanceof MarkdownStore) {
     await store.moveManyTo(ids, target);
   } else if (ids.length === 1) {
+    // The fallback is create-then-remove; check what remove would reject
+    // before creating so a refusal cannot leave the task in both backlogs.
+    const id = ids[0];
+    const { items } = await store.list({});
+    const dependents = items
+      .filter(
+        (task) =>
+          task.state !== "done" &&
+          task.deps.some((dep) => dep.type === "blocked-by" && dep.id === id),
+      )
+      .map((task) => task.id);
+    if (dependents.length > 0) {
+      throw new AxiError(
+        `Task "${id}" is still blocking active tasks: ${dependents.join(", ")}`,
+        "VALIDATION_ERROR",
+        [
+          `Unblock them first, e.g. \`tasks-axi unblock ${dependents[0]} --by ${id}\``,
+        ],
+      );
+    }
     await target.create(taskToInput(tasks[0]));
-    await store.remove(ids[0]);
+    await store.remove(id);
   } else {
     throw new AxiError(
       "Moving multiple tasks at once requires the markdown backend",
