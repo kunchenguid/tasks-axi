@@ -1,0 +1,2 @@
+# Trusted default-branch declaration: this fork runs no CI checks.
+no_ci: true

@@ -126,9 +126,6 @@ const TAIL_HOLD_KIND = new RegExp(
 );
 const TAIL_HOLD_UNTIL = new RegExp(`\\s*\\(hold-until:\\s*(${DATE})\\)\\s*$`);
 
-const REPORT_LINK = /\bdata\/\S+?\/report\.md\b/g;
-const GENERIC_URL = /https?:\/\/\S+/g;
-
 const LEADING_KIND: Array<[RegExp, string]> = [
   [/^PERSISTENT SECONDMATE\b/, "secondmate"],
   [/^SHIP\b/, "ship"],
@@ -148,11 +145,14 @@ function titleHasLeadingKind(title: string, kind: string): boolean {
   return leadingKind(title) === kind;
 }
 
+const REPORT_LINK = /\bdata\/\S+?\/report\.md\b/g;
+const GENERIC_URL = /https?:\/\/\S+/g;
+
 function trimUrl(url: string): string {
   return url.replace(/[).,;]+$/, "");
 }
 
-/** Derive typed links by scanning prose (links live in the prose, not as tags). */
+/** Derive typed links by scanning prose (links live in the prose, not as managed tags). */
 export function deriveLinks(text: string): TaskLink[] {
   const links: TaskLink[] = [];
   const seen = new Set<string>();
