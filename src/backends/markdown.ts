@@ -823,8 +823,8 @@ export class MarkdownStore implements Store {
    * guarantee.
    *
    * Each moved task is re-rendered canonically — identical to the single-id path — so
-   * multi-paragraph bodies and `blocked-by: <id> - <reason>` edges survive
-   * byte-exact. An intra-set dependency edge is preserved because both of its
+   * multi-paragraph body text and `blocked-by: <id> - <reason>` reasons are
+   * preserved. An intra-set dependency edge is preserved because both of its
    * endpoints travel together; `requireNoSplitDeps` refuses any move that would
    * strand a link across the two files.
    */
