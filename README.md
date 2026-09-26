@@ -199,7 +199,10 @@ Targeted task mutations re-render only the affected task; every other line, incl
 An item's body includes every following indented or blank line, so multi-paragraph notes and indented Markdown content move intact with the task.
 Trailing separator blanks remain with the item's raw source for byte-exact preservation without becoming part of its structured body.
 Maintenance commands are explicit exceptions: `render` normalizes every recognized task, `prune` trims the chosen section into the archive, and `mv` writes both source and destination backlogs.
-`mv <id> [<id>...] --to <path-or-dir>` moves one or more tasks as one atomic cross-file transaction.
+`mv <id> [<id>...] --to <path-or-dir>` validates the complete set under both backlog locks before writing. Validation failures leave both files unchanged. It then writes the destination followed by the source. If persisting the source fails, it attempts to remove the destination copies; if that rollback also fails, it reports PARTIAL_MOVE (error code `CONFLICT`, message `Move of "<id>" partially completed; task now exists in both backlogs`) and the files need reconciliation.
+
+The move is not crash-atomic. A process interruption between the two writes can leave copies in both backlogs; retrying `mv` then refuses with `CONFLICT`. Inspect both files and verify every destination copy before removing duplicates from the source (`tasks-axi rm <id>` against the source backlog). For connected sets, remove active dependents before their blockers. Power loss and storage failure have no durability guarantee from this write protocol: the atomic write is a temp file plus `rename`, with no `fsync`.
+
 To move a dependency-connected set, include every linked blocker and active dependent in the same command, unless the other endpoint already exists in the destination backlog.
 The command refuses a move that would strand a dependency across the two files, while preserving intra-set `blocked-by` links and their reason strings.
 Moved tasks are re-rendered canonically, so their multi-paragraph bodies remain intact but a trailing blank separator before the next item or section is dropped.
