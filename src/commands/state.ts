@@ -101,9 +101,19 @@ ready_public_followups group; use tasks-axi public-followup ready for their full
 Held work is excluded by default; --include-held shows it in a separate held group.`;
 
 export const MV_HELP = `usage: tasks-axi mv <id> [<id>...] --to <path-or-dir>
-Move one or more tasks to another backlog file in a single atomic transaction.
+Move one or more tasks to another backlog file under both backlog locks.
+The whole set is validated before anything is written; a validation failure
+leaves both files unchanged. The destination is written first, the source
+second. A failed source write is rolled back if possible; if the rollback
+also fails, the move reports PARTIAL_MOVE and both files need reconciliation.
+Not crash-atomic: interruption between writes can leave duplicates. For a multi-ID
+move, rollback can leave some or all requested tasks in the destination alongside
+their source copies. Retrying mv then refuses with CONFLICT. Before deleting source
+copies, inspect both files and reconcile the entire dependency-connected set. See
+README.md, “The markdown backend,” for recovery steps.
+Power-loss durability is not guaranteed: writes use temp-file plus rename, without fsync.
 Pass a whole connected set (a blocker and its dependents) to move it together;
-their blocked-by links and reason strings are preserved byte-exact.
+their blocked-by links and reason values are preserved.
 Duplicate ids are ignored after their first occurrence.
 Refuses if a moved item's dependency or active dependent would be stranded in the other
 file - include the whole set, or move the missing endpoint there first.
