@@ -106,9 +106,14 @@ The whole set is validated before anything is written; a validation failure
 leaves both files unchanged. The destination is written first, the source
 second. A failed source write is rolled back if possible; if the rollback
 also fails, the move reports PARTIAL_MOVE and both files need reconciliation.
-Not crash-atomic: a process interrupted between the two writes can leave the
-task in both files, and retrying then refuses with CONFLICT - inspect both
-files before removing the copy left in the source.
+Not crash-atomic: interruption between writes can leave duplicates. For a multi-ID
+move, a failed rollback can leave some or all moved tasks at the destination.
+Retrying mv then refuses with CONFLICT. Inspect both files and reconcile the
+entire dependency-connected set before deleting source copies.
+To keep the source set, remove all remaining moved copies from the destination.
+To keep the destination, ensure every moved task and linked dependency endpoint
+is there first. Remove active dependents before blockers, using tasks-axi rm <id>
+in whichever backlog you clean.
 Power-loss durability is not guaranteed: writes use temp-file plus rename, without fsync.
 Pass a whole connected set (a blocker and its dependents) to move it together;
 their blocked-by links and reason strings are preserved byte-exact.

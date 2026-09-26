@@ -814,10 +814,13 @@ export class MarkdownStore implements Store {
   /**
    * Move a connected set under both backlog locks. Validate before writing, then
    * persist destination followed by source. On source-persistence failure,
-   * attempt destination rollback; report PARTIAL_MOVE (`CONFLICT`, "task now
-   * exists in both backlogs") if rollback fails. Process interruption between
-   * writes can leave duplicates. This is neither a crash-atomic transaction nor
-   * a storage-durability guarantee.
+   * attempt destination rollback one task at a time; if rollback fails partway,
+   * some or all requested IDs may remain in the destination. Report
+   * PARTIAL_MOVE (`CONFLICT`, "task now exists in both backlogs"); this
+   * generic message does not mean every requested ID is duplicated.
+   * Process interruption between writes can also leave duplicates.
+   * This is neither a crash-atomic transaction nor a storage-durability
+   * guarantee.
    *
    * Each moved task is re-rendered canonically — identical to the single-id path — so
    * multi-paragraph bodies and `blocked-by: <id> - <reason>` edges survive
