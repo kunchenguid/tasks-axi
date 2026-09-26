@@ -109,6 +109,7 @@ also fails, the move reports PARTIAL_MOVE and both files need reconciliation.
 Not crash-atomic: a process interrupted between the two writes can leave the
 task in both files, and retrying then refuses with CONFLICT - inspect both
 files before removing the copy left in the source.
+Power-loss durability is not guaranteed: writes use temp-file plus rename, without fsync.
 Pass a whole connected set (a blocker and its dependents) to move it together;
 their blocked-by links and reason strings are preserved byte-exact.
 Duplicate ids are ignored after their first occurrence.
