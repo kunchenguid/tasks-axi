@@ -12,7 +12,8 @@ describe("minted id collisions", () => {
 
   it("retries when the first minted id already exists", async () => {
     vi.resetModules();
-    vi.doMock("node:crypto", () => ({
+    vi.doMock("node:crypto", async (importOriginal) => ({
+      ...(await importOriginal<typeof import("node:crypto")>()),
       randomBytes: () => Buffer.from([0]),
     }));
 

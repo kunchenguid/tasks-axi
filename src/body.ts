@@ -7,6 +7,7 @@
  * the true size so the agent knows how much it is missing.
  */
 
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { AxiError } from "./errors.js";
 import { takeFlag } from "./args.js";
@@ -57,4 +58,10 @@ export function truncate(
     text.slice(0, maxLen) +
     `\n... (truncated, ${text.length} chars total - ${hint})`
   );
+}
+
+export function bodySha256(body: string | undefined): string {
+  return createHash("sha256")
+    .update(body ?? "", "utf8")
+    .digest("hex");
 }

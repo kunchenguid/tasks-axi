@@ -109,6 +109,10 @@ tasks-axi update nm-release-validation --body "rewritten notes"
 tasks-axi update nm-release-validation --body-file notes.md --archive-body
 tasks-axi update nm-release-validation --title "clearer title"
 
+# guard a body rewrite against a concurrent writer (compare-and-set)
+tasks-axi show nm-release-validation --json      # copy body_sha256
+tasks-axi update nm-release-validation --body-file notes.md --expect-body-sha256 <body_sha256>
+
 # read the full notes on demand (truncated by default)
 tasks-axi show homemux-h7 --full
 
@@ -124,6 +128,7 @@ Output is [TOON](https://toonformat.dev)-encoded and token-efficient.
 The long task body is truncated by default — the whole point is that `list` stays cheap; use `--full` only when you need the complete notes.
 `update --body` and `update --body-file` replace the body wholesale, so agents should inspect the current body first and write back the curated current state rather than appending a journal entry.
 `--archive-body` preserves the replaced body in `note-archive.md` using the same dated markdown archive block style as done pruning.
+`show <id> --json` prints the full task with a `body_sha256` of its current body; pass that value as `update --expect-body-sha256 <hex>` and the write is refused with a `CONFLICT` error if another writer changed the body in between, so re-read and retry.
 Every write leads with a terse `ok:` line confirming the write result, including the resulting task state when the command changes one (e.g. `ok: start lavish-share -> In flight`, `ok: done grok-harness-g7 -> Done (pr <url>)`, `ok: render -> normalized 3`), followed by state-aware next-step hints that never suggest an action the command just performed.
 Mutations are idempotent and report what changed (`already: true` on a no-op), so re-running one is safe.
 Running `done` again on an already Done task can still backfill a new `--pr`, `--report`, or `--note` without changing the original close date.

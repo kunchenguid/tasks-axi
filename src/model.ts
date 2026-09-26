@@ -115,6 +115,12 @@ export interface TaskPatch {
   body?: string;
   /** Archive the previous body before a changed body replacement. */
   archiveBody?: boolean;
+  /**
+   * Refuse with CONFLICT unless the current parsed body has this SHA-256.
+   * Every backend that implements `update` must honor this, including a
+   * future sqlite store.
+   */
+  expectBodySha256?: string;
   /** Add body lines when they are not already present. */
   addBodyLines?: string[];
   repo?: string;

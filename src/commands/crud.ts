@@ -11,7 +11,12 @@ import {
 import { takeBody } from "../body.js";
 import { deriveLinks, extractTags } from "../backends/markdown-grammar.js";
 import { PR_URL_EXPECTED } from "../pr-url.js";
-import { renderMutation, stateLabel, taskToJson } from "../confirm.js";
+import {
+  renderJson,
+  renderMutation,
+  stateLabel,
+  taskToJson,
+} from "../confirm.js";
 import { requireCtx, type TasksContext } from "../context.js";
 import { blockedIds, heldTasks } from "../derive.js";
 import { AxiError, notFound } from "../errors.js";
@@ -67,8 +72,10 @@ examples:
   tasks-axi list --repo no-mistakes --fields blocked_by,created
   tasks-axi list --blocked`;
 
-export const SHOW_HELP = `usage: tasks-axi show <id> [--full]
+export const SHOW_HELP = `usage: tasks-axi show <id> [--full] [--json]
 aliases: view
+flags:
+  --json   print the full task as a JSON object, with body_sha256
 examples:
   tasks-axi show homemux-h7
   tasks-axi show homemux-h7 --full`;
@@ -78,6 +85,8 @@ aliases: edit
 flags:
   --title <text>, --body <text> or --body-file <path>
   --archive-body   with --body/--body-file, archive the previous body
+  --expect-body-sha256 <hex>   write only if the current body still has this
+                   hash (body_sha256 from \`show <id> --json\`); else CONFLICT
   --repo <name>, --kind <name>, --priority <0-4>, --pr <url>, --report <path>
   --json   print the resulting task as a JSON object
 examples:
@@ -463,6 +472,7 @@ export async function showCommand(
   const { store } = requireCtx(context);
   const args = [...rawArgs];
   const full = takeBoolFlag(args, "--full");
+  const json = takeBoolFlag(args, "--json");
   const positionals = requirePositionals(args, 1, 1, SHOW_HELP.split("\n")[0]);
   const id = requireId(positionals[0], "id");
 
@@ -470,6 +480,7 @@ export async function showCommand(
   if (!task) throw notFound(id, { globals: context?.suggestionGlobals });
 
   const all = (await store.list({})).items;
+  if (json) return renderJson(taskToJson(task, all));
   const isBlocked = blockedIds(all).has(id);
 
   const blocks = [renderTaskDetail(task, all, full)];
@@ -497,6 +508,7 @@ export async function updateCommand(
   const title = takeFlag(args, "--title");
   const body = takeBody(args);
   const archiveBody = takeBoolFlag(args, "--archive-body");
+  const expectBodySha256 = takeFlag(args, "--expect-body-sha256");
   const repo = requireNonEmptySingleLineFlagValue(
     "--repo",
     takeFlag(args, "--repo"),
@@ -551,6 +563,17 @@ export async function updateCommand(
     throw new AxiError("Nothing to update", "VALIDATION_ERROR", [
       "Pass a field, e.g. --title, --body, --body-file, --repo, or --kind",
     ]);
+  }
+
+  if (expectBodySha256 !== undefined) {
+    if (!/^[0-9a-f]{64}$/.test(expectBodySha256)) {
+      throw new AxiError(
+        "--expect-body-sha256 must be 64 lowercase hex characters",
+        "VALIDATION_ERROR",
+        ["Copy body_sha256 from `tasks-axi show <id> --json`"],
+      );
+    }
+    patch.expectBodySha256 = expectBodySha256;
   }
 
   if (!(await store.get(id))) {

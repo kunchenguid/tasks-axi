@@ -9,6 +9,7 @@
  * result object (the human-readable TOON form stays default).
  */
 
+import { bodySha256 } from "./body.js";
 import { activeBlockers, isHoldActive } from "./derive.js";
 import type { State, Task } from "./model.js";
 import { clonePublicFollowup } from "./public-followup.js";
@@ -107,6 +108,7 @@ export function taskToJson(task: Task, all?: Task[]): Record<string, unknown> {
       ? []
       : task.links.map((l) => ({ kind: l.kind, url: l.url })),
     body: task.public_followup ? null : (task.body ?? null),
+    body_sha256: task.public_followup ? null : bodySha256(task.body),
   };
   if (task.public_followup) {
     json.public_followup = clonePublicFollowup(task.public_followup);
