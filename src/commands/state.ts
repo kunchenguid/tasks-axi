@@ -107,16 +107,13 @@ leaves both files unchanged. The destination is written first, the source
 second. A failed source write is rolled back if possible; if the rollback
 also fails, the move reports PARTIAL_MOVE and both files need reconciliation.
 Not crash-atomic: interruption between writes can leave duplicates. For a multi-ID
-move, a failed rollback can leave some or all moved tasks at the destination.
-Retrying mv then refuses with CONFLICT. Inspect both files and reconcile the
-entire dependency-connected set before deleting source copies.
-To keep the source set, remove all remaining moved copies from the destination.
-To keep the destination, ensure every moved task and linked dependency endpoint
-is there first. Remove active dependents before blockers, using tasks-axi rm <id>
-in whichever backlog you clean.
+move, rollback can leave some or all requested tasks in the destination alongside
+their source copies. Retrying mv then refuses with CONFLICT. Before deleting source
+copies, inspect both files and reconcile the entire dependency-connected set. See
+README.md, “The markdown backend,” for recovery steps.
 Power-loss durability is not guaranteed: writes use temp-file plus rename, without fsync.
 Pass a whole connected set (a blocker and its dependents) to move it together;
-their blocked-by links and reason strings are preserved byte-exact.
+their blocked-by links and reason values are preserved.
 Duplicate ids are ignored after their first occurrence.
 Refuses if a moved item's dependency or active dependent would be stranded in the other
 file - include the whole set, or move the missing endpoint there first.

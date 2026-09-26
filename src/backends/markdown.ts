@@ -818,6 +818,7 @@ export class MarkdownStore implements Store {
    * some or all requested IDs may remain in the destination. Report
    * PARTIAL_MOVE (`CONFLICT`, "task now exists in both backlogs"); this
    * generic message does not mean every requested ID is duplicated.
+   * Before deleting source copies, reconcile the complete dependency-connected set.
    * Process interruption between writes can also leave duplicates.
    * This is neither a crash-atomic transaction nor a storage-durability
    * guarantee.
