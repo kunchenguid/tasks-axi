@@ -35,7 +35,7 @@
 
 ### Features
 
-* move linked task sets atomically ([#13](https://github.com/kunchenguid/tasks-axi/issues/13)) ([f75ebbd](https://github.com/kunchenguid/tasks-axi/commit/f75ebbd9faf92c1eb4cc8aa958ad5f37607ea677))
+* support moving linked task sets together ([#13](https://github.com/kunchenguid/tasks-axi/issues/13)) ([f75ebbd](https://github.com/kunchenguid/tasks-axi/commit/f75ebbd9faf92c1eb4cc8aa958ad5f37607ea677))
 
 ## [0.2.1](https://github.com/kunchenguid/tasks-axi/compare/tasks-axi-v0.2.0...tasks-axi-v0.2.1) (2026-07-10)
 
