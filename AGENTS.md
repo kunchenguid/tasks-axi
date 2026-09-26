@@ -36,7 +36,8 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
   Firstmate and other callers must use `tasks-axi public-followup` and `--json`, never parse or rewrite the comment.
   Generic worker readiness and lifecycle transitions cannot dispatch, complete, reopen, remove, or change the kind of an active obligation; only a posted receipt or Captain waiver completes it.
 - **Concurrency:** every mutation runs under `withLock` (advisory `<path>.lock`) and fails closed with a `LOCKED` error if another process holds the lock past the bounded timeout.
-  If the lock looks stale, the error tells the user to remove `<path>.lock` only after confirming no `tasks-axi` process is running.
+  A lock abandoned by a killed process is reclaimed on the next acquire once the pid in its token is gone (a definite `ESRCH`) and the file is past the stale window; reclaimers serialize on a second O_EXCL lockfile (`<path>.lock.reclaim`) and re-read the token after the pid probe, so the file removed is always the one proved abandoned and never a lock a normal writer took meanwhile; a reclaimer that cannot take the mutex never touches the lock.
+  A lock held by a live pid (`EPERM` and any unknown holder-check answer count as live), one younger than the stale window, or one whose token `tasks-axi` did not write still fails closed, and the error tells the user to remove `<path>.lock` (plus a leftover `<path>.lock.reclaim`) after confirming no `tasks-axi` process is running.
   Corruption-safety is guaranteed independently by atomic temp-file + rename writes, and a hand-edit landing between read and write is detected and refused.
   Reads do not lock.
 

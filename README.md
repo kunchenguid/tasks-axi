@@ -205,6 +205,7 @@ The command refuses a move that would strand a dependency across the two files, 
 Moved tasks are re-rendered canonically, so their multi-paragraph bodies remain intact but a trailing blank separator before the next item or section is dropped.
 
 The read-modify-write window is guarded by an advisory lockfile, an atomic write (temp file + rename), and a fresh re-read on every invocation, so a hand-edit and a CLI-edit cannot clobber each other.
+A lockfile left behind by a killed process is reclaimed automatically once the process it names is gone and the file has been untouched for the stale window, so one crashed agent does not freeze the backlog for the others; recoveries serialize on a `<path>.lock.reclaim` mutex and confirm the token again after checking the pid, so only the lockfile proved abandoned is ever removed, and a lock still held by a running process always fails closed.
 Task state is carried by the section header, not by the bullet style: `## In flight`, `## Queued`, and `## Done` decide whether a recognized item is in flight, queued, or done.
 In flight parses both the legacy `- **id** - ...` form and firstmate's `- [ ] id - ...` checkbox form, while normalization renders both In flight and Queued items as `- [ ] id - ...` and Done items as `- [x] id - ...`.
 Untouched legacy lines are still preserved byte-for-byte; only mutated or explicitly normalized tasks are rewritten.
