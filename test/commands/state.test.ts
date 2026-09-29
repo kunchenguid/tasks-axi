@@ -12,7 +12,7 @@ import {
   unblockCommand,
   unholdCommand,
 } from "../../src/commands/state.js";
-import { listCommand } from "../../src/commands/crud.js";
+import { listCommand, showCommand } from "../../src/commands/crud.js";
 import { makeBacklog } from "../helpers.js";
 
 describe("state commands", () => {
@@ -150,6 +150,31 @@ describe("state commands", () => {
       }
     });
 
+    it("closes with a ported Gitea pulls URL and reads it back unchanged", async () => {
+      const b = makeBacklog();
+      const url = "https://gitea.example.com:7990/team/app/pulls/271";
+      try {
+        const out = await doneCommand(
+          ["cert-cleanup", "--pr", url, "--no-prune"],
+          b.ctx,
+        );
+        expect(out).toContain(`done cert-cleanup -> Done (pr ${url})`);
+        expect(b.read()).toContain(url);
+        const shown = await showCommand(["cert-cleanup"], b.ctx);
+        expect(shown).toContain(url);
+        const task = await b.ctx.store.get("cert-cleanup");
+        expect(task?.links).toContainEqual({ kind: "pr", url });
+        const again = await doneCommand(
+          ["cert-cleanup", "--pr", url, "--no-prune"],
+          b.ctx,
+        );
+        expect(again).toContain("cert-cleanup");
+        expect(b.read().split(url).length - 1).toBe(1);
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects non-canonical pull URLs without mutating", async () => {
       const b = makeBacklog();
       try {
@@ -157,6 +182,8 @@ describe("state commands", () => {
           "https://forgejo.samesies.gay/eve/orchalycious/pull/39",
           "https://github.com/o/r/pulls/9",
           "https://github.com/o/r/pull/9?w=1",
+          "https://github.com:443/o/r/pull/9",
+          "https://gitea.example.com:0/team/app/pulls/271",
           " https://github.com/o/r/pull/9 ",
         ]) {
           await expect(

@@ -339,6 +339,18 @@ describe("markdown grammar", () => {
       ]);
     });
 
+    it("derives a ported Gitea pulls URL as the single pr link", () => {
+      const links = deriveLinks(
+        "merged https://gitea.example.com:7990/team/app/pulls/271",
+      );
+      expect(links).toEqual([
+        {
+          kind: "pr",
+          url: "https://gitea.example.com:7990/team/app/pulls/271",
+        },
+      ]);
+    });
+
     it("keeps non-canonical PR-ish URLs as doc links, never pr", () => {
       for (const url of [
         "https://forgejo.samesies.gay/eve/orchalycious/pull/39",
