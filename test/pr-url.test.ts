@@ -8,6 +8,10 @@ describe("isPrUrl", () => {
     "https://github.com/some-owner/some.repo/pull/1",
     "https://forgejo.samesies.gay/eve/orchalycious/pulls/39",
     "https://codeberg.org/forgejo/forgejo/pulls/1234",
+    "https://gitea.example.com/team/app/pulls/271",
+    "https://gitea.example.com:7990/team/app/pulls/271",
+    "https://forgejo.samesies.gay:1/o/r/pulls/39",
+    "https://forgejo.samesies.gay:65535/o/r/pulls/39",
   ])("accepts canonical PR URL %s", (url) => {
     expect(isPrUrl(url)).toBe(true);
   });
@@ -36,7 +40,20 @@ describe("isPrUrl", () => {
     // authority shape
     "https://user@forgejo.samesies.gay/o/r/pulls/39",
     "https://token:secret@github.com/o/r/pull/519",
-    "https://forgejo.samesies.gay:8443/o/r/pulls/39",
+    // ports: GitHub never, Forgejo/Gitea only 1-65535 without leading zeros
+    "https://github.com:443/o/r/pull/42",
+    "https://github.com:8443/o/r/pull/42",
+    "https://forgejo.samesies.gay:8443/o/r/pull/39",
+    "https://forgejo.samesies.gay:0/o/r/pulls/39",
+    "https://forgejo.samesies.gay:07990/o/r/pulls/39",
+    "https://forgejo.samesies.gay:65536/o/r/pulls/39",
+    "https://forgejo.samesies.gay:99999/o/r/pulls/39",
+    "https://forgejo.samesies.gay:123456/o/r/pulls/39",
+    "https://forgejo.samesies.gay:/o/r/pulls/39",
+    "https://forgejo.samesies.gay:79a/o/r/pulls/39",
+    "https://user@gitea.example.com:7990/o/r/pulls/39",
+    "https://gitea.example.com:7990/o/r/pulls/39/",
+    "https://gitea.example.com:7990/o/r/pulls/39?x=1",
     "https://Forgejo.Samesies.Gay/o/r/pulls/39",
     "https://-bad-.example.com/o/r/pulls/39",
     // path shape
