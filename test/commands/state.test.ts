@@ -150,6 +150,21 @@ describe("state commands", () => {
       }
     });
 
+    it("closes with a GitLab merge request URL and preserves it byte-for-byte", async () => {
+      const b = makeBacklog();
+      const url = "https://gitlab.com/group/sub/project/-/merge_requests/12";
+      try {
+        const out = await doneCommand(
+          ["cert-cleanup", "--pr", url, "--no-prune"],
+          b.ctx,
+        );
+        expect(out).toContain(`done cert-cleanup -> Done (pr ${url})`);
+        expect(b.read()).toContain(url);
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("rejects non-canonical pull URLs without mutating", async () => {
       const b = makeBacklog();
       try {
@@ -158,6 +173,8 @@ describe("state commands", () => {
           "https://github.com/o/r/pulls/9",
           "https://github.com/o/r/pull/9?w=1",
           " https://github.com/o/r/pull/9 ",
+          "https://gitlab.com/project/-/merge_requests/12",
+          "https://gitlab.com/group/project/-/merge_requests/12/diffs",
         ]) {
           await expect(
             doneCommand(["cert-cleanup", "--pr", url, "--no-prune"], b.ctx),

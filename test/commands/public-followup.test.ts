@@ -383,6 +383,27 @@ describe("public-followup commands", () => {
     }
   });
 
+  it("accepts a GitLab merge request URL as a pr-merged deliverable", async () => {
+    const b = makeBacklog(EMPTY);
+    const url = "https://gitlab.com/group/sub/project/-/merge_requests/12";
+    try {
+      await add(b);
+      await bind(b);
+      const landed = await acceptEvent(
+        b,
+        event("evt-gitlab-url", "rel-code", "work-code-q1", 1, {
+          deliverables: { pr_url: url },
+        }),
+      );
+      expect(
+        landed.task.public_followup.work_relations[0].accepted_events[0]
+          .deliverables.pr_url,
+      ).toBe(url);
+    } finally {
+      b.cleanup();
+    }
+  });
+
   it("rejects a singular-route Forgejo PR URL before accepting work", async () => {
     const b = makeBacklog(EMPTY);
     try {
