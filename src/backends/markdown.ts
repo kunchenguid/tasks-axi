@@ -63,6 +63,15 @@ export interface MarkdownStoreOptions {
   now?: () => string;
 }
 
+export interface MoveOptions {
+  /**
+   * Runs once the move is fully validated and before anything is written, while
+   * both backlogs stay locked; throwing aborts the move untouched. The locks
+   * are held until it settles, so it must be bounded.
+   */
+  prepare?: () => Promise<void> | void;
+}
+
 const ORDER: State[] = ["in_flight", "queued", "done"];
 const HEADERS: Record<State, string> = {
   in_flight: "## In flight",
@@ -821,9 +830,13 @@ export class MarkdownStore implements Store {
    * endpoints travel together; `requireNoSplitDeps` refuses any move that would
    * strand a link across the two files.
    */
-  async moveManyTo(ids: string[], target: MarkdownStore): Promise<Task[]> {
+  async moveManyTo(
+    ids: string[],
+    target: MarkdownStore,
+    options: MoveOptions = {},
+  ): Promise<Task[]> {
     const uniqueIds = [...new Set(ids)];
-    return withLocks([this.path, target.path], () => {
+    return withLocks([this.path, target.path], async () => {
       const loaded = this.loadForUpdate();
       const { doc } = loaded;
 
@@ -866,6 +879,8 @@ export class MarkdownStore implements Store {
       for (const section of doc.sections) {
         section.entries = section.entries.filter((e) => !removeSet.has(e));
       }
+
+      await options.prepare?.();
 
       target.assertUnchanged(targetLoaded);
       this.assertUnchanged(loaded);

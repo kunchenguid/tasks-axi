@@ -36,6 +36,7 @@ import {
   PUBLIC_FOLLOWUP_KIND,
   clonePublicFollowup,
 } from "../public-followup.js";
+import { PREPARE_TIMEOUT_MS, runPrepareCommand } from "../prepare.js";
 import type { Store } from "../store.js";
 import { getSuggestions } from "../suggestions.js";
 import { renderHelp, renderOutput } from "../toon.js";
@@ -100,7 +101,7 @@ Public-followup obligations are never dispatchable and appear only in the separa
 ready_public_followups group; use tasks-axi public-followup ready for their full payloads.
 Held work is excluded by default; --include-held shows it in a separate held group.`;
 
-export const MV_HELP = `usage: tasks-axi mv <id> [<id>...] --to <path-or-dir>
+export const MV_HELP = `usage: tasks-axi mv <id> [<id>...] --to <path-or-dir> [--prepare <command>]
 Move one or more tasks to another backlog file in a single atomic transaction.
 Pass a whole connected set (a blocker and its dependents) to move it together;
 their blocked-by links and reason strings are preserved byte-exact.
@@ -108,10 +109,14 @@ Duplicate ids are ignored after their first occurrence.
 Refuses if a moved item's dependency or active dependent would be stranded in the other
 file - include the whole set, or move the missing endpoint there first.
 flags:
+  --prepare <command>   run a shell command once the move is validated and before it is
+                        written, with both backlogs locked; the move commits only if the
+                        command exits 0 within 10 s and neither file changed meanwhile
   --json   print the result as a JSON object
 examples:
   tasks-axi mv hibit-cert-cleanup --to ../homemux/data/backlog.md
-  tasks-axi mv blocker-b1 dependent-d2 --to ../homemux/data/backlog.md`;
+  tasks-axi mv blocker-b1 dependent-d2 --to ../homemux/data/backlog.md
+  tasks-axi mv task-a --to ../other/backlog.md --prepare "./reserve-task.sh task-a"`;
 
 export async function startCommand(
   rawArgs: string[],
@@ -690,12 +695,22 @@ export async function mvCommand(
       "Name the destination backlog, e.g. `--to ../other/data/backlog.md`",
     ]);
   }
+  const prepare = requireNonEmptySingleLineFlagValue(
+    "--prepare",
+    takeFlag(args, "--prepare"),
+  );
   requireNoUnknownFlags(args);
   const positionals = args.filter((arg) => !arg.startsWith("-"));
   if (positionals.length === 0) {
     throw new AxiError("Expected at least one task id", "VALIDATION_ERROR", [
       MV_HELP.split("\n")[0],
     ]);
+  }
+  if (prepare !== undefined && !(store instanceof MarkdownStore)) {
+    throw new AxiError(
+      "--prepare requires the markdown backend",
+      "UNSUPPORTED",
+    );
   }
   const ids = [...new Set(positionals.map((p) => requireId(p, "id")))];
 
@@ -725,7 +740,13 @@ export async function mvCommand(
   }
 
   if (store instanceof MarkdownStore) {
-    await store.moveManyTo(ids, target);
+    await store.moveManyTo(
+      ids,
+      target,
+      prepare === undefined
+        ? {}
+        : { prepare: () => runPrepareCommand(prepare, PREPARE_TIMEOUT_MS) },
+    );
   } else if (ids.length === 1) {
     await target.create(taskToInput(tasks[0]));
     await store.remove(ids[0]);

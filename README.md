@@ -118,6 +118,8 @@ tasks-axi render                 # normalize the markdown in place
 tasks-axi mv hibit-cert-cleanup --to ../homemux/data/backlog.md
 # move a linked blocker/dependent set together
 tasks-axi mv blocker-b1 dependent-d2 --to ../homemux/data/backlog.md
+# run an external step only for a valid move, while both backlogs are locked
+tasks-axi mv task-a --to ../other/data/backlog.md --prepare "./reserve-task.sh task-a"
 ```
 
 Output is [TOON](https://toonformat.dev)-encoded and token-efficient.
@@ -203,6 +205,14 @@ Maintenance commands are explicit exceptions: `render` normalizes every recogniz
 To move a dependency-connected set, include every linked blocker and active dependent in the same command, unless the other endpoint already exists in the destination backlog.
 The command refuses a move that would strand a dependency across the two files, while preserving intra-set `blocked-by` links and their reason strings.
 Moved tasks are re-rendered canonically, so their multi-paragraph bodies remain intact but a trailing blank separator before the next item or section is dropped.
+`mv --prepare <command>` runs a shell command after the move is fully validated and before anything is written, while both backlogs stay locked.
+A move that would strand a dependency never runs the command, and no other tasks-axi command can change either backlog until the move commits or is abandoned.
+The move commits only if the command exits 0 and neither file was hand-edited meanwhile; otherwise nothing is moved (`PREPARE_FAILED` or `CONFLICT`).
+A command still running after 10 seconds is killed, and SIGINT or SIGTERM stops it the same way.
+Re-running an abandoned `mv` runs the command again, so make it safe to repeat; re-running a move that already committed reports the task as not found and does not run the command.
+The command's output goes to stderr, it must not run tasks-axi against either locked backlog, and it is not undone if the move later fails to write.
+If tasks-axi is killed outright, nothing is moved, but the lock files stay until removed and the command may keep running.
+`--prepare` needs the markdown backend and adds no durability beyond the existing write order of `mv`.
 
 The read-modify-write window is guarded by an advisory lockfile, an atomic write (temp file + rename), and a fresh re-read on every invocation, so a hand-edit and a CLI-edit cannot clobber each other.
 Task state is carried by the section header, not by the bullet style: `## In flight`, `## Queued`, and `## Done` decide whether a recognized item is in flight, queued, or done.

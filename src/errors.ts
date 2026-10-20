@@ -10,6 +10,7 @@ export type ErrorCode =
   | "LOCKED"
   | "CONFLICT"
   | "UNSUPPORTED"
+  | "PREPARE_FAILED"
   | "UNKNOWN";
 
 export { AxiError, exitCodeForError };
