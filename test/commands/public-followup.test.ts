@@ -743,6 +743,11 @@ describe("public-followup commands", () => {
           updateCommand(["public-final-ab", "--body", "unsafe rewrite"], b.ctx),
         () =>
           updateCommand(
+            ["public-final-ab", "--append-body", "unsafe append"],
+            b.ctx,
+          ),
+        () =>
+          updateCommand(
             ["public-final-ab", "--title", "unsafe rewrite"],
             b.ctx,
           ),

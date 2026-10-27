@@ -78,11 +78,15 @@ aliases: edit
 flags:
   --title <text>, --body <text> or --body-file <path>
   --archive-body   with --body/--body-file, archive the previous body
+  --append-body <text> or --append-body-file <path>
+                   append a paragraph atomically, without reading existing notes
+                   cannot combine with replacement or --archive-body
   --repo <name>, --kind <name>, --priority <0-4>, --pr <url>, --report <path>
   --json   print the resulting task as a JSON object
 examples:
   tasks-axi show nm-release-validation --full
   tasks-axi update nm-release-validation --body-file notes.md --archive-body
+  tasks-axi update nm-release-validation --append-body-file evidence.md
   tasks-axi update fm-x --repo firstmate --kind ship`;
 
 export const RM_HELP = `usage: tasks-axi rm <id>
@@ -497,6 +501,7 @@ export async function updateCommand(
   const title = takeFlag(args, "--title");
   const body = takeBody(args);
   const archiveBody = takeBoolFlag(args, "--archive-body");
+  const appendBody = takeBody(args, "--append-body", "--append-body-file");
   const repo = requireNonEmptySingleLineFlagValue(
     "--repo",
     takeFlag(args, "--repo"),
@@ -517,6 +522,15 @@ export async function updateCommand(
   const id = requireId(positionals[0], "id");
 
   const patch: TaskPatch = {};
+  if (appendBody !== undefined) {
+    if (body !== undefined || archiveBody) {
+      throw new AxiError(
+        "Body append cannot be combined with body replacement or --archive-body",
+        "VALIDATION_ERROR",
+      );
+    }
+    patch.appendBody = requireNonEmptyFlagValue("--append-body", appendBody);
+  }
   if (title !== undefined) {
     patch.title = requireTitle(
       title,

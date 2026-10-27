@@ -117,6 +117,8 @@ export interface TaskPatch {
   archiveBody?: boolean;
   /** Add body lines when they are not already present. */
   addBodyLines?: string[];
+  /** Append a paragraph under the store lock. Cannot accompany body replacement. */
+  appendBody?: string;
   repo?: string;
   kind?: string;
   /** Links to add (existing links are preserved). */

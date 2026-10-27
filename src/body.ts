@@ -14,16 +14,19 @@ import { takeFlag } from "./args.js";
 export const DEFAULT_TRUNCATE = 500;
 
 /**
- * Resolve a body from `--body <text>` or `--body-file <path>` (mutually
- * exclusive) and remove the flags from args. Returns undefined when neither
- * is present.
+ * Resolve body text from mutually exclusive inline or file flags and remove
+ * them from args. Returns undefined when neither is present.
  */
-export function takeBody(args: string[]): string | undefined {
-  const inline = takeFlag(args, "--body");
-  const file = takeFlag(args, "--body-file");
+export function takeBody(
+  args: string[],
+  inlineFlag = "--body",
+  fileFlag = "--body-file",
+): string | undefined {
+  const inline = takeFlag(args, inlineFlag);
+  const file = takeFlag(args, fileFlag);
   if (inline !== undefined && file !== undefined) {
     throw new AxiError(
-      "Use only one of --body or --body-file",
+      `Use only one of ${inlineFlag} or ${fileFlag}`,
       "VALIDATION_ERROR",
     );
   }
@@ -33,7 +36,7 @@ export function takeBody(args: string[]): string | undefined {
       return readFileSync(file, "utf8");
     } catch {
       throw new AxiError(
-        `Could not read --body-file path: ${file}`,
+        `Could not read ${fileFlag} path: ${file}`,
         "VALIDATION_ERROR",
       );
     }
