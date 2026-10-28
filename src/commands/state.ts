@@ -36,7 +36,7 @@ import {
   PUBLIC_FOLLOWUP_KIND,
   clonePublicFollowup,
 } from "../public-followup.js";
-import type { Store } from "../store.js";
+import type { PruneResult, Store } from "../store.js";
 import { getSuggestions } from "../suggestions.js";
 import { renderHelp, renderOutput } from "../toon.js";
 import { renderTaskDetail, renderTaskList, showFullTextHint } from "../view.js";
@@ -198,7 +198,8 @@ export async function doneCommand(
         ok: true,
         action: "done",
         already: true,
-        pruned,
+        pruned: pruned.archived,
+        pruned_ids: pruned.ids,
         task: taskToJson(task, all),
       },
       ...(changed
@@ -223,7 +224,8 @@ export async function doneCommand(
     jsonPayload: {
       ok: true,
       action: "done",
-      pruned,
+      pruned: pruned.archived,
+      pruned_ids: pruned.ids,
       task: taskToJson(task, all),
     },
     suggestions: getSuggestions({
@@ -246,23 +248,24 @@ function doneExtras(
   return parts.length > 0 ? ` (${parts.join(", ")})` : "";
 }
 
-/** A trailing `; pruned N` note, shown only when something was archived. */
-function prunedNote(pruned: number): string {
-  return pruned > 0 ? `; pruned ${pruned}` : "";
+/** A trailing count and IDs, shown only when something was archived. */
+function prunedNote(pruned: PruneResult): string {
+  return pruned.archived > 0
+    ? `; pruned ${pruned.archived} (${pruned.ids.join(", ")})`
+    : "";
 }
 
 async function pruneDone(
   store: Store,
   keep: number,
   noPrune: boolean,
-): Promise<number> {
-  if (noPrune || !store.prune) return 0;
-  const result = await store.prune({
+): Promise<PruneResult> {
+  if (noPrune || !store.prune) return { archived: 0, ids: [] };
+  return store.prune({
     state: "done",
     keep,
     archive: true,
   });
-  return result.archived;
 }
 
 function doneMetadataPatch(

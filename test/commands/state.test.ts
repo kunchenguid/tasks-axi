@@ -102,6 +102,94 @@ describe("state commands", () => {
   });
 
   describe("done", () => {
+    it.each([
+      { name: "fresh completion", already: false, keep: 1, noPrune: false },
+      { name: "already done", already: true, keep: 1, noPrune: false },
+      { name: "fresh --no-prune", already: false, keep: 1, noPrune: true },
+      {
+        name: "already done --no-prune",
+        already: true,
+        keep: 1,
+        noPrune: true,
+      },
+      { name: "fresh zero-prune", already: false, keep: 3, noPrune: false },
+      {
+        name: "already done zero-prune",
+        already: true,
+        keep: 3,
+        noPrune: false,
+      },
+    ])(
+      "reports exact archived IDs for $name in text and JSON",
+      async ({ already, keep, noPrune }) => {
+        for (const json of [false, true]) {
+          const b = makeBacklog(
+            [
+              "# Backlog",
+              "",
+              "## Queued",
+              ...(already ? [] : ["- [ ] finish-me - current work"]),
+              "",
+              "## Done",
+              ...(already
+                ? ["- [x] finish-me - current work (done 2026-06-30)"]
+                : []),
+              "- [x] old-done-a - previous work (done 2026-06-29)",
+              "- [x] old-done-b - older work (done 2026-06-28)",
+              "",
+            ].join("\n"),
+          );
+          b.ctx.config.doneKeep = keep;
+          const expectedIds =
+            noPrune || keep === 3 ? [] : ["old-done-a", "old-done-b"];
+          try {
+            const out = await doneCommand(
+              [
+                "finish-me",
+                ...(noPrune ? ["--no-prune"] : []),
+                ...(json ? ["--json"] : []),
+              ],
+              b.ctx,
+            );
+            if (json) {
+              const parsed = JSON.parse(out);
+              expect(parsed).toMatchObject({
+                ok: true,
+                action: "done",
+                pruned: expectedIds.length,
+                pruned_ids: expectedIds,
+                task: { id: "finish-me", state: "done" },
+              });
+              expect(parsed.already).toBe(already ? true : undefined);
+            } else {
+              const note =
+                expectedIds.length > 0
+                  ? `; pruned ${expectedIds.length} (${expectedIds.join(", ")})`
+                  : "";
+              expect(out.split("\n")[0]).toBe(
+                `ok: done finish-me${already ? " already" : ""} -> Done${note}`,
+              );
+            }
+            const archivedIds = [
+              ...b.archive().matchAll(/^- \[x\] ([a-z0-9-]+) - /gm),
+            ].map((match) => match[1]);
+            expect(archivedIds).toEqual(expectedIds);
+            const remaining = (await b.store.list({})).items.map(
+              (task) => task.id,
+            );
+            expect(remaining).toEqual(
+              expectedIds.length > 0
+                ? ["finish-me"]
+                : ["finish-me", "old-done-a", "old-done-b"],
+            );
+            if (expectedIds.length === 0) expect(b.archive()).toBe("");
+          } finally {
+            b.cleanup();
+          }
+        }
+      },
+    );
+
     it("closes, records the pr, and reports pruned count", async () => {
       const b = makeBacklog();
       try {

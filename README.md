@@ -127,6 +127,9 @@ The long task body is truncated by default — the whole point is that `list` st
 Every write leads with a terse `ok:` line confirming the write result, including the resulting task state when the command changes one (e.g. `ok: start lavish-share -> In flight`, `ok: done grok-harness-g7 -> Done (pr <url>)`, `ok: render -> normalized 3`), followed by state-aware next-step hints that never suggest an action the command just performed.
 Mutations are idempotent and report what changed (`already: true` on a no-op), so re-running one is safe.
 Running `done` again on an already Done task can still backfill a new `--pr`, `--report`, or `--note` without changing the original close date.
+Both fresh and already-Done completions automatically archive surplus Done tasks according to `done_keep`, overridden by `--keep`. Use `--no-prune` to skip archiving.
+When tasks are archived, the confirmation includes their count and IDs, for example `; pruned 2 (old-done-a, old-done-b)`.
+With `done --json`, `pruned` remains the count and `pruned_ids` lists the archived IDs. When nothing is archived, these are `0` and `[]`.
 `hold <id> --reason "<text>"` records an intentional pause without turning it into prose, and `unhold <id>` clears it.
 The reason must be single-line text without parentheses because parentheses are reserved for canonical markdown tags.
 Active holds are excluded from `ready`; a hold with `--until YYYY-MM-DD` becomes inactive on and after that date, so the task can surface as ready again if nothing else blocks it.
