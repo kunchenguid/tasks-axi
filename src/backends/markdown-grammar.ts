@@ -115,6 +115,7 @@ const TAIL_DEP = new RegExp(
 );
 const TAIL_REPO = /\s*\((?:[^()]*\+\s*)?repo:\s*([^)]+)\)\s*$/;
 const TAIL_KIND = /\s*\(kind:\s*([^)]+)\)\s*$/;
+const TAIL_REPORT = /\s*\(report:\s*(data\/\S+\/report\.md)\)\s*$/;
 const TAIL_PRIORITY = /\s*\(priority:\s*([0-4])\)\s*$/;
 const TAIL_SINCE = new RegExp(`\\s*\\(since\\s+(${DATE})\\)\\s*$`);
 const TAIL_CLOSED = new RegExp(
@@ -152,7 +153,7 @@ function trimUrl(url: string): string {
   return url.replace(/[).,;]+$/, "");
 }
 
-/** Derive typed links by scanning prose (links live in the prose, not as tags). */
+/** Derive typed links by scanning prose; report tags are handled by extractTags. */
 export function deriveLinks(text: string): TaskLink[] {
   const links: TaskLink[] = [];
   const seen = new Set<string>();
@@ -186,12 +187,13 @@ export interface ExtractedTags {
 
 /**
  * Pull the canonical inline tags off the trailing tag-region of a bullet's
- * content, returning the clean prose title plus the structured fields. Links
- * and any leading kind word stay in the prose (so they are never duplicated on
- * re-render), and mid-sentence parentheticals are preserved verbatim.
+ * content, returning the clean prose title plus the structured fields. Legacy
+ * prose links and any leading kind word stay in the title; explicit reports
+ * have their own tag. Mid-sentence parentheticals are preserved verbatim.
  */
 export function extractTags(rest: string): ExtractedTags {
   const deps: Dep[] = [];
+  const reports: TaskLink[] = [];
   let repo: string | undefined;
   let kindTag: string | undefined;
   let created: string | undefined;
@@ -211,6 +213,13 @@ export function extractTags(rest: string): ExtractedTags {
       const dep: Dep = { type: m[1] as Dep["type"], id: m[2] };
       if (m[3] !== undefined) dep.reason = m[3];
       deps.unshift(dep);
+      title = title.slice(0, m.index);
+      stripping = true;
+      continue;
+    }
+    m = title.match(TAIL_REPORT);
+    if (m) {
+      reports.unshift({ kind: "report", url: m[1] });
       title = title.slice(0, m.index);
       stripping = true;
       continue;
@@ -276,6 +285,13 @@ export function extractTags(rest: string): ExtractedTags {
   title = title.trim();
   const kind = kindTag ?? leadingKind(title);
   const links = deriveLinks(title);
+  for (const report of reports) {
+    if (
+      !links.some((link) => link.kind === "report" && link.url === report.url)
+    ) {
+      links.push(report);
+    }
+  }
   const hold =
     holdReason !== undefined
       ? {
@@ -310,6 +326,17 @@ export function buildProse(task: Task): string {
   if (task.repo) parts.push(`(repo: ${task.repo})`);
   if (task.kind && !titleHasLeadingKind(task.title, task.kind)) {
     parts.push(`(kind: ${task.kind})`);
+  }
+  const proseLinks = deriveLinks(task.title);
+  for (const link of task.links) {
+    if (
+      link.kind === "report" &&
+      !proseLinks.some(
+        (prose) => prose.kind === "report" && prose.url === link.url,
+      )
+    ) {
+      parts.push(`(report: ${link.url})`);
+    }
   }
   if (task.priority !== undefined) parts.push(`(priority: ${task.priority})`);
   if (task.state !== "done" && task.created) {

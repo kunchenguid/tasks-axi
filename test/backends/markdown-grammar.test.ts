@@ -140,6 +140,30 @@ describe("markdown grammar", () => {
       expect(task.created).toBe("2026-07-01");
     });
 
+    it("round-trips report tags independently of prose paths and dependency reasons", () => {
+      const title = "Review data/prose/report.md before release";
+      const src = `## Queued\r\n- [ ] reports-q1 - ${title} (report: data/one/report.md) (report: data/two(parens)/report.md) (repo: app) blocked-by: blocker-q1 - waits for review\r\n  body note\r\n`;
+      const doc = parseBacklog(src);
+      const task = tasksOf(doc)[0];
+      expect(task.title).toBe(title);
+      expect(task.links).toEqual([
+        { kind: "report", url: "data/prose/report.md" },
+        { kind: "report", url: "data/one/report.md" },
+        { kind: "report", url: "data/two(parens)/report.md" },
+      ]);
+      expect(task.body).toBe("body note");
+      expect(task.deps).toEqual([
+        { type: "blocked-by", id: "blocker-q1", reason: "waits for review" },
+      ]);
+      expect(renderBacklog(doc)).toBe(src);
+      markAllDirty(doc);
+      const canonical = renderBacklog(doc);
+      const reparsed = parseBacklog(canonical);
+      expect(tasksOf(reparsed)[0]).toEqual(task);
+      markAllDirty(reparsed);
+      expect(renderBacklog(reparsed)).toBe(canonical);
+    });
+
     it("extracts structured hold tags from the trailing tag region", () => {
       const doc = parseBacklog(
         "# Backlog\n\n## Queued\n- [ ] held-q1 - wait for launch (repo: app) (hold: load clears) (hold-kind: load) (hold-until: 2999-01-01)\n",

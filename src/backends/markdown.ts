@@ -245,10 +245,35 @@ function normalizeDep(ownerId: string, dep: Dep): Dep {
   return checked;
 }
 
-function appendTitleLink(title: string, link: TaskLink): string {
-  const { url } = normalizeTypedLink(link);
-  if (deriveLinks(title).some((link) => link.url === url)) return title;
-  return normalizeTitle(`${title} ${url}`);
+function linksWithReports(title: string, previous: TaskLink[]): TaskLink[] {
+  const links = deriveLinks(title);
+  for (const link of previous) {
+    if (
+      link.kind === "report" &&
+      !links.some((other) => other.kind === "report" && other.url === link.url)
+    ) {
+      links.push(link);
+    }
+  }
+  return links;
+}
+
+function addTaskLink(task: Task, link: TaskLink): boolean {
+  const normalized = normalizeTypedLink(link);
+  if (
+    task.links.some(
+      (existing) =>
+        existing.kind === normalized.kind && existing.url === normalized.url,
+    )
+  )
+    return false;
+  if (normalized.kind === "report") {
+    task.links.push(normalized);
+  } else {
+    task.title = normalizeTitle(`${task.title} ${normalized.url}`);
+    task.links = linksWithReports(task.title, task.links);
+  }
+  return true;
 }
 
 function bodyHasLine(body: string | undefined, line: string): boolean {
@@ -527,13 +552,9 @@ export class MarkdownStore implements Store {
   private taskFromInput(input: TaskInput): Task {
     const id = validateId(input.id);
     const state: State = input.state ?? "queued";
-    let title = normalizeTitle(input.title);
+    const title = normalizeTitle(input.title);
     const kind = normalizeTagValue(input.kind, "kind");
     const repo = normalizeTagValue(input.repo, "repo");
-    // Links live in the prose; fold any provided links into the title text.
-    for (const link of input.links ?? []) {
-      title = appendTitleLink(title, link);
-    }
     const task: Task = {
       id,
       title,
@@ -541,6 +562,7 @@ export class MarkdownStore implements Store {
       links: deriveLinks(title),
       deps: input.deps ? input.deps.map((dep) => normalizeDep(id, dep)) : [],
     };
+    for (const link of input.links ?? []) addTaskLink(task, link);
     if (kind) task.kind = kind;
     if (repo) task.repo = repo;
     if (input.body) task.body = input.body;
@@ -678,6 +700,7 @@ export class MarkdownStore implements Store {
         const title = normalizeTitle(patch.title);
         if (task.title !== title) {
           task.title = title;
+          task.links = linksWithReports(title, task.links);
           markChanged("title");
         }
       }
@@ -749,15 +772,12 @@ export class MarkdownStore implements Store {
         }
       }
       for (const link of patch.addLinks ?? []) {
-        const title = appendTitleLink(task.title, link);
-        if (task.title !== title) {
-          task.title = title;
+        if (addTaskLink(task, link)) {
           markChanged("links");
         }
       }
       if (changed.length === 0) return { task, changed };
 
-      task.links = deriveLinks(task.title);
       task.updated = this.now();
       found.entry.dirty = true;
       let archiveRestorePoint: ArchiveRestorePoint | undefined;
@@ -986,12 +1006,11 @@ export class MarkdownStore implements Store {
         transitionLinks.push({ kind: "report", url: opts.report });
       }
       for (const link of transitionLinks) {
-        task.title = appendTitleLink(task.title, link);
+        addTaskLink(task, link);
       }
       if (opts.note) {
         task.body = task.body ? `${task.body}\n${opts.note}` : opts.note;
       }
-      task.links = deriveLinks(task.title);
 
       task.state = to;
       if (to === "done") {
