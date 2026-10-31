@@ -132,7 +132,12 @@ The reason must be single-line text without parentheses because parentheses are 
 Active holds are excluded from `ready`; a hold with `--until YYYY-MM-DD` becomes inactive on and after that date, so the task can surface as ready again if nothing else blocks it.
 Use `ready --include-held` to show dispatchable ready work and a separate `held` group with the hold reason, kind, and until date.
 Use `list --state held` or `list --fields held,hold_reason,hold_kind,hold_until` when you need to scan active hold state directly.
+Labels are a generic multi-value tag set for topics and scenarios: `add --label <name>` sets them (deduplicated, sorted), `update --label <name>` adds to the set, and `update --unlabel <name>` removes from it. All three flags are repeatable; an update rejects adding and removing the same name in one command.
+Label updates apply to the current set under the store lock, so concurrent additions and removals preserve each other's changes.
+Label names contain 1–64 characters: lowercase letters, digits, `-`, `_`, `.`, `/`, and `:` (so `topic:t3` is legal). `list --label <name>` / `ready --label <name>` are repeatable filters that match only tasks carrying every requested label.
+`show` includes a `labels` field in the detail record. Use `list --fields labels` to include labels in list rows; the default compact columns remain `id,state,kind,repo,title`. `ready` keeps its usual default output schema when filtering by labels.
 Pass `--json` to any mutation for a machine-readable result object (`{ "ok": true, "action": …, "task": { … } }` or operation-specific result fields) instead of TOON, so an agent can confirm a write deterministically without a follow-up read.
+JSON task records include a `labels` array, which is empty for unlabelled tasks.
 For `mv`, a single task returns `id`, while a multi-task move returns first-occurrence-ordered, deduplicated `ids`, plus `from` and `to`.
 
 Run `tasks-axi --help` for the command list, or `tasks-axi <command> --help` for per-command usage.
@@ -216,6 +221,7 @@ It gently formalizes the inline tags a backlog already uses as the canonical fie
 - `(since <date>)` - when a task started; `(merged <date>)` / `(reported <date>)` when it closed
 - `(kind: X)` - task kind, when not already implied by a leading `SHIP` / `SCOUT` / `DOCS-ONLY` / `PERSISTENT SECONDMATE` word
 - `(priority: 0-4)` - optional priority, also accepted through `add` / `update --priority`
+- `(labels: a, b)` - a sorted, deduplicated label set written by `add --label` / `update --label` / `update --unlabel`; an unlabelled task renders no token
 - `(hold: <reason>)`, `(hold-kind: captain|external|load|parked|future)`, `(hold-until: YYYY-MM-DD)` - structured dispatch holds written by `hold`
 - PR urls, `data/<id>/report.md` paths, and other `http(s)` urls - typed links
 

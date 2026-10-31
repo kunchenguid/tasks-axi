@@ -11,8 +11,9 @@ import {
   startCommand,
   unblockCommand,
   unholdCommand,
+  READY_HELP,
 } from "../../src/commands/state.js";
-import { listCommand } from "../../src/commands/crud.js";
+import { addCommand, listCommand } from "../../src/commands/crud.js";
 import { makeBacklog } from "../helpers.js";
 
 describe("state commands", () => {
@@ -730,6 +731,47 @@ describe("state commands", () => {
       } finally {
         b.cleanup();
       }
+    });
+
+    it("filters dispatchable work by repeatable --label with AND semantics", async () => {
+      const b = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      try {
+        await addCommand(["ready-a1", "one tag", "--label", "alpha"], b.ctx);
+        await addCommand(
+          ["ready-ab1", "two tags", "--label", "alpha", "--label", "beta"],
+          b.ctx,
+        );
+        const one = await readyCommand(["--label", "alpha"], b.ctx);
+        expect(one).toContain("ready-a1");
+        expect(one).toContain("ready-ab1");
+        const both = await readyCommand(
+          ["--label", "alpha", "--label", "beta"],
+          b.ctx,
+        );
+        expect(both).toContain("ready-ab1");
+        expect(both).not.toContain("ready-a1");
+        const none = await readyCommand(["--label", "gamma"], b.ctx);
+        expect(none).toContain("ready: 0 unblocked queued tasks");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("keeps held work out of a matching --label filter", async () => {
+      const b = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      try {
+        await addCommand(["ready-h1", "held work", "--label", "alpha"], b.ctx);
+        await holdCommand(["ready-h1", "--reason", "wait"], b.ctx);
+        const out = await readyCommand(["--label", "alpha"], b.ctx);
+        expect(out).toContain("ready: 0 unblocked queued tasks");
+        expect(out).not.toContain("ready-h1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("documents the --label flag in help", () => {
+      expect(READY_HELP).toContain("--label");
     });
   });
 

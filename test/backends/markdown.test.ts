@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { MarkdownStore } from "../../src/backends/markdown.js";
 import { readyTasks } from "../../src/derive.js";
 import { AxiError } from "../../src/errors.js";
+import type { TaskPatch } from "../../src/model.js";
 import {
   FIRSTMATE_FIXTURE,
   makeBacklog,
@@ -1537,6 +1538,204 @@ describe("MarkdownStore", () => {
         expect(read).not.toContain("**fix-login-k3**");
       } finally {
         b.cleanup();
+      }
+    });
+  });
+
+  describe("labels", () => {
+    it.each<{
+      name: string;
+      initial: string[];
+      first: TaskPatch;
+      second: TaskPatch;
+      expected: string[];
+    }>([
+      {
+        name: "additions",
+        initial: ["alpha"],
+        first: { addLabels: ["beta"] },
+        second: { addLabels: ["gamma"] },
+        expected: ["alpha", "beta", "gamma"],
+      },
+      {
+        name: "removals",
+        initial: ["alpha", "beta"],
+        first: { removeLabels: ["alpha"] },
+        second: { removeLabels: ["beta"] },
+        expected: [],
+      },
+      {
+        name: "mixed edits",
+        initial: ["alpha", "beta"],
+        first: { removeLabels: ["alpha"] },
+        second: { addLabels: ["gamma"] },
+        expected: ["beta", "gamma"],
+      },
+    ])(
+      "preserves concurrent $name against the locked label set",
+      async ({ initial, first, second, expected }) => {
+        const b = makeBacklog();
+        try {
+          await b.store.create({
+            id: "labels-lock",
+            title: "work",
+            labels: initial,
+          });
+          const other = new MarkdownStore({ path: b.path });
+          const results = await Promise.all([
+            b.store.update("labels-lock", first),
+            other.update("labels-lock", second),
+          ]);
+          expect(results.map((result) => result.changed)).toEqual([
+            ["labels"],
+            ["labels"],
+          ]);
+          expect((await b.store.get("labels-lock"))?.labels).toEqual(
+            expected.length > 0 ? expected : undefined,
+          );
+        } finally {
+          b.cleanup();
+        }
+      },
+    );
+
+    it("normalizes set operations, removes before adding, and skips unchanged writes", async () => {
+      const b = makeBacklog();
+      try {
+        await b.store.create({
+          id: "labels-ops",
+          title: "work",
+          labels: ["alpha"],
+        });
+        const before = b.read();
+        const unchanged = await b.store.update("labels-ops", {
+          removeLabels: [" alpha ", "absent"],
+          addLabels: ["alpha", " alpha ", ""],
+        });
+        expect(unchanged.changed).toEqual([]);
+        expect(unchanged.task.labels).toEqual(["alpha"]);
+        expect(b.read()).toBe(before);
+        const emptied = await b.store.update("labels-ops", {
+          removeLabels: [" alpha "],
+        });
+        expect(emptied.changed).toEqual(["labels"]);
+        expect(emptied.task).not.toHaveProperty("labels");
+        expect(await b.store.get("labels-ops")).not.toHaveProperty("labels");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it.each(["addLabels", "removeLabels"] as const)(
+      "rejects unsafe %s without changing persisted state",
+      async (field) => {
+        const b = makeBacklog();
+        try {
+          await b.store.create({
+            id: "labels-invalid",
+            title: "work",
+            labels: ["alpha"],
+          });
+          const before = b.read();
+          await expect(
+            b.store.update("labels-invalid", { [field]: ["a,b"] }),
+          ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+          expect(b.read()).toBe(before);
+        } finally {
+          b.cleanup();
+        }
+      },
+    );
+
+    it("renders created labels as one canonical token and reads them back", async () => {
+      const b = makeBacklog();
+      try {
+        const task = await b.store.create({
+          id: "labels-q1",
+          title: "tagged work",
+          labels: ["topic:t3", "alpha"],
+        });
+        expect(task.labels).toEqual(["alpha", "topic:t3"]);
+        expect(b.read()).toContain(
+          "- [ ] labels-q1 - tagged work (labels: alpha, topic:t3)",
+        );
+        const read = await b.store.get("labels-q1");
+        expect(read?.labels).toEqual(["alpha", "topic:t3"]);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("omits the labels token when created without labels", async () => {
+      const b = makeBacklog();
+      try {
+        await b.store.create({ id: "bare-q1", title: "plain work" });
+        expect(b.read()).toMatch(/- \[ \] bare-q1 - plain work \(since/);
+        expect(b.read()).not.toContain("(labels:");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects label values that would corrupt the canonical token", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          b.store.create({
+            id: "bad-labels-q1",
+            title: "work",
+            labels: ["a,b"],
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await expect(
+          b.store.create({
+            id: "bad-labels-q2",
+            title: "work",
+            labels: ["a(b)"],
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("carries labels through transitions, prune, and archive untouched", async () => {
+      const b = makeBacklog();
+      try {
+        await b.store.create({
+          id: "labels-q5",
+          title: "tagged work",
+          labels: ["alpha"],
+        });
+        const started = await b.store.transition("labels-q5", "in_flight");
+        expect(started.labels).toEqual(["alpha"]);
+        const done = await b.store.transition("labels-q5", "done");
+        expect(done.labels).toEqual(["alpha"]);
+        await b.store.prune({ state: "done", keep: 0, archive: true });
+        expect(b.archive()).toContain("(labels: alpha)");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("moves labels with the task and re-renders the token canonically", async () => {
+      const source = makeBacklog(
+        "# Backlog\n\n## Queued\n- [ ] mv-labels-q1 - tagged work (labels: topic:t3, alpha)\n\n## Done\n",
+      );
+      const target = makeBacklog(
+        "# Backlog\n\n## In flight\n\n## Queued\n\n## Done\n",
+      );
+      try {
+        const [moved] = await source.store.moveManyTo(
+          ["mv-labels-q1"],
+          target.store,
+        );
+        expect(moved.labels).toEqual(["alpha", "topic:t3"]);
+        expect(target.read()).toContain("(labels: alpha, topic:t3)");
+        expect(source.read()).not.toContain("mv-labels-q1");
+      } finally {
+        source.cleanup();
+        target.cleanup();
       }
     });
   });

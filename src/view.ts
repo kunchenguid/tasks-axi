@@ -45,6 +45,7 @@ export function toRow(task: Task, opts: RowOptions): Record<string, unknown> {
     kind: task.kind ?? "task",
     repo: task.public_followup ? "-" : (task.repo ?? "-"),
     priority: task.priority ?? "-",
+    labels: task.labels ?? [],
     created: task.created ?? "-",
     closed: task.closed ?? "-",
     delivery_state: task.public_followup?.delivery.state ?? "-",
@@ -86,6 +87,7 @@ export const LIST_EXTRA_FIELDS: Record<string, FieldDef> = {
   hold_reason: field("hold_reason"),
   hold_until: field("hold_until"),
   links: field("links"),
+  labels: field("labels"),
   priority: field("priority"),
 };
 
@@ -102,6 +104,7 @@ const DETAIL_SCHEMA: FieldDef[] = [
   field("kind"),
   field("repo"),
   field("priority"),
+  field("labels"),
   field("created"),
   field("closed"),
   field("deps"),

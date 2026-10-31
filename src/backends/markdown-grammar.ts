@@ -1,4 +1,5 @@
 import { AxiError } from "../errors.js";
+import { canonicalizeLabels } from "../labels.js";
 import type { Dep, Hold, HoldKind, State, Task, TaskLink } from "../model.js";
 import { HOLD_KINDS } from "../model.js";
 import { isPrUrl } from "../pr-url.js";
@@ -116,6 +117,7 @@ const TAIL_DEP = new RegExp(
 const TAIL_REPO = /\s*\((?:[^()]*\+\s*)?repo:\s*([^)]+)\)\s*$/;
 const TAIL_KIND = /\s*\(kind:\s*([^)]+)\)\s*$/;
 const TAIL_PRIORITY = /\s*\(priority:\s*([0-4])\)\s*$/;
+const TAIL_LABELS = /\s*\(labels:\s*([^)]+)\)\s*$/;
 const TAIL_SINCE = new RegExp(`\\s*\\(since\\s+(${DATE})\\)\\s*$`);
 const TAIL_CLOSED = new RegExp(
   `\\s*\\((?:merged|reported|done|closed)\\s+(${DATE})\\)\\s*$`,
@@ -180,6 +182,8 @@ export interface ExtractedTags {
   created?: string;
   closed?: string;
   priority?: number;
+  /** Canonical label set (sorted, deduplicated) from a trailing `(labels: …)`. */
+  labels?: string[];
   hold?: Hold;
   links: TaskLink[];
 }
@@ -197,6 +201,7 @@ export function extractTags(rest: string): ExtractedTags {
   let created: string | undefined;
   let closed: string | undefined;
   let priority: number | undefined;
+  let labels: string[] | undefined;
   let holdReason: string | undefined;
   let holdKind: HoldKind | undefined;
   let holdUntil: string | undefined;
@@ -232,6 +237,15 @@ export function extractTags(rest: string): ExtractedTags {
     m = title.match(TAIL_PRIORITY);
     if (m) {
       if (priority === undefined) priority = Number(m[1]);
+      title = title.slice(0, m.index);
+      stripping = true;
+      continue;
+    }
+    m = title.match(TAIL_LABELS);
+    if (m) {
+      // Comma-separated values; canonical set collapse (sort + dedupe) makes
+      // re-render idempotent. Hand-edited values stay lenient, like dep ids.
+      if (labels === undefined) labels = canonicalizeLabels(m[1].split(","));
       title = title.slice(0, m.index);
       stripping = true;
       continue;
@@ -285,7 +299,18 @@ export function extractTags(rest: string): ExtractedTags {
         }
       : undefined;
 
-  return { title, kind, repo, deps, created, closed, priority, hold, links };
+  return {
+    title,
+    kind,
+    repo,
+    deps,
+    created,
+    closed,
+    priority,
+    ...(labels !== undefined ? { labels } : {}),
+    hold,
+    links,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -312,6 +337,11 @@ export function buildProse(task: Task): string {
     parts.push(`(kind: ${task.kind})`);
   }
   if (task.priority !== undefined) parts.push(`(priority: ${task.priority})`);
+  if (task.labels && task.labels.length > 0) {
+    // Re-collapse here so render is canonical even for a hand-built Task whose
+    // labels array was never run through parse or a store normalization.
+    parts.push(`(labels: ${canonicalizeLabels(task.labels).join(", ")})`);
+  }
   if (task.state !== "done" && task.created) {
     parts.push(`(since ${task.created})`);
   }
@@ -479,6 +509,7 @@ function buildTask(
   if (tags.created) task.created = tags.created;
   if (tags.closed) task.closed = tags.closed;
   if (tags.priority !== undefined) task.priority = tags.priority;
+  if (tags.labels) task.labels = tags.labels;
   if (tags.hold) task.hold = tags.hold;
   return task;
 }

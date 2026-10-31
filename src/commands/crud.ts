@@ -24,6 +24,7 @@ import {
   validateDependencyId,
   validateId,
 } from "../id.js";
+import { matchesLabels, validateLabel } from "../labels.js";
 import {
   STATES,
   type Dep,
@@ -49,6 +50,7 @@ flags:
   --kind <ship|scout|docs|...>, --repo <name>, --body <text> or --body-file <path>
   --start (place in In flight) | --queue (place in Queued, default)
   --blocked-by <id> (repeatable, must exist), --pr <url>, --report <path>, --priority <0-4>
+  --label <name> (repeatable; lowercase letters, digits, - _ . / :)
   --mint [--prefix <p>]   mint a slug-xx id from the title instead of passing one
   --json   print the resulting task as a JSON object
 examples:
@@ -59,12 +61,14 @@ examples:
 export const LIST_HELP = `usage: tasks-axi list [flags]
 flags:
   --state <queued|in_flight|done|held>, --repo <name>, --kind <name>, --blocked
+  --label <name> (repeatable; a task matches only when it carries every one)
   --limit <n>, --fields <a,b,c>  (extra: ${Object.keys(LIST_EXTRA_FIELDS)
     .sort()
     .join(", ")})
 examples:
   tasks-axi list --state queued
   tasks-axi list --repo no-mistakes --fields blocked_by,created
+  tasks-axi list --label topic:t3 --label alpha
   tasks-axi list --blocked`;
 
 export const SHOW_HELP = `usage: tasks-axi show <id> [--full]
@@ -79,6 +83,7 @@ flags:
   --title <text>, --body <text> or --body-file <path>
   --archive-body   with --body/--body-file, archive the previous body
   --repo <name>, --kind <name>, --priority <0-4>, --pr <url>, --report <path>
+  --label <name> (repeatable, adds to the set), --unlabel <name> (repeatable, removes)
   --json   print the resulting task as a JSON object
 examples:
   tasks-axi show nm-release-validation --full
@@ -244,6 +249,9 @@ export async function addCommand(
   const mint = takeBoolFlag(args, "--mint");
   const rawPrefix = takeFlag(args, "--prefix");
   const titleFlag = takeFlag(args, "--title");
+  const labels = takeAllFlags(args, "--label").map((value) =>
+    validateLabel("--label", value),
+  );
 
   if (start && queue) {
     throw new AxiError(
@@ -335,6 +343,7 @@ export async function addCommand(
   if (repo) input.repo = repo;
   if (body !== undefined) input.body = body;
   if (priority !== undefined) input.priority = priority;
+  if (labels.length > 0) input.labels = labels;
 
   const task = await store.create(input);
   const all = (await store.list({})).items;
@@ -352,11 +361,18 @@ export async function addCommand(
   });
 }
 
-/** The `(kind, repo X)` parenthetical for an add confirmation, omitted when bare. */
-function addAttrs(task: { kind?: string; repo?: string }): string {
+/** The `(kind, repo X, labels a, b)` parenthetical for an add confirmation, omitted when bare. */
+function addAttrs(task: {
+  kind?: string;
+  repo?: string;
+  labels?: string[];
+}): string {
   const parts: string[] = [];
   if (task.kind) parts.push(task.kind);
   if (task.repo) parts.push(`repo ${task.repo}`);
+  if (task.labels && task.labels.length > 0) {
+    parts.push(`labels ${task.labels.join(", ")}`);
+  }
   return parts.length > 0 ? ` (${parts.join(", ")})` : "";
 }
 
@@ -380,6 +396,9 @@ export async function listCommand(
     "--kind",
     takeFlag(args, "--kind"),
   );
+  const labelFilters = takeAllFlags(args, "--label").map((value) =>
+    validateLabel("--label", value),
+  );
   const onlyBlocked = takeBoolFlag(args, "--blocked");
   const limit = parseOptionalNonNegativeIntegerFlag(
     "--limit",
@@ -402,6 +421,9 @@ export async function listCommand(
   }
   if (repo) matched = matched.filter((t) => t.repo === repo);
   if (kind) matched = matched.filter((t) => (t.kind ?? "task") === kind);
+  if (labelFilters.length > 0) {
+    matched = matched.filter((t) => matchesLabels(t, labelFilters));
+  }
   if (onlyBlocked) matched = matched.filter((t) => blocked.has(t.id));
 
   const total = matched.length;
@@ -508,6 +530,22 @@ export async function updateCommand(
   const priority = parsePriority(takeFlag(args, "--priority"));
   const pr = takeFlag(args, "--pr");
   const report = takeFlag(args, "--report");
+  const addLabels = takeAllFlags(args, "--label").map((value) =>
+    validateLabel("--label", value),
+  );
+  const removeLabels = takeAllFlags(args, "--unlabel").map((value) =>
+    validateLabel("--unlabel", value),
+  );
+  const labelOverlap = addLabels.filter((label) =>
+    removeLabels.includes(label),
+  );
+  if (labelOverlap.length > 0) {
+    throw new AxiError(
+      `Use --label or --unlabel for ${labelOverlap.join(", ")}, not both`,
+      "VALIDATION_ERROR",
+    );
+  }
+
   const positionals = requirePositionals(
     args,
     1,
@@ -547,9 +585,12 @@ export async function updateCommand(
   const addLinks = parseLinks(pr, report);
   if (addLinks.length > 0) patch.addLinks = addLinks;
 
+  if (addLabels.length > 0) patch.addLabels = addLabels;
+  if (removeLabels.length > 0) patch.removeLabels = removeLabels;
+
   if (Object.keys(patch).length === 0) {
     throw new AxiError("Nothing to update", "VALIDATION_ERROR", [
-      "Pass a field, e.g. --title, --body, --body-file, --repo, or --kind",
+      "Pass a field, e.g. --title, --body, --body-file, --repo, --kind, or --label",
     ]);
   }
 
@@ -591,6 +632,7 @@ function orderUpdateChanges(changed: TaskUpdateChange[]): TaskUpdateChange[] {
     "repo",
     "kind",
     "priority",
+    "labels",
     "links",
     "hold",
     "meta",

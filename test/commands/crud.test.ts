@@ -2,6 +2,7 @@ import { decode } from "@toon-format/toon";
 import { describe, expect, it } from "vitest";
 import {
   ADD_HELP,
+  LIST_HELP,
   addCommand,
   listCommand,
   rmCommand,
@@ -391,6 +392,84 @@ describe("crud commands", () => {
       }
     });
 
+    it("persists repeatable labels as one canonical sorted token", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await addCommand(
+          [
+            "topic-q1",
+            "tagged task",
+            "--label",
+            "topic:t3",
+            "--label",
+            "alpha",
+            "--label",
+            "topic:t3",
+          ],
+          b.ctx,
+        );
+        expect(out).toContain("ok: added topic-q1 (labels alpha, topic:t3)");
+        expect(b.read()).toContain(
+          "- [ ] topic-q1 - tagged task (labels: alpha, topic:t3)",
+        );
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects an invalid label name before creating", async () => {
+      const b = makeBacklog();
+      try {
+        for (const bad of ["Topic", "two words", "a(b)", "a,b"]) {
+          await expect(
+            addCommand(["bad-label-q1", "work", "--label", bad], b.ctx),
+          ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        }
+        await expect(
+          addCommand(["bad-label-q2", "work", "--label", ""], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).not.toContain("bad-label");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects a label longer than the bounded length", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          addCommand(
+            ["long-label-q1", "work", "--label", "a".repeat(65)],
+            b.ctx,
+          ),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await addCommand(
+          ["edge-label-q1", "work", "--label", "a".repeat(64)],
+          b.ctx,
+        );
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("carries labels in the --json task payload", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await addCommand(
+          ["json-labels-q1", "tagged", "--label", "alpha", "--json"],
+          b.ctx,
+        );
+        const parsed = JSON.parse(out) as {
+          ok: boolean;
+          task: { labels: string[] };
+        };
+        expect(parsed.ok).toBe(true);
+        expect(parsed.task.labels).toEqual(["alpha"]);
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("exposes usage help text", () => {
       expect(ADD_HELP).toContain("usage: tasks-axi add");
     });
@@ -579,6 +658,69 @@ describe("crud commands", () => {
         b.cleanup();
       }
     });
+
+    it("filters by repeatable --label with AND semantics", async () => {
+      const b = makeBacklog();
+      try {
+        await addCommand(["list-a1", "one tag", "--label", "alpha"], b.ctx);
+        await addCommand(
+          ["list-ab1", "two tags", "--label", "alpha", "--label", "beta"],
+          b.ctx,
+        );
+        const one = await listCommand(["--label", "alpha"], b.ctx);
+        expect(one).toContain("list-a1");
+        expect(one).toContain("list-ab1");
+        const both = await listCommand(
+          ["--label", "alpha", "--label", "beta"],
+          b.ctx,
+        );
+        expect(both).toContain("list-ab1");
+        expect(both).not.toContain("list-a1");
+        const none = await listCommand(["--label", "gamma"], b.ctx);
+        expect(none).toContain("count: 0");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("combines a --label filter with --state", async () => {
+      const b = makeBacklog();
+      try {
+        await addCommand(["list-s1", "queued", "--label", "alpha"], b.ctx);
+        await addCommand(
+          ["list-s2", "started", "--label", "alpha", "--start"],
+          b.ctx,
+        );
+        const out = await listCommand(
+          ["--state", "in_flight", "--label", "alpha"],
+          b.ctx,
+        );
+        expect(out).toContain("list-s2");
+        expect(out).not.toContain("list-s1");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("exposes a labels column via --fields", async () => {
+      const b = makeBacklog();
+      try {
+        await addCommand(
+          ["list-f1", "tagged", "--label", "alpha", "--label", "topic:t3"],
+          b.ctx,
+        );
+        const out = await listCommand(["--fields", "labels"], b.ctx);
+        expect(() => decode(out)).not.toThrow();
+        expect(out).toContain("labels[2]");
+        expect(out).toContain('"topic:t3"');
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("documents the --label flag in help", () => {
+      expect(LIST_HELP).toContain("--label");
+    });
   });
 
   describe("show", () => {
@@ -590,6 +732,21 @@ describe("crud commands", () => {
         expect(out).toContain("use --full");
         const full = await showCommand(["owns-widget-h7", "--full"], b.ctx);
         expect(full).not.toContain("use --full");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("prints labels in the detail record", async () => {
+      const b = makeBacklog();
+      try {
+        await addCommand(
+          ["show-l1", "tagged", "--label", "alpha", "--label", "topic:t3"],
+          b.ctx,
+        );
+        const out = await showCommand(["show-l1"], b.ctx);
+        expect(() => decode(out)).not.toThrow();
+        expect(out).toContain('labels[2]: alpha,"topic:t3"');
       } finally {
         b.cleanup();
       }
@@ -725,6 +882,135 @@ describe("crud commands", () => {
           b.ctx,
         );
         expect(out).toContain("ok: updated cert-cleanup (title, repo)");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("adds and removes labels with --label / --unlabel", async () => {
+      const b = makeBacklog();
+      try {
+        await addCommand(
+          ["label-update-q1", "tagged", "--label", "alpha"],
+          b.ctx,
+        );
+        const out = await updateCommand(
+          ["label-update-q1", "--label", "topic:t3", "--unlabel", "alpha"],
+          b.ctx,
+        );
+        expect(out).toContain("ok: updated label-update-q1 (labels)");
+        expect(b.read()).toContain("(labels: topic:t3)");
+        expect(b.read()).not.toContain("alpha");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("unions repeated --label values into the existing set", async () => {
+      const b = makeBacklog();
+      try {
+        await addCommand(
+          ["label-union-q1", "tagged", "--label", "alpha"],
+          b.ctx,
+        );
+        await updateCommand(
+          ["label-union-q1", "--label", "topic:t3", "--label", "alpha"],
+          b.ctx,
+        );
+        expect(b.read()).toContain("(labels: alpha, topic:t3)");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it.each([
+      {
+        name: "additions",
+        initial: ["alpha"],
+        first: ["--label", "beta"],
+        second: ["--label", "gamma"],
+        expected: ["alpha", "beta", "gamma"],
+      },
+      {
+        name: "removals",
+        initial: ["alpha", "beta"],
+        first: ["--unlabel", "alpha"],
+        second: ["--unlabel", "beta"],
+        expected: [],
+      },
+      {
+        name: "mixed edits",
+        initial: ["alpha", "beta"],
+        first: ["--unlabel", "alpha"],
+        second: ["--label", "gamma"],
+        expected: ["beta", "gamma"],
+      },
+    ])(
+      "preserves concurrent label $name through update",
+      async ({ initial, first, second, expected }) => {
+        const b = makeBacklog();
+        try {
+          await b.store.create({
+            id: "labels-race",
+            title: "work",
+            labels: initial,
+          });
+          const outputs = await Promise.all([
+            updateCommand(["labels-race", ...first, "--json"], b.ctx),
+            updateCommand(["labels-race", ...second, "--json"], b.ctx),
+          ]);
+          for (const output of outputs) {
+            expect(JSON.parse(output)).toMatchObject({
+              ok: true,
+              changed: ["labels"],
+            });
+          }
+          expect((await b.store.get("labels-race"))?.labels ?? []).toEqual(
+            expected,
+          );
+        } finally {
+          b.cleanup();
+        }
+      },
+    );
+
+    it("rejects --label and --unlabel on the same name", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          updateCommand(
+            ["cert-cleanup", "--label", "alpha", "--unlabel", "alpha"],
+            b.ctx,
+          ),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("is idempotent when --unlabel names an absent label", async () => {
+      const b = makeBacklog();
+      try {
+        const out = await updateCommand(
+          ["cert-cleanup", "--unlabel", "absent"],
+          b.ctx,
+        );
+        expect(out).toContain("already: true");
+        expect(b.read()).not.toContain("(labels:");
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("rejects an invalid label name before updating", async () => {
+      const b = makeBacklog();
+      try {
+        await expect(
+          updateCommand(["cert-cleanup", "--label", "Nope"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await expect(
+          updateCommand(["cert-cleanup", "--unlabel", "a,b"], b.ctx),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
       } finally {
         b.cleanup();
       }

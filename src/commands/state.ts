@@ -8,6 +8,7 @@ import {
   requireNonEmptySingleLineFlagValue,
   requirePositionals,
   requireId,
+  takeAllFlags,
   takeBoolFlag,
   takeFlag,
 } from "../args.js";
@@ -22,6 +23,7 @@ import {
 import { AxiError, notFound } from "../errors.js";
 import { formatCountLine } from "../format.js";
 import { validateDependencyId } from "../id.js";
+import { matchesLabels, validateLabel } from "../labels.js";
 import type {
   Dep,
   Hold,
@@ -94,8 +96,9 @@ Clear a structured dispatch hold (idempotent).
 flags:
   --json   print the resulting task as a JSON object`;
 
-export const READY_HELP = `usage: tasks-axi ready [--repo <name>] [--include-held]
+export const READY_HELP = `usage: tasks-axi ready [--repo <name>] [--label <name>] [--include-held]
 List unblocked, unheld queued work dispatchable right now.
+--label is repeatable; a task matches only when it carries every requested label.
 Public-followup obligations are never dispatchable and appear only in the separate
 ready_public_followups group; use tasks-axi public-followup ready for their full payloads.
 Held work is excluded by default; --include-held shows it in a separate held group.`;
@@ -586,6 +589,9 @@ export async function readyCommand(
     takeFlag(args, "--repo"),
   );
   const includeHeld = takeBoolFlag(args, "--include-held");
+  const labelFilters = takeAllFlags(args, "--label").map((value) =>
+    validateLabel("--label", value),
+  );
   requirePositionals(args, 0, 0, READY_HELP.split("\n")[0]);
 
   const all = (await store.list({})).items;
@@ -601,6 +607,13 @@ export async function readyCommand(
   if (repo) items = items.filter((t) => t.repo === repo);
   if (repo) held = held.filter((t) => t.repo === repo);
   if (repo) publicFollowups = publicFollowups.filter((t) => t.repo === repo);
+  if (labelFilters.length > 0) {
+    items = items.filter((t) => matchesLabels(t, labelFilters));
+    held = held.filter((t) => matchesLabels(t, labelFilters));
+    publicFollowups = publicFollowups.filter((t) =>
+      matchesLabels(t, labelFilters),
+    );
+  }
   const isEmpty = items.length === 0;
 
   const blocks: string[] = [formatCountLine({ count: items.length })];
@@ -667,6 +680,7 @@ function taskToInput(task: Task): TaskInput {
   if (task.body) input.body = task.body;
   if (task.hold) input.hold = { ...task.hold };
   if (task.priority !== undefined) input.priority = task.priority;
+  if (task.labels) input.labels = [...task.labels];
   input.created = task.created ?? null;
   if (task.closed) input.closed = task.closed;
   if (task.public_followup) {

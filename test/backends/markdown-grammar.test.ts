@@ -154,6 +154,31 @@ describe("markdown grammar", () => {
       });
     });
 
+    it("extracts a trailing labels tag, sorting and deduping values", () => {
+      const doc = parseBacklog(
+        "# Backlog\n\n## Queued\n- [ ] topic-q1 - tagged work (labels: topic:t3, alpha, topic:t3)\n",
+      );
+      const task = tasksOf(doc)[0];
+      expect(task.title).toBe("tagged work");
+      expect(task.labels).toEqual(["alpha", "topic:t3"]);
+    });
+
+    it("leaves a non-trailing labels-like parenthetical in the prose", () => {
+      const doc = parseBacklog(
+        "# Backlog\n\n## Queued\n- [ ] prose-q1 - compare (labels: draft) against shipped (priority: 1)\n",
+      );
+      const task = tasksOf(doc)[0];
+      expect(task.title).toBe("compare (labels: draft) against shipped");
+      expect(task.labels).toBeUndefined();
+      expect(task.priority).toBe(1);
+    });
+
+    it("keeps an unmutated labels line byte-exact across a round-trip", () => {
+      const src =
+        "# Backlog\n\n## Queued\n- [ ] topic-q1 - tagged work (labels: topic:t3, alpha)\n";
+      expect(renderBacklog(parseBacklog(src))).toBe(src);
+    });
+
     it("reads indented continuation lines as the body", () => {
       const task = tasksOf(parseBacklog(FIXTURE)).find(
         (t) => t.id === "multi-line-w8",
@@ -482,6 +507,42 @@ describe("markdown grammar", () => {
       ]);
     });
 
+    it("renders labels as one canonical sorted tag after priority", () => {
+      const task: Task = {
+        id: "topic-q1",
+        title: "tagged work",
+        state: "queued",
+        priority: 2,
+        labels: ["topic:t3", "alpha"],
+        links: [],
+        deps: [],
+      };
+      expect(buildProse(task)).toBe(
+        "tagged work (priority: 2) (labels: alpha, topic:t3)",
+      );
+    });
+
+    it("omits the labels token when the task has no labels", () => {
+      const task: Task = {
+        id: "bare-q1",
+        title: "plain work",
+        state: "queued",
+        links: [],
+        deps: [],
+      };
+      expect(buildProse(task)).toBe("plain work");
+    });
+
+    it("normalizes a hand-written labels token on a dirty re-render", () => {
+      const src =
+        "# Backlog\n\n## Queued\n- [ ] topic-q1 - tagged work (labels: topic:t3, alpha, topic:t3)\n";
+      const normalized =
+        "# Backlog\n\n## Queued\n- [ ] topic-q1 - tagged work (labels: alpha, topic:t3)\n";
+      const doc = parseBacklog(src);
+      markAllDirty(doc);
+      expect(renderBacklog(doc)).toBe(normalized);
+    });
+
     it("normalization is idempotent: normalize(normalize(x)) === normalize(x)", () => {
       const doc1 = parseBacklog(FIXTURE);
       markAllDirty(doc1);
@@ -489,6 +550,30 @@ describe("markdown grammar", () => {
       const doc2 = parseBacklog(once);
       markAllDirty(doc2);
       expect(renderBacklog(doc2)).toBe(once);
+    });
+
+    it("a reason-bearing dep edge never swallows a labels tag across re-parse", () => {
+      const src = [
+        "# Backlog",
+        "",
+        "## Queued",
+        "- [ ] combo-q1 - combined tags (repo: acme) (priority: 1) (labels: alpha, topic:t3) (since 2026-01-02) blocked-by: combo-q0 - waits on the prerequisite",
+        "",
+        "## Done",
+        "",
+      ].join("\n");
+      const doc = parseBacklog(src);
+      const task = tasksOf(doc).find((t) => t.id === "combo-q1");
+      expect(task?.labels).toEqual(["alpha", "topic:t3"]);
+      markAllDirty(doc);
+      const once = renderBacklog(doc);
+      expect(once).toContain(
+        "(labels: alpha, topic:t3) (since 2026-01-02) blocked-by: combo-q0 - waits on the prerequisite",
+      );
+      const twiceDoc = parseBacklog(once);
+      markAllDirty(twiceDoc);
+      const again = renderBacklog(twiceDoc);
+      expect(again).toBe(once);
     });
   });
 
