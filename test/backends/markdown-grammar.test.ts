@@ -341,7 +341,7 @@ describe("markdown grammar", () => {
 
     it("keeps non-canonical PR-ish URLs as doc links, never pr", () => {
       for (const url of [
-        "https://forgejo.samesies.gay/eve/orchalycious/pull/39",
+        "https://forgejo.samesies.gay/eve/orchalycious/pulls/39/",
         "https://github.com/o/r/pulls/42",
         "https://forgejo.samesies.gay/o/r/pulls/39?tab=files",
       ]) {

@@ -154,7 +154,7 @@ describe("state commands", () => {
       const b = makeBacklog();
       try {
         for (const url of [
-          "https://forgejo.samesies.gay/eve/orchalycious/pull/39",
+          "https://forgejo.samesies.gay/eve/orchalycious/pulls/39/",
           "https://github.com/o/r/pulls/9",
           "https://github.com/o/r/pull/9?w=1",
           " https://github.com/o/r/pull/9 ",

@@ -6,6 +6,11 @@ describe("isPrUrl", () => {
   it.each([
     "https://github.com/o/r/pull/42",
     "https://github.com/some-owner/some.repo/pull/1",
+    // GitHub Enterprise: ghe.com and GitHub Enterprise Server hosts
+    "https://example.ghe.com/ExampleOrg/core/pull/42",
+    "https://ghe.example.com/ExampleOrg/core/pull/7",
+    "https://github.internal.corp.example/team/repo/pull/1234",
+    "https://forgejo.samesies.gay/eve/orchalycious/pull/39",
     "https://forgejo.samesies.gay/eve/orchalycious/pulls/39",
     "https://codeberg.org/forgejo/forgejo/pulls/1234",
   ])("accepts canonical PR URL %s", (url) => {
@@ -13,9 +18,8 @@ describe("isPrUrl", () => {
   });
 
   it.each([
-    // singular/plural route confusion
+    // singular/plural route confusion on github.com
     "https://github.com/o/r/pulls/42",
-    "https://forgejo.samesies.gay/eve/orchalycious/pull/39",
     // issue URLs
     "https://github.com/o/r/issues/42",
     "https://forgejo.samesies.gay/o/r/issues/42",
@@ -23,12 +27,17 @@ describe("isPrUrl", () => {
     "https://github.com/o/r/pull/0",
     "https://github.com/o/r/pull/042",
     "https://github.com/o/r/pull/42abc",
+    "https://example.ghe.com/o/r/pull/042",
+    "https://ghe.example.com/o/r/pull/0",
     "https://forgejo.samesies.gay/o/r/pulls/0",
     // scheme / decoration
     "http://github.com/o/r/pull/42",
     "https://github.com/o/r/pull/42/",
     "https://github.com/o/r/pull/42?w=1",
     "https://github.com/o/r/pull/42#top",
+    "https://example.ghe.com/o/r/pull/42/",
+    "https://example.ghe.com/o/r/pull/42?w=1",
+    "https://Example.GHE.com/o/r/pull/42",
     " https://github.com/o/r/pull/42",
     "https://github.com/o/r/pull/42\n",
     "https://github.com/o/r/pull/4\u00002",

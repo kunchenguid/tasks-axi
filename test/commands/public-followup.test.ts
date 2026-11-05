@@ -383,7 +383,7 @@ describe("public-followup commands", () => {
     }
   });
 
-  it("rejects a singular-route Forgejo PR URL before accepting work", async () => {
+  it("rejects a non-canonical PR URL before accepting work", async () => {
     const b = makeBacklog(EMPTY);
     try {
       await add(b);
@@ -393,7 +393,7 @@ describe("public-followup commands", () => {
           b,
           event("evt-singular-url", "rel-code", "work-code-q1", 1, {
             deliverables: {
-              pr_url: "https://forgejo.samesies.gay/eve/orchalycious/pull/39",
+              pr_url: "https://forgejo.samesies.gay/eve/orchalycious/pulls/39/",
             },
           }),
         ),

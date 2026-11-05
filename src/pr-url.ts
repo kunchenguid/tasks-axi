@@ -4,11 +4,13 @@
  * backend normalization), and public-followup `pr_url` deliverables.
  *
  * Exactly two byte-for-byte shapes are PR URLs:
- *   - GitHub:  https://github.com/<owner>/<repo>/pull/<n>
- *   - Forgejo: https://<lowercase-dns-host>/<owner>/<repo>/pulls/<n>
+ *   - GitHub (github.com and any GitHub Enterprise host):
+ *     https://<lowercase-dns-host>/<owner>/<repo>/pull/<n>
+ *   - Forgejo (any host other than github.com):
+ *     https://<lowercase-dns-host>/<owner>/<repo>/pulls/<n>
  * with <n> a positive number without leading zeros. Anything else - issue URLs,
- * singular/plural route confusion, trailing slash, query/fragment, whitespace,
- * userinfo, ports, encoded separators - is not a PR URL.
+ * `/pulls/` on github.com, trailing slash, query/fragment, whitespace, userinfo,
+ * ports, encoded separators - is not a PR URL.
  */
 
 const HOST_LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
@@ -18,9 +20,12 @@ const PR_URL_RE = new RegExp(
 );
 
 export const PR_URL_EXPECTED =
-  "a canonical pull request URL: https://github.com/<owner>/<repo>/pull/<n> (GitHub) or https://<host>/<owner>/<repo>/pulls/<n> (Forgejo)";
+  "a canonical pull request URL: https://<host>/<owner>/<repo>/pull/<n> (GitHub, including GitHub Enterprise hosts) or https://<host>/<owner>/<repo>/pulls/<n> (Forgejo)";
 
-/** True when url is byte-for-byte a canonical GitHub or Forgejo PR URL. */
+/**
+ * True when url is byte-for-byte a canonical GitHub (incl. GitHub Enterprise)
+ * or Forgejo PR URL.
+ */
 export function isPrUrl(url: string): boolean {
   const m = PR_URL_RE.exec(url);
   if (m === null) return false;
@@ -28,5 +33,8 @@ export function isPrUrl(url: string): boolean {
   if (owner === "." || owner === ".." || repo === "." || repo === "..") {
     return false;
   }
-  return route === "pull" ? host === "github.com" : host !== "github.com";
+  // `/pull/<n>` is GitHub's shape on github.com and on GitHub Enterprise hosts
+  // (ghe.com, GHES); `/pulls/<n>` stays Forgejo-only, so github.com keeps
+  // rejecting it.
+  return route === "pull" || host !== "github.com";
 }

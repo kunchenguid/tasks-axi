@@ -120,6 +120,8 @@ tasks-axi mv hibit-cert-cleanup --to ../homemux/data/backlog.md
 tasks-axi mv blocker-b1 dependent-d2 --to ../homemux/data/backlog.md
 ```
 
+PR links support GitHub, including GitHub Enterprise (`ghe.com` and GitHub Enterprise Server), and Forgejo; the same validation applies to `--pr`, prose link derivation, and public-followup `pr_url` deliverables. See [`src/pr-url.ts`](src/pr-url.ts) for the exact accepted URL shapes.
+
 Output is [TOON](https://toonformat.dev)-encoded and token-efficient.
 The long task body is truncated by default — the whole point is that `list` stays cheap; use `--full` only when you need the complete notes.
 `update --body` and `update --body-file` replace the body wholesale, so agents should inspect the current body first and write back the curated current state rather than appending a journal entry.
