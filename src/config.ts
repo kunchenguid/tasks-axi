@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { readFileSafe } from "./backends/lock.js";
 import { AxiError } from "./errors.js";
 
@@ -28,10 +28,20 @@ export interface ResolvedConfig {
   doneKeep: number;
   /** Beads backend settings from the `[beads]` table. */
   beads?: {
-    /** Workspace directory holding `.beads/` (resolved to an absolute path). */
+    /**
+     * Workspace directory holding `.beads/` (resolved to an absolute path).
+     * Set by `dir` or its alias `path` (which may name the `.beads` directory
+     * itself). Unset: bd runs from the current directory and finds its own
+     * workspace.
+     */
     dir?: string;
-    /** bd binary to execute (default "bd"). */
+    /**
+     * Executable to run (default "bd"). Set by `bin` or its alias `binary`;
+     * any command that accepts bd's arguments works, including a wrapper.
+     */
     bin?: string;
+    /** Issue-id prefix of the workspace; when set, other ids are rejected. */
+    prefix?: string;
   };
 }
 
@@ -52,7 +62,10 @@ interface TomlConfig {
   };
   beads?: {
     dir?: string;
+    path?: string;
     bin?: string;
+    binary?: string;
+    prefix?: string;
   };
 }
 
@@ -63,7 +76,8 @@ type ConfigTable = "root" | "markdown" | "beads" | "unsupported";
 /**
  * Minimal TOML reader for the tiny config surface we need: a top-level
  * `backend` key, a `[markdown]` table with `path` / `archive` / `done_keep`,
- * and a `[beads]` table with `dir` / `bin`.
+ * and a `[beads]` table with `dir` (alias `path`) / `bin` (alias `binary`) /
+ * `prefix`.
  * `archive` points at the file that receives pruned tasks.
  * Intentionally not a general TOML parser.
  */
@@ -103,8 +117,15 @@ export function parseConfigToml(src: string): TomlConfig {
     }
     if (table === "beads") {
       config.beads ??= {};
-      if (key === "dir") config.beads.dir = requireTomlString(value, source);
-      if (key === "bin") config.beads.bin = requireTomlString(value, source);
+      if (
+        key === "dir" ||
+        key === "path" ||
+        key === "bin" ||
+        key === "binary" ||
+        key === "prefix"
+      ) {
+        config.beads[key] = requireTomlString(value, source);
+      }
       continue;
     }
     config.markdown ??= {};
@@ -151,7 +172,14 @@ function configKeySource(table: ConfigTable, key: string): string | undefined {
   ) {
     return `markdown.${key}`;
   }
-  if (table === "beads" && (key === "dir" || key === "bin")) {
+  if (
+    table === "beads" &&
+    (key === "dir" ||
+      key === "path" ||
+      key === "bin" ||
+      key === "binary" ||
+      key === "prefix")
+  ) {
     return `beads.${key}`;
   }
   return undefined;
@@ -266,17 +294,73 @@ export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
   if (archive) {
     config.archivePath = isAbsolute(archive) ? archive : resolve(cwd, archive);
   }
-  const beadsDir = projectToml.beads?.dir ?? homeToml.beads?.dir;
-  const beadsBin = projectToml.beads?.bin ?? homeToml.beads?.bin;
-  if (beadsDir !== undefined || beadsBin !== undefined) {
-    config.beads = {};
-    if (beadsDir !== undefined) {
-      const dir = validatePathValue(beadsDir, "beads.dir");
-      if (dir !== undefined) {
-        config.beads.dir = isAbsolute(dir) ? dir : resolve(cwd, dir);
+  const beads = resolveBeadsConfig(projectToml, homeToml, cwd, home);
+  if (beads) config.beads = beads;
+  return config;
+}
+
+/** Expand a leading `~/` against the home directory. */
+function expandHome(value: string, home: string): string {
+  return value === "~"
+    ? home
+    : value.startsWith("~/")
+      ? join(home, value.slice(2))
+      : value;
+}
+
+/**
+ * Merge the `[beads]` tables. Each file may spell the workspace as `dir` or
+ * `path` and the executable as `bin` or `binary` (the long and short forms are
+ * aliases; `dir`/`bin` win inside one file). The project file beats the home
+ * file key by key. A `path` that names the `.beads` directory itself resolves
+ * to its parent, the directory bd runs from.
+ */
+function resolveBeadsConfig(
+  projectToml: TomlConfig,
+  homeToml: TomlConfig,
+  cwd: string,
+  home: string,
+): ResolvedConfig["beads"] | undefined {
+  const pick = (
+    key: "dir" | "bin" | "prefix",
+    alias: "path" | "binary" | undefined,
+  ): { value: string; source: string } | undefined => {
+    for (const toml of [projectToml, homeToml]) {
+      if (toml.beads?.[key] !== undefined) {
+        return { value: toml.beads[key], source: `beads.${key}` };
+      }
+      if (alias && toml.beads?.[alias] !== undefined) {
+        return { value: toml.beads[alias], source: `beads.${alias}` };
       }
     }
-    if (beadsBin !== undefined) config.beads.bin = beadsBin;
+    return undefined;
+  };
+
+  const beads: NonNullable<ResolvedConfig["beads"]> = {};
+  const dir = pick("dir", "path");
+  if (dir) {
+    const value = validatePathValue(dir.value, dir.source) as string;
+    const absolute = resolve(cwd, expandHome(value, home));
+    beads.dir = basename(absolute) === ".beads" ? dirname(absolute) : absolute;
   }
-  return config;
+  const bin = pick("bin", "binary");
+  if (bin) {
+    const value = validatePathValue(bin.value, bin.source) as string;
+    beads.bin = expandHome(value, home);
+  }
+  const prefix = pick("prefix", undefined);
+  if (prefix) beads.prefix = validatePrefix(prefix.value);
+  return Object.keys(beads).length > 0 ? beads : undefined;
+}
+
+function validatePrefix(value: string): string {
+  const prefix = value.trim().replace(/-$/, "");
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(prefix)) {
+    throw new AxiError(
+      "beads.prefix must be an issue-id prefix such as `task`",
+      "VALIDATION_ERROR",
+      ['Set `[beads] prefix = "task"` in .tasks.toml, or remove the key'],
+    );
+  }
+  return prefix;
 }

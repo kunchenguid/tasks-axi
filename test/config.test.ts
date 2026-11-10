@@ -36,6 +36,28 @@ describe("parseConfigToml", () => {
     });
   });
 
+  it("reads the [beads] table", () => {
+    const cfg = parseConfigToml(
+      [
+        'backend = "beads"',
+        "[beads]",
+        'path = "/var/lib/beads/.beads"',
+        'binary = "bd"',
+        'prefix = "fm"',
+        'dir = "/var/lib/beads"',
+        'bin = "/usr/local/bin/bd"',
+      ].join("\n"),
+    );
+    expect(cfg.backend).toBe("beads");
+    expect(cfg.beads).toEqual({
+      path: "/var/lib/beads/.beads",
+      binary: "bd",
+      prefix: "fm",
+      dir: "/var/lib/beads",
+      bin: "/usr/local/bin/bd",
+    });
+  });
+
   it("ignores unknown keys and tables", () => {
     const cfg = parseConfigToml('[sqlite]\npath = ".tasks.db"\npath: broken\n');
     expect(cfg.markdown).toBeUndefined();
@@ -61,9 +83,9 @@ describe("parseConfigToml", () => {
   });
 
   it("rejects a non-numeric done_keep value", () => {
-    expect(() =>
-      parseConfigToml("[markdown]\ndone_keep = many\n"),
-    ).toThrow(/done_keep/);
+    expect(() => parseConfigToml("[markdown]\ndone_keep = many\n")).toThrow(
+      /done_keep/,
+    );
   });
 
   it("rejects malformed assignments in the top-level scope", () => {
@@ -146,6 +168,111 @@ describe("resolveConfig", () => {
     expect(resolveConfig({ cwd: dir, home, env: {} }).doneKeep).toBe(5);
   });
 
+  it("resolves beads settings from the project toml", () => {
+    writeFileSync(
+      join(dir, ".tasks.toml"),
+      [
+        'backend = "beads"',
+        "[beads]",
+        'path = ".data/.beads"',
+        'binary = "custom-bd"',
+        'prefix = "fm"',
+      ].join("\n"),
+    );
+    expect(resolveConfig({ cwd: dir, home, env: {} })).toMatchObject({
+      backend: "beads",
+      beads: { dir: join(dir, ".data"), bin: "custom-bd", prefix: "fm" },
+    });
+  });
+
+  it("treats beads dir/path and bin/binary as aliases", () => {
+    writeFileSync(
+      join(dir, ".tasks.toml"),
+      ["[beads]", 'dir = "ws"', 'bin = "bd"'].join("\n"),
+    );
+    expect(resolveConfig({ cwd: dir, home, env: {} }).beads).toEqual({
+      dir: join(dir, "ws"),
+      bin: "bd",
+    });
+  });
+
+  it("keeps a path that is not a .beads directory as the workspace", () => {
+    writeFileSync(join(dir, ".tasks.toml"), '[beads]\npath = "ws"\n');
+    expect(resolveConfig({ cwd: dir, home, env: {} }).beads?.dir).toBe(
+      join(dir, "ws"),
+    );
+  });
+
+  it("prefers dir over path and bin over binary within one file", () => {
+    writeFileSync(
+      join(dir, ".tasks.toml"),
+      ["[beads]", 'dir = "a"', 'path = "b"', 'bin = "x"', 'binary = "y"'].join(
+        "\n",
+      ),
+    );
+    expect(resolveConfig({ cwd: dir, home, env: {} }).beads).toEqual({
+      dir: join(dir, "a"),
+      bin: "x",
+    });
+  });
+
+  it("lets the project toml beat the home toml key by key", () => {
+    mkdirSync(join(home, ".tasks-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".tasks-axi", "config.toml"),
+      [
+        "[beads]",
+        'dir = "home-ws"',
+        'binary = "home-bd"',
+        'prefix = "hm"',
+      ].join("\n"),
+    );
+    writeFileSync(join(dir, ".tasks.toml"), '[beads]\npath = "proj-ws"\n');
+    expect(resolveConfig({ cwd: dir, home, env: {} }).beads).toEqual({
+      dir: join(dir, "proj-ws"),
+      bin: "home-bd",
+      prefix: "hm",
+    });
+  });
+
+  it("expands ~/ in beads paths and the binary", () => {
+    writeFileSync(
+      join(dir, ".tasks.toml"),
+      [
+        "[beads]",
+        'path = "~/data/tasks/.beads"',
+        'binary = "~/.local/bin/task"',
+      ].join("\n"),
+    );
+    expect(resolveConfig({ cwd: dir, home, env: {} }).beads).toEqual({
+      dir: join(home, "data/tasks"),
+      bin: join(home, ".local/bin/task"),
+    });
+  });
+
+  it("leaves beads unset when the toml has no [beads] keys", () => {
+    writeFileSync(join(dir, ".tasks.toml"), 'backend = "beads"\n');
+    expect(resolveConfig({ cwd: dir, home, env: {} }).beads).toBeUndefined();
+  });
+
+  it("normalizes the beads prefix and rejects an invalid one", () => {
+    writeFileSync(join(dir, ".tasks.toml"), '[beads]\nprefix = "task-"\n');
+    expect(resolveConfig({ cwd: dir, home, env: {} }).beads?.prefix).toBe(
+      "task",
+    );
+    writeFileSync(join(dir, ".tasks.toml"), '[beads]\nprefix = "no spaces"\n');
+    expect(() => resolveConfig({ cwd: dir, home, env: {} })).toThrow(
+      /beads.prefix/,
+    );
+  });
+
+  it.each(["", "   "])("rejects an empty beads binary %#", (value) => {
+    writeFileSync(join(dir, ".tasks.toml"), `[beads]\nbinary = "${value}"\n`);
+    expect(() => resolveConfig({ cwd: dir, home, env: {} })).toThrow(
+      /beads.binary/,
+    );
+  });
+
   it("rejects negative done_keep from toml", () => {
     writeFileSync(join(dir, ".tasks.toml"), "[markdown]\ndone_keep = -1\n");
     expect(() => resolveConfig({ cwd: dir, home, env: {} })).toThrow(
@@ -153,14 +280,11 @@ describe("resolveConfig", () => {
     );
   });
 
-  it.each(["", "   "])(
-    "rejects an empty TASKS_AXI_FILE value %#",
-    (value) => {
-      expect(() =>
-        resolveConfig({ cwd: dir, home, env: { TASKS_AXI_FILE: value } }),
-      ).toThrow(/TASKS_AXI_FILE/);
-    },
-  );
+  it.each(["", "   "])("rejects an empty TASKS_AXI_FILE value %#", (value) => {
+    expect(() =>
+      resolveConfig({ cwd: dir, home, env: { TASKS_AXI_FILE: value } }),
+    ).toThrow(/TASKS_AXI_FILE/);
+  });
 
   it.each(["", "   "])(
     "rejects an empty markdown path from toml %#",
