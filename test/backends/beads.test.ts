@@ -665,6 +665,101 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore transitions and deps", () => {
   );
 });
 
+describe.skipIf(!BD_AVAILABLE)("BeadsStore mutation read-back", () => {
+  let bl: TempBeadsBacklog;
+  let depWrapper: string;
+  let archiveWrapper: string;
+
+  beforeAll(() => {
+    bl = makeBeadsBacklog();
+    depWrapper = join(bl.dir, "noop-dep.cjs");
+    archiveWrapper = join(bl.dir, "noop-archive.cjs");
+    writeFileSync(
+      depWrapper,
+      [
+        "#!/usr/bin/env node",
+        'const { spawnSync } = require("node:child_process");',
+        'const args = process.argv.slice(2);',
+        'if (args[0] === "dep") process.exit(0);',
+        'const result = spawnSync("bd", args, { stdio: "inherit" });',
+        "process.exit(result.status ?? 1);",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    writeFileSync(
+      archiveWrapper,
+      [
+        "#!/usr/bin/env node",
+        'const { spawnSync } = require("node:child_process");',
+        'const args = process.argv.slice(2);',
+        'if (args[0] === "update" && args.includes("--metadata") && args.some((arg) => arg.includes("\\\"archived\\\":true"))) process.exit(0);',
+        'const result = spawnSync("bd", args, { stdio: "inherit" });',
+        "process.exit(result.status ?? 1);",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    chmodSync(depWrapper, 0o755);
+    chmodSync(archiveWrapper, 0o755);
+  }, HOOK_TIMEOUT);
+  afterAll(() => bl.cleanup());
+
+  it(
+    "rejects a dependency mutation the configured bd wrapper did not persist",
+    async () => {
+      await bl.store.create({ id: "rb-a1", title: "dependent" });
+      await bl.store.create({ id: "rb-a2", title: "blocker" });
+      const noopDeps = new BeadsStore({
+        dir: bl.dir,
+        bin: depWrapper,
+        now: () => "2026-07-01",
+      });
+
+      await expect(
+        noopDeps.create({
+          id: "rb-a3",
+          title: "created with a dependency",
+          deps: [{ type: "blocked-by", id: "rb-a2" }],
+        }),
+      ).rejects.toMatchObject({ message: expect.stringContaining("dependencies") });
+      await expect(
+        noopDeps.addDep("rb-a1", { type: "blocked-by", id: "rb-a2" }),
+      ).rejects.toMatchObject({ message: expect.stringContaining("dependencies") });
+
+      await bl.store.addDep("rb-a1", { type: "blocked-by", id: "rb-a2" });
+      await expect(
+        noopDeps.removeDep("rb-a1", { type: "blocked-by", id: "rb-a2" }),
+      ).rejects.toMatchObject({ message: expect.stringContaining("dependencies") });
+      expect((await bl.store.get("rb-a1"))?.deps).toEqual([
+        { type: "blocked-by", id: "rb-a2" },
+      ]);
+    },
+    IT_TIMEOUT,
+  );
+
+  it(
+    "does not archive a task when bd did not persist its archive marker",
+    async () => {
+      await bl.store.create({ id: "rb-p1", title: "finished", created: null });
+      await bl.store.transition("rb-p1", "done", { date: "2026-06-01" });
+      const noopArchive = new BeadsStore({
+        dir: bl.dir,
+        bin: archiveWrapper,
+        archivePath: join(bl.dir, "read-back-archive.md"),
+        now: () => "2026-07-01",
+      });
+
+      await expect(
+        noopArchive.prune({ state: "done", keep: 0, archive: true }),
+      ).rejects.toMatchObject({ message: expect.stringContaining("did not archive rb-p1") });
+      expect(await bl.store.get("rb-p1")).not.toBeNull();
+      expect(readdirSync(bl.dir)).not.toContain("read-back-archive.md");
+    },
+    IT_TIMEOUT,
+  );
+});
+
 describe.skipIf(!BD_AVAILABLE)("BeadsStore maintenance and mirror", () => {
   let bl: TempBeadsBacklog;
   beforeAll(async () => {

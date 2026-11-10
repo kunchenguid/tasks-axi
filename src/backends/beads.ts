@@ -176,6 +176,8 @@ interface BeadsCache {
   byId: Map<string, Task>;
   /** Every bd issue including archived ones, for id-collision checks. */
   rawIds: Set<string>;
+  /** Issues whose tasks-axi metadata marks them archived. */
+  archivedIds: Set<string>;
 }
 
 /** Well above one mutation's handful of bd calls, so writers queue. */
@@ -268,6 +270,18 @@ function stableJson(value: unknown): string {
 /** Bodies round-trip with trailing newlines stripped (like markdown blocks). */
 function normalizedBody(body: string | undefined): string {
   return (body ?? "").replace(/\n+$/, "");
+}
+
+function stableDeps(deps: Dep[]): string {
+  return stableJson(
+    deps
+      .map(({ type, id, reason }) => ({ type, id, reason }))
+      .sort((a, b) =>
+        `${a.type}\0${a.id}\0${a.reason ?? ""}`.localeCompare(
+          `${b.type}\0${b.id}\0${b.reason ?? ""}`,
+        ),
+      ),
+  );
 }
 
 export class BeadsStore implements Store {
@@ -487,17 +501,26 @@ export class BeadsStore implements Store {
     const issues = parsed as BdIssue[];
     const tasks: Task[] = [];
     const rawIds = new Set<string>();
+    const archivedIds = new Set<string>();
     const createdAt = new Map<string, string>();
     for (const issue of issues) {
       if (!issue || typeof issue.id !== "string") continue;
       rawIds.add(issue.id);
       createdAt.set(issue.id, issue.created_at ?? "");
       const ta = this.tasksAxiMeta(issue);
-      if (ta?.archived) continue;
+      if (ta?.archived) {
+        archivedIds.add(issue.id);
+        continue;
+      }
       tasks.push(this.taskFromIssue(issue, ta));
     }
     tasks.sort((a, b) => this.taskOrder(a, b, createdAt));
-    this.cache = { tasks, byId: new Map(tasks.map((t) => [t.id, t])), rawIds };
+    this.cache = {
+      tasks,
+      byId: new Map(tasks.map((t) => [t.id, t])),
+      rawIds,
+      archivedIds,
+    };
     return this.cache;
   }
 
@@ -758,6 +781,9 @@ export class BeadsStore implements Store {
     if (!sameHold(persisted.hold, expected.hold)) mismatched.push("hold");
     if (persisted.created !== expected.created) mismatched.push("created");
     if (persisted.closed !== expected.closed) mismatched.push("closed");
+    if (stableDeps(persisted.deps) !== stableDeps(expected.deps)) {
+      mismatched.push("dependencies");
+    }
     if (stableJson(persisted.meta ?? {}) !== stableJson(expected.meta ?? {})) {
       mismatched.push("meta");
     }
@@ -769,6 +795,16 @@ export class BeadsStore implements Store {
       );
     }
     return persisted;
+  }
+
+  private verifyArchived(ids: string[], cache: BeadsCache): void {
+    const missing = ids.filter((id) => !cache.archivedIds.has(id));
+    if (missing.length === 0) return;
+    throw new AxiError(
+      `beads backend: bd update did not archive ${missing.join(", ")}`,
+      "UNKNOWN",
+      missing.map((id) => `Inspect the issue with \`bd show ${id} --json\``),
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -1156,7 +1192,10 @@ export class BeadsStore implements Store {
         next.deps.push(checkedDep);
         await this.runBd(["update", id, "--metadata", this.metadataArg(next)]);
       }
-      await this.writeMirror();
+      const expected = cloneTask(task);
+      expected.deps.push(checkedDep);
+      const fresh = await this.writeMirror();
+      this.verifyPersisted(expected, fresh, "dep add");
       return true;
     });
   }
@@ -1179,7 +1218,10 @@ export class BeadsStore implements Store {
         next.deps = remaining;
         await this.runBd(["update", id, "--metadata", this.metadataArg(next)]);
       }
-      await this.writeMirror();
+      const expected = cloneTask(task);
+      expected.deps = remaining;
+      const fresh = await this.writeMirror();
+      this.verifyPersisted(expected, fresh, "dep remove");
       return true;
     });
   }
@@ -1202,9 +1244,6 @@ export class BeadsStore implements Store {
       const surplus = candidates.slice(keep);
       if (surplus.length === 0) return { archived: 0, ids: [] };
 
-      // Flag first, archive after: a mid-loop bd failure must never leave
-      // archive lines for tasks that are still active, and a retry must not
-      // duplicate lines for tasks already archived.
       for (const task of surplus) {
         await this.runBd([
           "update",
@@ -1212,11 +1251,12 @@ export class BeadsStore implements Store {
           "--metadata",
           this.metadataArg(task, { archived: true }),
         ]);
+        const fresh = await this.writeMirror();
+        this.verifyArchived([task.id], fresh);
         if (options.archive) {
           this.appendArchiveBlock(this.archivePath, renderTaskLines(task));
         }
       }
-      await this.writeMirror();
       return { archived: surplus.length, ids: surplus.map((task) => task.id) };
     });
   }
