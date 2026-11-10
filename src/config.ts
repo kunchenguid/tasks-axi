@@ -20,9 +20,15 @@ export interface ResolvedConfig {
   backend: string;
   /**
    * Markdown backlog path (resolved to an absolute path). The beads backend
-   * uses it as the canonical-markdown mirror it rewrites after every mutation.
+   * uses it as the canonical-markdown mirror it rewrites after every mutation,
+   * but only when `pathConfigured` is true.
    */
   path: string;
+  /**
+   * True when `path` was set by `--file`, `TASKS_AXI_FILE` or `[markdown] path`
+   * rather than defaulted. The beads backend writes no mirror otherwise.
+   */
+  pathConfigured?: boolean;
   /** Optional archive path for pruned tasks (resolved to an absolute path). */
   archivePath?: string;
   doneKeep: number;
@@ -290,7 +296,12 @@ export function resolveConfig(overrides: ConfigOverrides = {}): ResolvedConfig {
       DEFAULT_KEEP,
   );
 
-  const config: ResolvedConfig = { backend, path, doneKeep };
+  const config: ResolvedConfig = {
+    backend,
+    path,
+    pathConfigured: explicitPath !== undefined || tomlPath !== undefined,
+    doneKeep,
+  };
   if (archive) {
     config.archivePath = isAbsolute(archive) ? archive : resolve(cwd, archive);
   }

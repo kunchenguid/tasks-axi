@@ -10,7 +10,14 @@ import {
 } from "../beads-helpers.js";
 import { BeadsStore } from "../../src/backends/beads.js";
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -714,6 +721,114 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore maintenance and mirror", () => {
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
+    },
+    IT_TIMEOUT,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Optional mirror and a config-only binary/workspace swap
+// ---------------------------------------------------------------------------
+
+describe.skipIf(!BD_AVAILABLE)("BeadsStore without a mirror", () => {
+  let bl: TempBeadsBacklog;
+  beforeAll(() => {
+    bl = makeBeadsBacklog();
+  }, HOOK_TIMEOUT);
+  afterAll(() => bl.cleanup());
+
+  it(
+    "writes no mirror, archive or lock file when none is configured",
+    async () => {
+      const store = new BeadsStore({ dir: bl.dir, now: () => "2026-07-01" });
+      await store.create({ id: "nm-a1", title: "first", body: "kept body" });
+      await store.create({ id: "nm-a2", title: "second", created: null });
+      await store.transition("nm-a2", "done", { date: "2026-06-01" });
+      await store.transition("nm-a1", "in_flight");
+      await store.update("nm-a1", { body: "curated", archiveBody: true });
+      const pruned = await store.prune({
+        state: "done",
+        keep: 0,
+        archive: true,
+      });
+      expect(pruned.ids).toEqual(["nm-a2"]);
+      expect(await store.render()).toBe(1);
+
+      const files = readdirSync(bl.dir);
+      for (const name of ["backlog.md", "done-archive.md", "note-archive.md"]) {
+        expect(files).not.toContain(name);
+      }
+      expect(files.filter((name) => name.endsWith(".lock"))).toEqual([]);
+      expect((await store.get("nm-a1"))?.body).toBe("curated");
+      // The superseded body survives as a bd comment even with no file archive.
+      const comments = execFileSync("bd", ["comments", "nm-a1", "--json"], {
+        cwd: bl.dir,
+        env: { ...process.env, BEADS_DIR: join(bl.dir, ".beads") },
+        encoding: "utf8",
+      });
+      expect(comments).toContain("kept body");
+    },
+    IT_TIMEOUT,
+  );
+
+  it(
+    "still writes the archive file when archivePath is configured",
+    async () => {
+      const archivePath = join(bl.dir, "elsewhere", "done.md");
+      const store = new BeadsStore({
+        dir: bl.dir,
+        archivePath,
+        now: () => "2026-07-01",
+      });
+      await store.create({ id: "nm-b1", title: "old", created: null });
+      await store.transition("nm-b1", "done", { date: "2026-06-01" });
+      await store.prune({ state: "done", keep: 0, archive: true });
+      expect(readFileSync(archivePath, "utf8")).toContain("nm-b1");
+      expect(readdirSync(bl.dir)).not.toContain("done-archive.md");
+    },
+    IT_TIMEOUT,
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "runs a wrapper binary with no dir, leaving workspace selection to it",
+    async () => {
+      // A wrapper pins the workspace itself, as a store launcher script would;
+      // tasks-axi is configured with nothing but the executable.
+      const wrapper = join(bl.dir, "pinned-bd.cjs");
+      writeFileSync(
+        wrapper,
+        [
+          "#!/usr/bin/env node",
+          'const { spawnSync } = require("node:child_process");',
+          "const r = spawnSync(",
+          '  "bd",',
+          "  process.argv.slice(2),",
+          "  {",
+          '    stdio: "inherit",',
+          `    cwd: ${JSON.stringify(bl.dir)},`,
+          `    env: { ...process.env, BEADS_DIR: ${JSON.stringify(join(bl.dir, ".beads"))} },`,
+          "  },",
+          ");",
+          "process.exit(r.status ?? 1);",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      chmodSync(wrapper, 0o755);
+      const elsewhere = mkdtempSync(join(tmpdir(), "tasks-axi-nowork-"));
+      const previous = process.cwd();
+      try {
+        process.chdir(elsewhere);
+        const store = new BeadsStore({ bin: wrapper, now: () => "2026-07-01" });
+        await store.create({ id: "nm-w1", title: "via wrapper" });
+        await store.transition("nm-w1", "in_flight");
+        expect((await store.get("nm-w1"))?.state).toBe("in_flight");
+        expect(readdirSync(elsewhere)).toEqual([]);
+      } finally {
+        process.chdir(previous);
+        rmSync(elsewhere, { recursive: true, force: true });
+      }
+      expect((await bl.store.get("nm-w1"))?.title).toBe("via wrapper");
     },
     IT_TIMEOUT,
   );

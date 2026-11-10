@@ -168,6 +168,23 @@ describe("resolveConfig", () => {
     expect(resolveConfig({ cwd: dir, home, env: {} }).doneKeep).toBe(5);
   });
 
+  it("reports whether the markdown path was configured", () => {
+    expect(resolveConfig({ cwd: dir, home, env: {} }).pathConfigured).toBe(
+      false,
+    );
+    expect(
+      resolveConfig({ cwd: dir, home, env: { TASKS_AXI_FILE: "x.md" } })
+        .pathConfigured,
+    ).toBe(true);
+    expect(
+      resolveConfig({ cwd: dir, home, env: {}, file: "x.md" }).pathConfigured,
+    ).toBe(true);
+    writeFileSync(join(dir, ".tasks.toml"), '[markdown]\npath = "x.md"\n');
+    expect(resolveConfig({ cwd: dir, home, env: {} }).pathConfigured).toBe(
+      true,
+    );
+  });
+
   it("resolves beads settings from the project toml", () => {
     writeFileSync(
       join(dir, ".tasks.toml"),

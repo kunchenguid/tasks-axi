@@ -1,4 +1,3 @@
-import { dirname } from "node:path";
 import { BeadsStore } from "./backends/beads.js";
 import { MarkdownStore } from "./backends/markdown.js";
 import {
@@ -42,10 +41,11 @@ function createStore(config: ResolvedConfig): Store {
     });
   }
   if (config.backend === "beads") {
-    // `path` doubles as the canonical-markdown mirror the beads backend keeps.
+    // The markdown path doubles as the canonical-markdown mirror the beads
+    // backend keeps, but only when one was configured; otherwise no mirror.
     return new BeadsStore({
-      mirrorPath: config.path,
-      dir: config.beads?.dir ?? dirname(config.path),
+      ...(config.pathConfigured ? { mirrorPath: config.path } : {}),
+      ...(config.beads?.dir ? { dir: config.beads.dir } : {}),
       ...(config.beads?.bin ? { bin: config.beads.bin } : {}),
       ...(config.archivePath ? { archivePath: config.archivePath } : {}),
     });

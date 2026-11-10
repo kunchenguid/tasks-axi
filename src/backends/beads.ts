@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { appendFileSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { AxiError, unsupported } from "../errors.js";
 import { validateId } from "../id.js";
@@ -49,11 +51,15 @@ import {
 /**
  * A Store backed by the beads issue tracker (https://github.com/gastownhall/beads).
  *
- * The beads database (`.beads/` under `dir`, driven through the `bd` CLI with
- * `--json`) is the source of truth. After every mutation the backend re-renders
- * `mirrorPath` as a read-only canonical-markdown mirror of the active backlog,
- * so tools that read the markdown grammar directly (firstmate's fleet snapshot,
- * voice records, inbox view) keep working unchanged on top of beads.
+ * The beads database (driven through the `bd` CLI with `--json`) is the source
+ * of truth. The executable (`bin`) and workspace (`dir`) are configuration, not
+ * assumptions: any command that accepts bd's arguments works, including a
+ * wrapper that pins its own workspace, and without a `dir` bd runs from the
+ * current directory and finds its workspace itself. When `mirrorPath` is set,
+ * the backend re-renders it after every mutation as a read-only
+ * canonical-markdown mirror of the active backlog, so tools that read the
+ * markdown grammar directly (firstmate's fleet snapshot, voice records, inbox
+ * view) keep working unchanged on top of beads. Without it no file is written.
  *
  * Field mapping:
  * - state <-> bd status: queued=open, in_flight=in_progress, done=closed;
@@ -68,27 +74,44 @@ import {
  *   `deriveLinks(title)` works identically on both backends.
  * - a hold with `until` also sets bd's `--defer` date for bd-native views.
  *
- * Pruned Done tasks are archived to `archivePath` and flagged
- * `tasks_axi.archived` in bd (hidden from tasks-axi, retained by beads).
+ * Pruned Done tasks are flagged `tasks_axi.archived` in bd (hidden from
+ * tasks-axi, retained by beads) and, when `archivePath` is set, also appended
+ * to that file.
  * Public-followups are unsupported: their compare-and-swap contract has no bd
  * primitive yet, and firstmate only needs them when Relay is enabled.
  *
- * Mutations serialize under the mirror-path advisory lock and fail closed
- * with LOCKED on contention, like the markdown backend; reads stay lock-free.
+ * Mutations serialize under an advisory lock (the mirror path's, or a
+ * temp-dir lock keyed by bin and workspace when there is no mirror) and fail
+ * closed with LOCKED on contention, like the markdown backend; reads stay
+ * lock-free.
  * bd-native writers bypass this lock, so a raw `bd create --id X --force`
  * racing tasks-axi can still silently overwrite an existing issue.
  */
 
 export interface BeadsStoreOptions {
-  /** Directory holding the beads workspace (`.beads/`); bd runs from here. */
-  dir: string;
-  /** Canonical-markdown mirror path, rewritten after every mutation. */
-  mirrorPath: string;
-  /** bd binary to execute (default "bd"). */
+  /**
+   * Directory holding the beads workspace (`.beads/`). When set, bd runs from
+   * here with `BEADS_DIR` pointing at it; when unset, bd inherits the current
+   * directory and environment and resolves its own workspace.
+   */
+  dir?: string;
+  /**
+   * Canonical-markdown mirror path, rewritten after every mutation. Unset:
+   * no mirror is written.
+   */
+  mirrorPath?: string;
+  /** Executable to run (default "bd"); may be a wrapper around bd. */
   bin?: string;
-  /** Where pruned Done items are archived (default `<mirror dir>/done-archive.md`). */
+  /**
+   * Where pruned Done items are archived (default `<mirror dir>/done-archive.md`
+   * with a mirror, otherwise none).
+   */
   archivePath?: string;
-  /** Where superseded task bodies are archived (default `<mirror dir>/note-archive.md`). */
+  /**
+   * Where superseded task bodies are archived (default
+   * `<mirror dir>/note-archive.md` with a mirror, otherwise none). The
+   * superseded body is always kept as a bd comment as well.
+   */
   noteArchivePath?: string;
   /** Injectable clock returning a YYYY-MM-DD stamp (for tests). */
   now?: () => string;
@@ -215,11 +238,12 @@ function normalizedBody(body: string | undefined): string {
 }
 
 export class BeadsStore implements Store {
-  private readonly dir: string;
-  private readonly mirrorPath: string;
+  private readonly dir?: string;
+  private readonly mirrorPath?: string;
   private readonly bin: string;
-  private readonly archivePath: string;
-  private readonly noteArchivePath: string;
+  private readonly archivePath?: string;
+  private readonly noteArchivePath?: string;
+  private readonly lockPath: string;
   private readonly now: () => string;
   private readonly timeoutMs: number;
   private cache?: BeadsCache;
@@ -228,25 +252,54 @@ export class BeadsStore implements Store {
     this.dir = options.dir;
     this.mirrorPath = options.mirrorPath;
     this.bin = options.bin ?? "bd";
+    const mirrorDir = options.mirrorPath
+      ? dirname(options.mirrorPath)
+      : undefined;
     this.archivePath =
-      options.archivePath ?? `${dirname(options.mirrorPath)}/done-archive.md`;
+      options.archivePath ??
+      (mirrorDir ? `${mirrorDir}/done-archive.md` : undefined);
     this.noteArchivePath =
       options.noteArchivePath ??
-      `${dirname(options.mirrorPath)}/note-archive.md`;
-    if (resolve(this.archivePath) === resolve(this.mirrorPath)) {
+      (mirrorDir ? `${mirrorDir}/note-archive.md` : undefined);
+    if (
+      this.mirrorPath &&
+      this.archivePath &&
+      resolve(this.archivePath) === resolve(this.mirrorPath)
+    ) {
       throw new AxiError(
         "Archive path must not be the mirror path",
         "VALIDATION_ERROR",
       );
     }
-    if (resolve(this.noteArchivePath) === resolve(this.mirrorPath)) {
+    if (
+      this.mirrorPath &&
+      this.noteArchivePath &&
+      resolve(this.noteArchivePath) === resolve(this.mirrorPath)
+    ) {
       throw new AxiError(
         "Note archive path must not be the mirror path",
         "VALIDATION_ERROR",
       );
     }
+    this.lockPath = this.mirrorPath ?? this.workspaceLockPath();
     this.now = options.now ?? today;
     this.timeoutMs = options.timeoutMs ?? 60_000;
+  }
+
+  /**
+   * Lock target when there is no mirror to lock on: a temp-dir path keyed by
+   * everything that selects the workspace, so every process configured for the
+   * same one contends on the same lock without writing into the workspace.
+   */
+  private workspaceLockPath(): string {
+    const key = [
+      this.bin,
+      this.dir ?? "",
+      this.dir ? "" : process.cwd(),
+      process.env.BEADS_DIR ?? "",
+    ].join("\0");
+    const digest = createHash("sha256").update(key).digest("hex").slice(0, 16);
+    return join(tmpdir(), `tasks-axi-beads-${digest}`);
   }
 
   capabilities(): Capabilities {
@@ -270,8 +323,12 @@ export class BeadsStore implements Store {
   private runBd(args: string[], stdin?: string): Promise<string> {
     return new Promise((resolvePromise, rejectPromise) => {
       const child = spawn(this.bin, args, {
-        cwd: this.dir,
-        env: { ...process.env, BEADS_DIR: join(this.dir, ".beads") },
+        ...(this.dir
+          ? {
+              cwd: this.dir,
+              env: { ...process.env, BEADS_DIR: join(this.dir, ".beads") },
+            }
+          : {}),
         stdio: ["pipe", "pipe", "pipe"],
       });
       let stdout = "";
@@ -309,7 +366,7 @@ export class BeadsStore implements Store {
                   `beads backend: \`${this.bin}\` CLI not found`,
                   "VALIDATION_ERROR",
                   [
-                    "Install beads: `npm install -g @beads/bd` (or `brew install beads`)",
+                    "Install beads (`npm install -g @beads/bd` or `brew install beads`), or point [beads] bin at the executable to run",
                   ],
                 )
               : this.bdError(args[0], error.message),
@@ -338,11 +395,12 @@ export class BeadsStore implements Store {
   private bdError(verb: string | undefined, detail: string): AxiError {
     const firstLine = detail.split("\n")[0] || "unknown error";
     if (/no beads database found/i.test(detail)) {
+      const where = this.dir ? ` in ${this.dir}` : "";
       return new AxiError(
-        `beads backend: no beads database found in ${this.dir}`,
+        `beads backend: no beads database found${where}`,
         "VALIDATION_ERROR",
         [
-          `Run \`bd init\` in ${this.dir}, or point [beads] dir at the workspace`,
+          `Run \`bd init\`${where || " in the workspace directory"}, or point [beads] dir at an existing workspace`,
         ],
       );
     }
@@ -546,6 +604,7 @@ export class BeadsStore implements Store {
   private async writeMirror(): Promise<BeadsCache> {
     this.invalidate();
     const cache = await this.loadAll();
+    if (!this.mirrorPath) return cache;
     const doc: BacklogDoc = {
       finalNewline: true,
       preamble: [
@@ -572,25 +631,25 @@ export class BeadsStore implements Store {
         return section;
       }),
     };
-    const content = renderBacklog(doc);
-    atomicWrite(this.mirrorPath, content);
+    if (this.mirrorPath) atomicWrite(this.mirrorPath, renderBacklog(doc));
     return cache;
   }
 
-  private appendArchiveBlock(path: string, lines: string[]): void {
+  private appendArchiveBlock(path: string | undefined, lines: string[]): void {
+    if (!path) return;
     mkdirSync(dirname(path), { recursive: true });
     const block = `\n## Archived ${this.now()}\n${lines.join("\n")}\n`;
     appendFileSync(path, block, "utf8");
   }
 
   /**
-   * Serialize a mutation under the mirror-path advisory lock and drop the
+   * Serialize a mutation under the advisory lock and drop the
    * list cache inside it, so check-then-act guards (duplicate ids, active
    * dependents) run against fresh bd state. Fails closed with LOCKED on
    * contention like the markdown backend; reads stay lock-free.
    */
   private mutate<T>(fn: () => Promise<T>): Promise<T> {
-    return withLock(this.mirrorPath, () => {
+    return withLock(this.lockPath, () => {
       this.invalidate();
       return fn();
     });
