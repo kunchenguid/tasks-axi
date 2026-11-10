@@ -934,11 +934,14 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore native beads", () => {
       String(d.getDate()).padStart(2, "0"),
     ].join("-");
   };
-  const showJson = (id: string): { created_at: string; closed_at?: string } => {
+  const showJson = (
+    id: string,
+  ): { created_at: string; closed_at?: string; close_reason?: string } => {
     const parsed = JSON.parse(bd("show", id, "--json")) as unknown;
     return (Array.isArray(parsed) ? parsed[0] : parsed) as {
       created_at: string;
       closed_at?: string;
+      close_reason?: string;
     };
   };
 
@@ -1030,6 +1033,28 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore native beads", () => {
       expect(created.priority).toBeUndefined();
       expect((await bl.store.get("nat-own"))?.priority).toBeUndefined();
       expect((await bl.store.get("nat-own"))?.kind).toBeUndefined();
+    },
+    IT_TIMEOUT,
+  );
+
+  it(
+    "records a close reason: the pr url when given, else a default",
+    async () => {
+      await bl.store.create({ id: "nat-pr", title: "closed with a pr" });
+      await bl.store.create({ id: "nat-bare", title: "closed bare" });
+      await bl.store.create({
+        id: "nat-blocked",
+        title: "closed while blocked",
+        deps: [{ type: "blocked-by", id: "nat-bare" }],
+      });
+      const pr = "https://github.com/acme/widgets/pull/7";
+      await bl.store.transition("nat-pr", "done", { pr, date: "2026-07-01" });
+      await bl.store.transition("nat-blocked", "done", { date: "2026-07-01" });
+      await bl.store.transition("nat-bare", "done", { date: "2026-07-01" });
+      expect(showJson("nat-pr").close_reason).toBe(pr);
+      expect(showJson("nat-bare").close_reason).toBe("Closed");
+      expect(showJson("nat-blocked").close_reason).toBe("Closed");
+      expect((await bl.store.get("nat-pr"))?.state).toBe("done");
     },
     IT_TIMEOUT,
   );

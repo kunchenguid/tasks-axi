@@ -1069,18 +1069,25 @@ export class BeadsStore implements Store {
       }
       task.updated = this.now();
 
-      const args = [
-        "update",
-        id,
-        "-s",
-        BD_STATUS[to],
-        "--metadata",
-        this.metadataArg(task),
-      ];
+      // Closing goes through `bd close` below so the issue gets a close
+      // reason; bd keeps the first reason, so a plain `-s closed` here would
+      // leave it blank for good.
+      const args = ["update", id, "--metadata", this.metadataArg(task)];
+      if (to !== "done") args.push("-s", BD_STATUS[to]);
       if (task.title !== current.title) args.push("--title", task.title);
       const bodyChanged = task.body !== current.body;
       if (bodyChanged) args.push("--body-file", "-");
       await this.runBd(args, bodyChanged ? (task.body ?? "") : undefined);
+      if (to === "done") {
+        // --force keeps a blocked task closable, as the status update was.
+        await this.runBd([
+          "close",
+          id,
+          "--reason",
+          opts.pr ?? opts.report ?? "Closed",
+          "--force",
+        ]);
+      }
 
       const fresh = await this.writeMirror();
       this.verifyPersisted(task, fresh, "transition");
