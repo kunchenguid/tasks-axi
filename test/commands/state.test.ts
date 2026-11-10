@@ -13,6 +13,8 @@ import {
   unholdCommand,
 } from "../../src/commands/state.js";
 import { listCommand } from "../../src/commands/crud.js";
+import { AxiError } from "../../src/errors.js";
+import type { Store } from "../../src/store.js";
 import { makeBacklog } from "../helpers.js";
 
 describe("state commands", () => {
@@ -917,6 +919,38 @@ describe("state commands", () => {
         expect(edited).toBe(true);
         expect(readFileSync(target.path, "utf8")).toContain("fresh title");
         expect(readFileSync(target.path, "utf8")).not.toContain("stale title");
+      } finally {
+        b.cleanup();
+        target.cleanup();
+      }
+    });
+
+    it("removes the destination when a non-markdown source rejects removal", async () => {
+      const b = makeBacklog();
+      const target = makeBacklog("# Backlog\n\n## Queued\n\n## Done\n");
+      const source: Store = {
+        capabilities: () => ({ ...b.store.capabilities(), backend: "beads" }),
+        create: b.store.create.bind(b.store),
+        get: b.store.get.bind(b.store),
+        update: b.store.update.bind(b.store),
+        remove: async () => {
+          throw new AxiError("source task gained a dependent", "VALIDATION_ERROR");
+        },
+        list: b.store.list.bind(b.store),
+        transition: b.store.transition.bind(b.store),
+        addDep: b.store.addDep.bind(b.store),
+        removeDep: b.store.removeDep.bind(b.store),
+        updatePublicFollowup: b.store.updatePublicFollowup.bind(b.store),
+      };
+      try {
+        await expect(
+          mvCommand(["cert-cleanup", "--to", target.path], {
+            ...b.ctx,
+            store: source,
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(b.read()).toContain("cert-cleanup");
+        expect(readFileSync(target.path, "utf8")).not.toContain("cert-cleanup");
       } finally {
         b.cleanup();
         target.cleanup();

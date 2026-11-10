@@ -727,8 +727,14 @@ export async function mvCommand(
   if (store instanceof MarkdownStore) {
     await store.moveManyTo(ids, target);
   } else if (ids.length === 1) {
+    const id = ids[0];
     await target.create(taskToInput(tasks[0]));
-    await store.remove(ids[0]);
+    try {
+      await store.remove(id);
+    } catch (error) {
+      await target.remove(id);
+      throw error;
+    }
   } else {
     throw new AxiError(
       "Moving multiple tasks at once requires the markdown backend",

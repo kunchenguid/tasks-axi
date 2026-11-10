@@ -9,17 +9,17 @@
 
 Task and backlog manager for agents — designed with [AXI](https://github.com/kunchenguid/axi) (Agent eXperience Interface).
 
-tasks-axi makes a tiny structured change to a human-readable backlog at near-zero output-token cost.
-It edits a hand-editable `backlog.md` in place with a byte-exact round-trip, so the markdown stays the source of truth while long task bodies never bloat a `list`.
+tasks-axi makes a tiny structured change to a backlog at near-zero output-token cost.
+Its default Markdown backend edits a hand-editable `backlog.md` in place with a byte-exact round-trip, so the markdown stays the source of truth while long task bodies never bloat a `list`.
 It borrows the dependency-graph and ready-query model from [beads](https://github.com/gastownhall/beads), adds structured dispatch holds, and keeps the house style from its `*-axi` siblings - token-efficient TOON output, contextual next-step suggestions, idempotent mutations, and structured errors.
 
 ## Why
 
-Every backlog mutation today regenerates markdown through the model, which is expensive output tokens and risks dropped, duplicated, or reordered items.
+Every Markdown-backlog mutation used to regenerate the file through the model, which is expensive output tokens and risks dropped, duplicated, or reordered items.
 tasks-axi reduces that to the length of one short command plus a compact confirmation read back as cheap input.
 The long status line that the model used to rewrite on every status change is now a `body`.
 Note writes are inspect-then-update: read the current body with `show <id> --full`, then replace it deliberately with `update --body` or `update --body-file`.
-Pass `--archive-body` with a body replacement when the superseded body should be moved to cold history in `note-archive.md`.
+Pass `--archive-body` with a body replacement to preserve the superseded body; the backend-specific archive behavior is described below.
 
 ## Quick Start
 
@@ -249,13 +249,49 @@ Body replacements with `--archive-body` append superseded bodies to `note-archiv
 
 ## Backends
 
-P1 ships the **markdown** backend only, behind a narrow `Store` interface so additional backends slot in without touching the CLI layer.
+Backends sit behind a narrow `Store` interface, so they slot in without touching the CLI layer.
 
 | Backend                | Status  |
 | ---------------------- | ------- |
 | markdown               | shipped |
+| beads                  | shipped |
 | sqlite                 | planned |
 | github / jira / linear | planned |
+
+### The beads backend
+
+`backend = "beads"` stores the backlog in a [beads](https://github.com/gastownhall/beads) issue database, driven through the `bd` CLI (`npm install -g @beads/bd`, then `bd init` in the workspace directory).
+Beads becomes the source of truth: dependency graph, priorities, full history, and every bd-native view (`bd show`, `bd graph`, `bd list`) work on the same tasks.
+
+```toml
+# .tasks.toml
+backend = "beads"
+
+[beads]
+dir = "data"               # directory holding .beads/ (alias: path; a path ending in .beads is accepted too)
+bin = "bd"                 # bd binary or wrapper command (alias: binary)
+prefix = "proj"            # issue-id prefix of the workspace; other ids are rejected
+lock_timeout_ms = 30000    # how long a mutation waits for another's lock
+
+[markdown]
+path = "data/backlog.md"   # optional read-only mirror (see below)
+```
+
+Every `[beads]` key is optional.
+`bin` can be any executable that speaks bd's CLI, so a launcher script that pins its own workspace (for example by exporting `BEADS_DIR` and then `exec bd "$@"`) works with `dir` unset; tasks-axi then sets no `cwd` or `BEADS_DIR` and leaves workspace selection to the wrapper.
+With `prefix` set, a task id outside `<prefix>-` is rejected up front instead of being forced past bd's own prefix check; with no prefix, ids are forced as before.
+Issues created outside tasks-axi still read naturally: bd's priority (0-4), a non-`task` issue type as the task kind, and its created/closed dates are surfaced when an issue has no `tasks_axi` metadata, and `done` records the PR link (or `Closed`) as bd's close reason.
+
+When `[markdown] path` (or `--file` / `TASKS_AXI_FILE`) is set, after every mutation the backend rewrites that path as a **read-only canonical mirror** of the active backlog, byte-compatible with the markdown backend's format, so tools that read `backlog.md` directly keep working unchanged.
+Hand-edits to the mirror are overwritten; mutate through tasks-axi (or `bd`, then `tasks-axi render` to refresh the mirror).
+tasks-axi fields that beads has no column for (kind, repo, holds, canonical dates, dependency reasons) live in a `tasks_axi` object inside each issue's metadata; a hold with `--until` also sets bd's defer date.
+With no mirror configured, nothing is written beside the workspace; `prune` archives surplus Done tasks to `done-archive.md` only when a mirror (or `[markdown] archive`) is set, and hides them from tasks-axi with a metadata flag while beads retains the full record.
+`--archive-body` always preserves the superseded body as a bd comment, so the history stays visible from bd-native views; when a mirror configures `note-archive.md`, it also writes the shared dated archive block there.
+`create`, `update`, and every state transition are verified by reading the task back from bd and comparing the persisted fields, so a bd invocation that exits 0 without applying the change surfaces as a structured error instead of silent divergence.
+bd stores one relationship type per task pair, so adding a `blocked-by` edge to an id that already carries a `parent` or `discovered-from` edge (or vice versa) fails with a `VALIDATION_ERROR` naming the existing edge; remove that edge first.
+`ready`/`blocked`/`held` stay derived by the CLI from the dependency graph, so they are correct even where `bd ready` itself is not (bd 1.2.2 mis-reads blockers on issues whose id prefix differs from the database prefix).
+tasks-axi mutations serialize under an advisory lock (on the mirror path, or a temp file keyed to the binary and workspace when there is no mirror) and wait up to `lock_timeout_ms` (default 30 s, above one mutation) before failing closed with a `LOCKED` error, so parallel agents queue instead of retrying; raw `bd` writers bypass that lock, and `bd create --id <id> --force` silently overwrites an existing issue, so create ids through tasks-axi when both are in play.
+Public-followups and multi-task `mv` are not supported on this backend.
 
 ## Development
 
