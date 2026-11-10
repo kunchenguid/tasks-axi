@@ -669,11 +669,15 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore mutation read-back", () => {
   let bl: TempBeadsBacklog;
   let depWrapper: string;
   let archiveWrapper: string;
+  let deleteWrapper: string;
+  let commentWrapper: string;
 
   beforeAll(() => {
     bl = makeBeadsBacklog();
     depWrapper = join(bl.dir, "noop-dep.cjs");
     archiveWrapper = join(bl.dir, "noop-archive.cjs");
+    deleteWrapper = join(bl.dir, "noop-delete.cjs");
+    commentWrapper = join(bl.dir, "noop-comment.cjs");
     writeFileSync(
       depWrapper,
       [
@@ -700,8 +704,36 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore mutation read-back", () => {
       ].join("\n"),
       "utf8",
     );
+    writeFileSync(
+      deleteWrapper,
+      [
+        "#!/usr/bin/env node",
+        'const { spawnSync } = require("node:child_process");',
+        'const args = process.argv.slice(2);',
+        'if (args[0] === "delete") process.exit(0);',
+        'const result = spawnSync("bd", args, { stdio: "inherit" });',
+        "process.exit(result.status ?? 1);",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    writeFileSync(
+      commentWrapper,
+      [
+        "#!/usr/bin/env node",
+        'const { spawnSync } = require("node:child_process");',
+        'const args = process.argv.slice(2);',
+        'if (args[0] === "comment") process.exit(0);',
+        'const result = spawnSync("bd", args, { stdio: "inherit" });',
+        "process.exit(result.status ?? 1);",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
     chmodSync(depWrapper, 0o755);
     chmodSync(archiveWrapper, 0o755);
+    chmodSync(deleteWrapper, 0o755);
+    chmodSync(commentWrapper, 0o755);
   }, HOOK_TIMEOUT);
   afterAll(() => bl.cleanup());
 
@@ -734,6 +766,52 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore mutation read-back", () => {
       expect((await bl.store.get("rb-a1"))?.deps).toEqual([
         { type: "blocked-by", id: "rb-a2" },
       ]);
+    },
+    IT_TIMEOUT,
+  );
+
+  it(
+    "rejects a delete the configured bd wrapper did not persist",
+    async () => {
+      await bl.store.create({ id: "rb-d1", title: "still here" });
+      const noopDelete = new BeadsStore({
+        dir: bl.dir,
+        bin: deleteWrapper,
+        now: () => "2026-07-01",
+      });
+
+      await expect(noopDelete.remove("rb-d1")).rejects.toMatchObject({
+        message: expect.stringContaining("did not remove task"),
+      });
+      expect(await bl.store.get("rb-d1")).not.toBeNull();
+    },
+    IT_TIMEOUT,
+  );
+
+  it(
+    "preserves archive-body content before replacing it without a mirror",
+    async () => {
+      await bl.store.create({
+        id: "rb-c1",
+        title: "body preservation",
+        body: "original body",
+      });
+      const noopComment = new BeadsStore({
+        dir: bl.dir,
+        bin: commentWrapper,
+        now: () => "2026-07-01",
+      });
+
+      await expect(
+        noopComment.update("rb-c1", {
+          body: "replacement body",
+          archiveBody: true,
+        }),
+      ).rejects.toMatchObject({
+        message: expect.stringContaining("did not preserve the superseded body"),
+      });
+      expect((await bl.store.get("rb-c1"))?.body).toBe("original body");
+      expect(readdirSync(bl.dir)).not.toContain("note-archive.md");
     },
     IT_TIMEOUT,
   );
@@ -998,6 +1076,49 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore lock wait", () => {
       ).rejects.toMatchObject({ code: "LOCKED" });
       await held;
       expect(await impatient.get("lk-c2")).toBeNull();
+    },
+    IT_TIMEOUT,
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "shares one lock between mirrored and mirrorless workspace views",
+    async () => {
+      const wrapper = join(bl.dir, "slow-create.cjs");
+      writeFileSync(
+        wrapper,
+        [
+          "#!/usr/bin/env node",
+          'const { spawnSync } = require("node:child_process");',
+          'const args = process.argv.slice(2);',
+          'if (args[0] === "create" && args.includes("ws-a1")) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);',
+          'const result = spawnSync("bd", args, { stdio: "inherit" });',
+          "process.exit(result.status ?? 1);",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      chmodSync(wrapper, 0o755);
+      const mirrorless = new BeadsStore({
+        dir: bl.dir,
+        bin: wrapper,
+        lockTimeoutMs: 1_000,
+        now: () => "2026-07-01",
+      });
+      const mirrored = new BeadsStore({
+        dir: bl.dir,
+        mirrorPath: bl.mirrorPath,
+        bin: wrapper,
+        lockTimeoutMs: 50,
+        now: () => "2026-07-01",
+      });
+
+      const first = mirrorless.create({ id: "ws-a1", title: "slow" });
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      await expect(
+        mirrored.create({ id: "ws-a2", title: "contender" }),
+      ).rejects.toMatchObject({ code: "LOCKED" });
+      await first;
+      expect(await mirrorless.get("ws-a2")).toBeNull();
     },
     IT_TIMEOUT,
   );

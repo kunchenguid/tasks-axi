@@ -83,9 +83,8 @@ import {
  * Public-followups are unsupported: their compare-and-swap contract has no bd
  * primitive yet, and firstmate only needs them when Relay is enabled.
  *
- * Mutations serialize under an advisory lock (the mirror path's, or a
- * temp-dir lock keyed by bin and workspace when there is no mirror) and fail
- * closed with LOCKED once `lockTimeoutMs` runs out, like the markdown
+ * Mutations serialize under a temp-dir advisory lock keyed by the workspace and
+ * fail closed with LOCKED once `lockTimeoutMs` runs out, like the markdown
  * backend; reads stay lock-free. One mutation is several bd calls (seconds), so
  * the wait defaults to well above that and parallel writers queue instead of
  * needing a caller retry.
@@ -331,20 +330,18 @@ export class BeadsStore implements Store {
         "VALIDATION_ERROR",
       );
     }
-    this.lockPath = this.mirrorPath ?? this.workspaceLockPath();
+    this.lockPath = this.workspaceLockPath();
     this.now = options.now ?? today;
     this.timeoutMs = options.timeoutMs ?? 60_000;
     this.lockTimeoutMs = options.lockTimeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS;
   }
 
   /**
-   * Lock target when there is no mirror to lock on: a temp-dir path keyed by
-   * everything that selects the workspace, so every process configured for the
-   * same one contends on the same lock without writing into the workspace.
+   * Temp-dir lock keyed by the workspace, so every configured view of one
+   * workspace contends without writing into it.
    */
   private workspaceLockPath(): string {
     const key = [
-      this.bin,
       this.dir ?? "",
       this.dir ? "" : process.cwd(),
       process.env.BEADS_DIR ?? "",
@@ -807,6 +804,16 @@ export class BeadsStore implements Store {
     );
   }
 
+  private async verifyBodyArchived(id: string, body: string): Promise<void> {
+    const comments = await this.runBd(["comments", id, "--json"]);
+    if (comments.includes(body)) return;
+    throw new AxiError(
+      `beads backend: bd comment did not preserve the superseded body for "${id}"`,
+      "UNKNOWN",
+      [`Inspect comments with \`bd comments ${id} --json\``],
+    );
+  }
+
   // -------------------------------------------------------------------------
   // CRUD
   // -------------------------------------------------------------------------
@@ -1054,6 +1061,9 @@ export class BeadsStore implements Store {
           ["comment", id, "--stdin"],
           `[tasks-axi] superseded body archived ${this.now()}:\n\n${supersededBody}`,
         );
+        if (!this.noteArchivePath) {
+          await this.verifyBodyArchived(id, supersededBody);
+        }
         this.appendArchiveBlock(
           this.noteArchivePath,
           renderTaskLines(archivedTask),
@@ -1077,7 +1087,14 @@ export class BeadsStore implements Store {
       if (!task) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
       this.requireNoActiveDependents(cache, id);
       await this.runBd(["delete", id, "-f"]);
-      await this.writeMirror();
+      const fresh = await this.writeMirror();
+      if (fresh.rawIds.has(id)) {
+        throw new AxiError(
+          `beads backend: bd delete did not remove task "${id}"`,
+          "UNKNOWN",
+          [`Inspect the issue with \`bd show ${id} --json\``],
+        );
+      }
       return task;
     });
   }
