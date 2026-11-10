@@ -72,6 +72,37 @@ describe("beads config", () => {
     }
   });
 
+  it("threads [beads] prefix into the store, rejecting foreign ids before bd runs", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tasks-axi-beads-prefix-"));
+    try {
+      writeFileSync(
+        join(dir, ".tasks.toml"),
+        [
+          'backend = "beads"',
+          "[beads]",
+          'prefix = "task"',
+          'bin = "no-such-bd"',
+        ].join("\n"),
+        "utf8",
+      );
+      const ctx = resolveTasksContext({ cwd: dir, home: dir, env: {} });
+      await expect(
+        ctx.store.create({ id: "fix-login-k3", title: "wrong prefix" }),
+      ).rejects.toMatchObject({
+        code: "VALIDATION_ERROR",
+        message: expect.stringContaining('configured beads prefix "task-"'),
+      });
+      // A matching id gets past the check and reaches the (missing) binary.
+      await expect(
+        ctx.store.create({ id: "task-fix-login", title: "right prefix" }),
+      ).rejects.toMatchObject({
+        message: expect.stringContaining("no-such-bd"),
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("names both backends on an unknown backend", () => {
     expect(() =>
       resolveTasksContext({ backend: "sqlite", cwd: tmpdir(), env: {} }),
@@ -829,6 +860,58 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore without a mirror", () => {
         rmSync(elsewhere, { recursive: true, force: true });
       }
       expect((await bl.store.get("nm-w1"))?.title).toBe("via wrapper");
+    },
+    IT_TIMEOUT,
+  );
+});
+
+describe.skipIf(!BD_AVAILABLE)("BeadsStore id prefix", () => {
+  let bl: TempBeadsBacklog;
+  beforeAll(() => {
+    bl = makeBeadsBacklog();
+  }, HOOK_TIMEOUT);
+  afterAll(() => bl.cleanup());
+
+  it(
+    "creates ids under the configured prefix without forcing them past bd",
+    async () => {
+      const store = new BeadsStore({
+        dir: bl.dir,
+        prefix: "tst",
+        now: () => "2026-07-01",
+      });
+      await store.create({ id: "tst-wire-up-login", title: "slug id" });
+      expect((await store.get("tst-wire-up-login"))?.title).toBe("slug id");
+      await expect(
+        store.create({ id: "other-1", title: "foreign" }),
+      ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      expect(await store.get("other-1")).toBeNull();
+    },
+    IT_TIMEOUT,
+  );
+
+  it(
+    "surfaces bd's own prefix error when the configured prefix is wrong",
+    async () => {
+      const store = new BeadsStore({
+        dir: bl.dir,
+        prefix: "zzz",
+        now: () => "2026-07-01",
+      });
+      await expect(
+        store.create({ id: "zzz-1", title: "bd disagrees" }),
+      ).rejects.toMatchObject({
+        message: expect.stringMatching(/prefix mismatch/i),
+      });
+    },
+    IT_TIMEOUT,
+  );
+
+  it(
+    "keeps accepting any slug when no prefix is configured",
+    async () => {
+      await bl.store.create({ id: "anything-goes", title: "forced" });
+      expect((await bl.store.get("anything-goes"))?.title).toBe("forced");
     },
     IT_TIMEOUT,
   );

@@ -47,6 +47,7 @@ function createStore(config: ResolvedConfig): Store {
       ...(config.pathConfigured ? { mirrorPath: config.path } : {}),
       ...(config.beads?.dir ? { dir: config.beads.dir } : {}),
       ...(config.beads?.bin ? { bin: config.beads.bin } : {}),
+      ...(config.beads?.prefix ? { prefix: config.beads.prefix } : {}),
       ...(config.archivePath ? { archivePath: config.archivePath } : {}),
     });
   }

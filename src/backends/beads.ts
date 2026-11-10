@@ -103,6 +103,12 @@ export interface BeadsStoreOptions {
   /** Executable to run (default "bd"); may be a wrapper around bd. */
   bin?: string;
   /**
+   * Issue-id prefix of the workspace (`task` for ids like `task-ab12`). When
+   * set, `create` rejects ids outside it and lets bd validate the id itself;
+   * when unset, ids are created with `--force`, so any slug is accepted.
+   */
+  prefix?: string;
+  /**
    * Where pruned Done items are archived (default `<mirror dir>/done-archive.md`
    * with a mirror, otherwise none).
    */
@@ -241,6 +247,7 @@ export class BeadsStore implements Store {
   private readonly dir?: string;
   private readonly mirrorPath?: string;
   private readonly bin: string;
+  private readonly prefix?: string;
   private readonly archivePath?: string;
   private readonly noteArchivePath?: string;
   private readonly lockPath: string;
@@ -252,6 +259,7 @@ export class BeadsStore implements Store {
     this.dir = options.dir;
     this.mirrorPath = options.mirrorPath;
     this.bin = options.bin ?? "bd";
+    this.prefix = options.prefix;
     const mirrorDir = options.mirrorPath
       ? dirname(options.mirrorPath)
       : undefined;
@@ -747,6 +755,13 @@ export class BeadsStore implements Store {
 
   async create(input: TaskInput): Promise<Task> {
     const task = this.taskFromInput(input);
+    if (this.prefix && !task.id.startsWith(`${this.prefix}-`)) {
+      throw new AxiError(
+        `Task id "${task.id}" must use the configured beads prefix "${this.prefix}-"`,
+        "VALIDATION_ERROR",
+        [`Use an id like "${this.prefix}-<slug>", or change [beads] prefix`],
+      );
+    }
     return this.mutate(async () => {
       const cache = await this.loadAll();
       if (cache.rawIds.has(task.id)) {
@@ -760,7 +775,9 @@ export class BeadsStore implements Store {
         task.title,
         "--id",
         task.id,
-        "--force",
+        // Without a configured prefix the workspace's own is unknown, so any
+        // slug has to be forced through bd's prefix validation.
+        ...(this.prefix ? [] : ["--force"]),
         "-t",
         "task",
         "--silent",
