@@ -70,6 +70,9 @@ import {
  * - kind/repo/priority/hold/created/closed/dep reasons/meta live in one
  *   `tasks_axi` object inside bd issue metadata; those fields are authoritative
  *   over bd's own priority/timestamps so the mirror round-trips exactly.
+ *   An issue with no `tasks_axi` metadata (created natively with `bd create`)
+ *   reads through bd's own priority, issue type and created/closed dates
+ *   instead, so a native bead shows what bd shows.
  * - links live in the title prose exactly like the markdown backend, so
  *   `deriveLinks(title)` works identically on both backends.
  * - a hold with `until` also sets bd's `--defer` date for bd-native views.
@@ -142,6 +145,7 @@ interface BdIssue {
   dependencies?: BdDependency[];
   created_at?: string;
   updated_at?: string;
+  closed_at?: string;
 }
 
 /** The tasks-axi payload stored under `metadata.tasks_axi` on every bd issue. */
@@ -198,6 +202,19 @@ function stateFromStatus(status: string): State {
   // open, blocked, deferred, and any custom bd status read back as queued;
   // blocked/held are derived above the seam from deps and holds.
   return "queued";
+}
+
+/**
+ * The local YYYY-MM-DD of a bd timestamp. bd stamps UTC; the backlog's dates
+ * (and `today()`) are local, so convert rather than slicing the ISO string.
+ */
+function localDate(stamp: string | undefined): string | undefined {
+  if (!stamp) return undefined;
+  const d = new Date(stamp);
+  if (Number.isNaN(d.getTime())) return undefined;
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${month}-${day}`;
 }
 
 function depReasonKey(dep: Dep): string {
@@ -464,7 +481,7 @@ export class BeadsStore implements Store {
       rawIds.add(issue.id);
       createdAt.set(issue.id, issue.created_at ?? "");
       const ta = this.tasksAxiMeta(issue);
-      if (ta.archived) continue;
+      if (ta?.archived) continue;
       tasks.push(this.taskFromIssue(issue, ta));
     }
     tasks.sort((a, b) => this.taskOrder(a, b, createdAt));
@@ -488,15 +505,17 @@ export class BeadsStore implements Store {
     return a.id.localeCompare(b.id);
   }
 
-  private tasksAxiMeta(issue: BdIssue): TasksAxiMeta {
+  /** The `tasks_axi` payload, or undefined for an issue tasks-axi never wrote. */
+  private tasksAxiMeta(issue: BdIssue): TasksAxiMeta | undefined {
     const value = issue.metadata?.tasks_axi;
     if (!value || typeof value !== "object" || Array.isArray(value)) {
-      return { v: 1 };
+      return undefined;
     }
     return value as TasksAxiMeta;
   }
 
-  private taskFromIssue(issue: BdIssue, ta: TasksAxiMeta): Task {
+  private taskFromIssue(issue: BdIssue, meta: TasksAxiMeta | undefined): Task {
+    const ta = meta ?? { v: 1 };
     const title = typeof issue.title === "string" ? issue.title : "";
     const task: Task = {
       id: issue.id,
@@ -522,9 +541,37 @@ export class BeadsStore implements Store {
     if (typeof ta.created === "string") task.created = ta.created;
     if (typeof ta.closed === "string") task.closed = ta.closed;
     if (ta.meta && typeof ta.meta === "object") task.meta = { ...ta.meta };
+    if (!meta) this.readNativeFields(issue, task);
     const body = (issue.description ?? "").replace(/\n+$/, "");
     if (body !== "") task.body = body;
     return task;
+  }
+
+  /**
+   * Fill the fields tasks-axi would keep in metadata from bd's own columns,
+   * for an issue that has no `tasks_axi` metadata. Only used then: once
+   * tasks-axi has written an issue its metadata stays authoritative.
+   */
+  private readNativeFields(issue: BdIssue, task: Task): void {
+    if (
+      typeof issue.priority === "number" &&
+      Number.isInteger(issue.priority) &&
+      issue.priority >= 0 &&
+      issue.priority <= 4
+    ) {
+      task.priority = issue.priority;
+    }
+    // bd's default type is `task`, which carries no information; any other
+    // type (bug, feature, epic, chore, ...) is the task's kind.
+    if (typeof issue.issue_type === "string" && issue.issue_type !== "task") {
+      if (/^[^\s()]+$/.test(issue.issue_type)) task.kind = issue.issue_type;
+    }
+    const created = localDate(issue.created_at);
+    if (created) task.created = created;
+    if (task.state === "done") {
+      const closed = localDate(issue.closed_at);
+      if (closed) task.closed = closed;
+    }
   }
 
   /** Build the authoritative `tasks_axi` metadata payload for a task. */

@@ -916,3 +916,121 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore id prefix", () => {
     IT_TIMEOUT,
   );
 });
+
+describe.skipIf(!BD_AVAILABLE)("BeadsStore native beads", () => {
+  let bl: TempBeadsBacklog;
+  const bd = (...args: string[]): string =>
+    execFileSync("bd", args, {
+      cwd: bl.dir,
+      env: { ...process.env, BEADS_DIR: join(bl.dir, ".beads") },
+      encoding: "utf8",
+    });
+  // The local date of a bd UTC timestamp, computed independently of the store.
+  const localDay = (stamp: string): string => {
+    const d = new Date(stamp);
+    return [
+      d.getFullYear(),
+      String(d.getMonth() + 1).padStart(2, "0"),
+      String(d.getDate()).padStart(2, "0"),
+    ].join("-");
+  };
+  const showJson = (id: string): { created_at: string; closed_at?: string } => {
+    const parsed = JSON.parse(bd("show", id, "--json")) as unknown;
+    return (Array.isArray(parsed) ? parsed[0] : parsed) as {
+      created_at: string;
+      closed_at?: string;
+    };
+  };
+
+  beforeAll(() => {
+    bl = makeBeadsBacklog();
+    bd(
+      "create",
+      "--title",
+      "native bug",
+      "--id",
+      "tst-nat1",
+      "-t",
+      "bug",
+      "-p",
+      "0",
+      "--silent",
+    );
+    bd("create", "--title", "native plain", "--id", "tst-nat2", "--silent");
+    bd(
+      "create",
+      "--title",
+      "native closed",
+      "--id",
+      "tst-nat3",
+      "-t",
+      "feature",
+      "-p",
+      "3",
+      "--silent",
+    );
+    bd("close", "tst-nat3", "--reason", "finished natively");
+  }, HOOK_TIMEOUT);
+  afterAll(() => bl.cleanup());
+
+  it(
+    "reads priority, issue type and dates from bd for an untouched issue",
+    async () => {
+      const bug = await bl.store.get("tst-nat1");
+      expect(bug).toMatchObject({
+        state: "queued",
+        kind: "bug",
+        priority: 0,
+        created: localDay(showJson("tst-nat1").created_at),
+      });
+      expect(bug?.closed).toBeUndefined();
+
+      const plain = await bl.store.get("tst-nat2");
+      expect(plain?.kind).toBeUndefined();
+      expect(plain?.priority).toBe(2);
+
+      const closed = await bl.store.get("tst-nat3");
+      expect(closed).toMatchObject({
+        state: "done",
+        kind: "feature",
+        priority: 3,
+        closed: localDay(showJson("tst-nat3").closed_at as string),
+      });
+    },
+    IT_TIMEOUT,
+  );
+
+  it(
+    "keeps the native values, with no fabricated date, after a tasks-axi write",
+    async () => {
+      const before = await bl.store.get("tst-nat1");
+      const started = await bl.store.transition("tst-nat1", "in_flight", {
+        date: "2030-01-01",
+      });
+      expect(started).toMatchObject({
+        state: "in_flight",
+        kind: "bug",
+        priority: 0,
+        created: before?.created,
+      });
+      const reread = await new BeadsStore({
+        dir: bl.dir,
+        now: () => "2030-01-01",
+      }).get("tst-nat1");
+      expect(reread).toMatchObject({ kind: "bug", priority: 0 });
+      expect(reread?.created).toBe(before?.created);
+    },
+    IT_TIMEOUT,
+  );
+
+  it(
+    "does not mistake bd's default priority for one on tasks-axi-written issues",
+    async () => {
+      const created = await bl.store.create({ id: "nat-own", title: "mine" });
+      expect(created.priority).toBeUndefined();
+      expect((await bl.store.get("nat-own"))?.priority).toBeUndefined();
+      expect((await bl.store.get("nat-own"))?.kind).toBeUndefined();
+    },
+    IT_TIMEOUT,
+  );
+});
