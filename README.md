@@ -9,17 +9,17 @@
 
 Task and backlog manager for agents — designed with [AXI](https://github.com/kunchenguid/axi) (Agent eXperience Interface).
 
-tasks-axi makes a tiny structured change to a human-readable backlog at near-zero output-token cost.
-It edits a hand-editable `backlog.md` in place with a byte-exact round-trip, so the markdown stays the source of truth while long task bodies never bloat a `list`.
+tasks-axi makes a tiny structured change to a backlog at near-zero output-token cost.
+Its default Markdown backend edits a hand-editable `backlog.md` in place with a byte-exact round-trip, so the markdown stays the source of truth while long task bodies never bloat a `list`.
 It borrows the dependency-graph and ready-query model from [beads](https://github.com/gastownhall/beads), adds structured dispatch holds, and keeps the house style from its `*-axi` siblings - token-efficient TOON output, contextual next-step suggestions, idempotent mutations, and structured errors.
 
 ## Why
 
-Every backlog mutation today regenerates markdown through the model, which is expensive output tokens and risks dropped, duplicated, or reordered items.
+Every Markdown-backlog mutation used to regenerate the file through the model, which is expensive output tokens and risks dropped, duplicated, or reordered items.
 tasks-axi reduces that to the length of one short command plus a compact confirmation read back as cheap input.
 The long status line that the model used to rewrite on every status change is now a `body`.
 Note writes are inspect-then-update: read the current body with `show <id> --full`, then replace it deliberately with `update --body` or `update --body-file`.
-Pass `--archive-body` with a body replacement when the superseded body should be moved to cold history in `note-archive.md`.
+Pass `--archive-body` with a body replacement to preserve the superseded body; the backend-specific archive behavior is described below.
 
 ## Quick Start
 
@@ -286,7 +286,7 @@ When `[markdown] path` (or `--file` / `TASKS_AXI_FILE`) is set, after every muta
 Hand-edits to the mirror are overwritten; mutate through tasks-axi (or `bd`, then `tasks-axi render` to refresh the mirror).
 tasks-axi fields that beads has no column for (kind, repo, holds, canonical dates, dependency reasons) live in a `tasks_axi` object inside each issue's metadata; a hold with `--until` also sets bd's defer date.
 With no mirror configured, nothing is written beside the workspace; `prune` archives surplus Done tasks to `done-archive.md` only when a mirror (or `[markdown] archive`) is set, and hides them from tasks-axi with a metadata flag while beads retains the full record.
-`--archive-body` preserves the superseded body both in `note-archive.md` (the shared file contract) and as a bd comment on the issue, so the history stays visible from bd-native views.
+`--archive-body` always preserves the superseded body as a bd comment, so the history stays visible from bd-native views; when a mirror configures `note-archive.md`, it also writes the shared dated archive block there.
 `create`, `update`, and every state transition are verified by reading the task back from bd and comparing the persisted fields, so a bd invocation that exits 0 without applying the change surfaces as a structured error instead of silent divergence.
 bd stores one relationship type per task pair, so adding a `blocked-by` edge to an id that already carries a `parent` or `discovered-from` edge (or vice versa) fails with a `VALIDATION_ERROR` naming the existing edge; remove that edge first.
 `ready`/`blocked`/`held` stay derived by the CLI from the dependency graph, so they are correct even where `bd ready` itself is not (bd 1.2.2 mis-reads blockers on issues whose id prefix differs from the database prefix).

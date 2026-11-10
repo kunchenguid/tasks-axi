@@ -697,7 +697,7 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore mutation read-back", () => {
         "#!/usr/bin/env node",
         'const { spawnSync } = require("node:child_process");',
         'const args = process.argv.slice(2);',
-        'if (args[0] === "update" && args.includes("--metadata") && args.some((arg) => arg.includes("\\\"archived\\\":true"))) process.exit(0);',
+        'if (args[0] === "update" && args.includes("--metadata") && args.some((arg) => arg.includes("\\"archived\\":true"))) process.exit(0);',
         'const result = spawnSync("bd", args, { stdio: "inherit" });',
         "process.exit(result.status ?? 1);",
         "",
