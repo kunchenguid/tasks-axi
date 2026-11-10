@@ -48,6 +48,8 @@ export interface ResolvedConfig {
     bin?: string;
     /** Issue-id prefix of the workspace; when set, other ids are rejected. */
     prefix?: string;
+    /** How long a mutation waits on another's lock, in ms (default 30000). */
+    lockTimeoutMs?: number;
   };
 }
 
@@ -72,6 +74,7 @@ interface TomlConfig {
     bin?: string;
     binary?: string;
     prefix?: string;
+    lock_timeout_ms?: number;
   };
 }
 
@@ -83,7 +86,7 @@ type ConfigTable = "root" | "markdown" | "beads" | "unsupported";
  * Minimal TOML reader for the tiny config surface we need: a top-level
  * `backend` key, a `[markdown]` table with `path` / `archive` / `done_keep`,
  * and a `[beads]` table with `dir` (alias `path`) / `bin` (alias `binary`) /
- * `prefix`.
+ * `prefix` / `lock_timeout_ms`.
  * `archive` points at the file that receives pruned tasks.
  * Intentionally not a general TOML parser.
  */
@@ -123,6 +126,17 @@ export function parseConfigToml(src: string): TomlConfig {
     }
     if (table === "beads") {
       config.beads ??= {};
+      if (key === "lock_timeout_ms") {
+        if (typeof value !== "number") {
+          throw new AxiError(
+            "beads.lock_timeout_ms must be an integer",
+            "VALIDATION_ERROR",
+            ["Set `[beads] lock_timeout_ms = 30000` in .tasks.toml"],
+          );
+        }
+        config.beads.lock_timeout_ms = value;
+        continue;
+      }
       if (
         key === "dir" ||
         key === "path" ||
@@ -184,7 +198,8 @@ function configKeySource(table: ConfigTable, key: string): string | undefined {
       key === "path" ||
       key === "bin" ||
       key === "binary" ||
-      key === "prefix")
+      key === "prefix" ||
+      key === "lock_timeout_ms")
   ) {
     return `beads.${key}`;
   }
@@ -361,6 +376,18 @@ function resolveBeadsConfig(
   }
   const prefix = pick("prefix", undefined);
   if (prefix) beads.prefix = validatePrefix(prefix.value);
+  const lockTimeout =
+    projectToml.beads?.lock_timeout_ms ?? homeToml.beads?.lock_timeout_ms;
+  if (lockTimeout !== undefined) {
+    if (!Number.isSafeInteger(lockTimeout) || lockTimeout < 0) {
+      throw new AxiError(
+        "beads.lock_timeout_ms must be a non-negative integer",
+        "VALIDATION_ERROR",
+        ["Set `[beads] lock_timeout_ms = 30000` in .tasks.toml"],
+      );
+    }
+    beads.lockTimeoutMs = lockTimeout;
+  }
   return Object.keys(beads).length > 0 ? beads : undefined;
 }
 

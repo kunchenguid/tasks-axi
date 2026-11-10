@@ -865,6 +865,49 @@ describe.skipIf(!BD_AVAILABLE)("BeadsStore without a mirror", () => {
   );
 });
 
+describe.skipIf(!BD_AVAILABLE)("BeadsStore lock wait", () => {
+  let bl: TempBeadsBacklog;
+  beforeAll(() => {
+    bl = makeBeadsBacklog();
+  }, HOOK_TIMEOUT);
+  afterAll(() => bl.cleanup());
+
+  it(
+    "queues parallel writers on the default wait instead of failing",
+    async () => {
+      const a = new BeadsStore({ dir: bl.dir, now: () => "2026-07-01" });
+      const b = new BeadsStore({ dir: bl.dir, now: () => "2026-07-01" });
+      await Promise.all([
+        a.create({ id: "lk-a1", title: "from a" }),
+        b.create({ id: "lk-b1", title: "from b" }),
+        a.create({ id: "lk-a2", title: "also a" }),
+      ]);
+      const ids = (await a.list({})).items.map((t) => t.id);
+      expect(ids).toEqual(expect.arrayContaining(["lk-a1", "lk-b1", "lk-a2"]));
+    },
+    IT_TIMEOUT * 3,
+  );
+
+  it(
+    "fails with LOCKED once a configured wait runs out",
+    async () => {
+      const holder = new BeadsStore({ dir: bl.dir, now: () => "2026-07-01" });
+      const impatient = new BeadsStore({
+        dir: bl.dir,
+        lockTimeoutMs: 50,
+        now: () => "2026-07-01",
+      });
+      const held = holder.create({ id: "lk-c1", title: "slow writer" });
+      await expect(
+        impatient.create({ id: "lk-c2", title: "gives up" }),
+      ).rejects.toMatchObject({ code: "LOCKED" });
+      await held;
+      expect(await impatient.get("lk-c2")).toBeNull();
+    },
+    IT_TIMEOUT,
+  );
+});
+
 describe.skipIf(!BD_AVAILABLE)("BeadsStore id prefix", () => {
   let bl: TempBeadsBacklog;
   beforeAll(() => {

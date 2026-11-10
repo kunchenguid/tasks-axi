@@ -283,6 +283,38 @@ describe("resolveConfig", () => {
     );
   });
 
+  it("reads beads lock_timeout_ms, project over home", () => {
+    mkdirSync(join(home, ".tasks-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".tasks-axi", "config.toml"),
+      "[beads]\nlock_timeout_ms = 5000\n",
+    );
+    expect(
+      resolveConfig({ cwd: dir, home, env: {} }).beads?.lockTimeoutMs,
+    ).toBe(5000);
+    writeFileSync(
+      join(dir, ".tasks.toml"),
+      "[beads]\nlock_timeout_ms = 120000\n",
+    );
+    expect(
+      resolveConfig({ cwd: dir, home, env: {} }).beads?.lockTimeoutMs,
+    ).toBe(120000);
+  });
+
+  it("rejects a negative or non-integer beads lock_timeout_ms", () => {
+    writeFileSync(join(dir, ".tasks.toml"), "[beads]\nlock_timeout_ms = -1\n");
+    expect(() => resolveConfig({ cwd: dir, home, env: {} })).toThrow(
+      /beads.lock_timeout_ms/,
+    );
+    writeFileSync(
+      join(dir, ".tasks.toml"),
+      '[beads]\nlock_timeout_ms = "soon"\n',
+    );
+    expect(() => resolveConfig({ cwd: dir, home, env: {} })).toThrow(
+      /beads.lock_timeout_ms/,
+    );
+  });
+
   it.each(["", "   "])("rejects an empty beads binary %#", (value) => {
     writeFileSync(join(dir, ".tasks.toml"), `[beads]\nbinary = "${value}"\n`);
     expect(() => resolveConfig({ cwd: dir, home, env: {} })).toThrow(

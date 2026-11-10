@@ -85,8 +85,10 @@ import {
  *
  * Mutations serialize under an advisory lock (the mirror path's, or a
  * temp-dir lock keyed by bin and workspace when there is no mirror) and fail
- * closed with LOCKED on contention, like the markdown backend; reads stay
- * lock-free.
+ * closed with LOCKED once `lockTimeoutMs` runs out, like the markdown
+ * backend; reads stay lock-free. One mutation is several bd calls (seconds), so
+ * the wait defaults to well above that and parallel writers queue instead of
+ * needing a caller retry.
  * bd-native writers bypass this lock, so a raw `bd create --id X --force`
  * racing tasks-axi can still silently overwrite an existing issue.
  */
@@ -126,6 +128,11 @@ export interface BeadsStoreOptions {
   now?: () => string;
   /** Per-bd-invocation timeout in milliseconds (default 60s). */
   timeoutMs?: number;
+  /**
+   * How long a mutation waits for another tasks-axi process's mutation to
+   * finish before failing with LOCKED, in milliseconds (default 30s).
+   */
+  lockTimeoutMs?: number;
 }
 
 interface BdDependency {
@@ -170,6 +177,9 @@ interface BeadsCache {
   /** Every bd issue including archived ones, for id-collision checks. */
   rawIds: Set<string>;
 }
+
+/** Well above one mutation's handful of bd calls, so writers queue. */
+const DEFAULT_LOCK_TIMEOUT_MS = 30_000;
 
 const ORDER: State[] = ["in_flight", "queued", "done"];
 const HEADERS: Record<State, string> = {
@@ -270,6 +280,7 @@ export class BeadsStore implements Store {
   private readonly lockPath: string;
   private readonly now: () => string;
   private readonly timeoutMs: number;
+  private readonly lockTimeoutMs: number;
   private cache?: BeadsCache;
 
   constructor(options: BeadsStoreOptions) {
@@ -309,6 +320,7 @@ export class BeadsStore implements Store {
     this.lockPath = this.mirrorPath ?? this.workspaceLockPath();
     this.now = options.now ?? today;
     this.timeoutMs = options.timeoutMs ?? 60_000;
+    this.lockTimeoutMs = options.lockTimeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS;
   }
 
   /**
@@ -704,10 +716,14 @@ export class BeadsStore implements Store {
    * contention like the markdown backend; reads stay lock-free.
    */
   private mutate<T>(fn: () => Promise<T>): Promise<T> {
-    return withLock(this.lockPath, () => {
-      this.invalidate();
-      return fn();
-    });
+    return withLock(
+      this.lockPath,
+      () => {
+        this.invalidate();
+        return fn();
+      },
+      { timeoutMs: this.lockTimeoutMs },
+    );
   }
 
   /**
