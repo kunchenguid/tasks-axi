@@ -38,6 +38,7 @@ The CLI layer never knows which backend is active — it only talks to the `Stor
 - **Concurrency:** every mutation runs under `withLock` (advisory `<path>.lock`) and fails closed with a `LOCKED` error if another process holds the lock past the bounded timeout.
   If the lock looks stale, the error tells the user to remove `<path>.lock` only after confirming no `tasks-axi` process is running.
   Corruption-safety is guaranteed independently by atomic temp-file + rename writes, and a hand-edit landing between read and write is detected and refused.
+  `Store.transition` decides already-vs-fresh on the task reread under the lock and returns `{ task, already, changed }`; commands render that result and never branch on an earlier unlocked read, so racing `start`/`done`/`reopen` callers cannot both report a fresh transition.
   Reads do not lock.
 
 ## Conventions

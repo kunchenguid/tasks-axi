@@ -145,6 +145,16 @@ export interface TaskUpdateResult {
   changed: TaskUpdateChange[];
 }
 
+/** Result of a state transition, decided under the backend's write lock. */
+export interface TransitionResult {
+  /** The task after the transition, or the existing task when it was already there. */
+  task: Task;
+  /** True when the task was already in the target state when the lock was taken. */
+  already: boolean;
+  /** True when anything was written: the transition itself or backfilled done metadata. */
+  changed: boolean;
+}
+
 /** Options for a state transition. */
 export interface TransitionOpts {
   /** PR url to record (done). */

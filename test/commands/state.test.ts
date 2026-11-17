@@ -67,6 +67,24 @@ describe("state commands", () => {
       }
     });
 
+    it("reports exactly one fresh start when two start calls race", async () => {
+      const b = makeBacklog();
+      try {
+        holdPreLockReads(b.store, "cert-cleanup", 2);
+        const outputs = await Promise.all([
+          startCommand(["cert-cleanup", "--json"], b.ctx),
+          startCommand(["cert-cleanup", "--json"], b.ctx),
+        ]);
+        const results = outputs.map(
+          (out) => JSON.parse(out) as { already?: boolean },
+        );
+        expect(results.filter((r) => r.already === true)).toHaveLength(1);
+        expect(results.filter((r) => r.already === undefined)).toHaveLength(1);
+      } finally {
+        b.cleanup();
+      }
+    });
+
     it("emits a machine-readable task with --json", async () => {
       const b = makeBacklog();
       try {
@@ -358,11 +376,11 @@ describe("state commands", () => {
     it("preserves body edits made before an already-done note update", async () => {
       const b = makeBacklog();
       try {
-        const originalUpdate = b.store.update.bind(
+        const originalTransition = b.store.transition.bind(
           b.store,
-        ) as typeof b.store.update;
+        ) as typeof b.store.transition;
         let injected = false;
-        b.store.update = async (taskId, patch) => {
+        b.store.transition = async (taskId, to, opts) => {
           if (!injected) {
             injected = true;
             writeFileSync(
@@ -376,7 +394,7 @@ describe("state commands", () => {
               "utf8",
             );
           }
-          return originalUpdate(taskId, patch);
+          return originalTransition(taskId, to, opts);
         };
 
         await doneCommand(
@@ -409,6 +427,43 @@ describe("state commands", () => {
           b.ctx,
         );
         expect(b.read().match(/retry-safe note/g)).toHaveLength(1);
+      } finally {
+        b.cleanup();
+      }
+    });
+
+    it("reports exactly one fresh close when two done --pr calls race", async () => {
+      const b = makeBacklog();
+      try {
+        await startCommand(["cert-cleanup"], b.ctx);
+        holdPreLockReads(b.store, "cert-cleanup", 2);
+        const outputs = await Promise.all([
+          doneCommand(
+            [
+              "cert-cleanup",
+              "--pr",
+              "https://github.com/o/r/pull/101",
+              "--json",
+              "--no-prune",
+            ],
+            b.ctx,
+          ),
+          doneCommand(
+            [
+              "cert-cleanup",
+              "--pr",
+              "https://github.com/o/r/pull/202",
+              "--json",
+              "--no-prune",
+            ],
+            b.ctx,
+          ),
+        ]);
+        const results = outputs.map(
+          (out) => JSON.parse(out) as { already?: boolean },
+        );
+        expect(results.filter((r) => r.already === true)).toHaveLength(1);
+        expect(results.filter((r) => r.already === undefined)).toHaveLength(1);
       } finally {
         b.cleanup();
       }
@@ -1224,3 +1279,31 @@ describe("state commands", () => {
     });
   });
 });
+
+/**
+ * Make the first `count` reads of `id` wait for each other, so every racing
+ * caller finishes its unlocked read before any of them takes the lock.
+ */
+function holdPreLockReads(
+  store: MakeBacklogStore,
+  id: string,
+  count: number,
+): void {
+  const realGet = store.get.bind(store) as typeof store.get;
+  let arrivals = 0;
+  let release!: () => void;
+  const allRead = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  store.get = async (taskId) => {
+    const task = await realGet(taskId);
+    if (taskId === id && arrivals < count) {
+      arrivals += 1;
+      if (arrivals === count) release();
+      else await allRead;
+    }
+    return task;
+  };
+}
+
+type MakeBacklogStore = ReturnType<typeof makeBacklog>["store"];

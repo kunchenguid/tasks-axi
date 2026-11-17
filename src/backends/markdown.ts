@@ -20,6 +20,7 @@ import type {
   TaskUpdateChange,
   TaskUpdateResult,
   TransitionOpts,
+  TransitionResult,
 } from "../model.js";
 import { HOLD_KINDS } from "../model.js";
 import { PR_URL_EXPECTED } from "../pr-url.js";
@@ -957,7 +958,7 @@ export class MarkdownStore implements Store {
     id: string,
     to: State,
     opts: TransitionOpts = {},
-  ): Promise<Task> {
+  ): Promise<TransitionResult> {
     return withLock(this.path, () => {
       const loaded = this.loadForUpdate();
       const { doc } = loaded;
@@ -966,6 +967,12 @@ export class MarkdownStore implements Store {
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
 
       const task = found.entry.task;
+      // Decide already-vs-fresh on the state reread under the lock, never on a
+      // caller's earlier unlocked read, so racing callers cannot both win.
+      if (task.state === to) {
+        if (to !== "done") return { task, already: true, changed: false };
+        return this.backfillDone(loaded, found.entry, opts);
+      }
       if (isPublicFollowupTask(task)) {
         throw new AxiError(
           "Public-followup state cannot change through generic transitions",
@@ -1011,8 +1018,51 @@ export class MarkdownStore implements Store {
       this.insert(this.section(doc, to), moved, to !== "queued");
 
       this.persist(loaded);
-      return task;
+      return { task, already: false, changed: true };
     });
+  }
+
+  /**
+   * `done` on an already-Done task: keep the original closed date and backfill
+   * only supplied links and non-duplicate notes. Runs inside `transition`'s lock.
+   */
+  private backfillDone(
+    loaded: LoadedBacklogDoc,
+    entry: TaskEntry,
+    opts: TransitionOpts,
+  ): TransitionResult {
+    const task = entry.task;
+    const links: TaskLink[] = [];
+    if (opts.pr !== undefined) links.push({ kind: "pr", url: opts.pr });
+    if (opts.report !== undefined) {
+      links.push({ kind: "report", url: opts.report });
+    }
+    if (isPublicFollowupTask(task) && (links.length > 0 || opts.note)) {
+      throw new AxiError(
+        "Public-followup content and holds cannot change through generic update",
+        "VALIDATION_ERROR",
+        ["Create a successor obligation when the public promise changes"],
+      );
+    }
+    let changed = false;
+    if (opts.note && !bodyHasLine(task.body, opts.note)) {
+      task.body = addBodyLine(task.body, opts.note);
+      changed = true;
+    }
+    for (const link of links) {
+      const title = appendTitleLink(task.title, link);
+      if (task.title !== title) {
+        task.title = title;
+        changed = true;
+      }
+    }
+    if (!changed) return { task, already: true, changed: false };
+
+    task.links = deriveLinks(task.title);
+    task.updated = this.now();
+    entry.dirty = true;
+    this.persist(loaded);
+    return { task, already: true, changed: true };
   }
 
   async updatePublicFollowup(

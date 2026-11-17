@@ -28,8 +28,6 @@ import type {
   HoldKind,
   Task,
   TaskInput,
-  TaskLink,
-  TaskPatch,
 } from "../model.js";
 import { HOLD_KINDS } from "../model.js";
 import {
@@ -126,8 +124,7 @@ export async function startCommand(
   const current = await store.get(id);
   if (!current) throw notFound(id, { globals: context?.suggestionGlobals });
 
-  const already = current.state === "in_flight";
-  const task = already ? current : await store.transition(id, "in_flight");
+  const { task, already } = await store.transition(id, "in_flight");
   const all = (await store.list({})).items;
   return renderMutation({
     json,
@@ -178,54 +175,24 @@ export async function doneCommand(
   if (report !== undefined) opts.report = report;
   if (note !== undefined) opts.note = note;
 
-  if (current.state === "done") {
-    const patch = doneMetadataPatch(pr, report, note);
-    const hasPatch = Object.keys(patch).length > 0;
-    let task = current;
-    let changed = false;
-    if (hasPatch) {
-      const result = await store.update(id, patch);
-      task = result.task;
-      changed = result.changed.length > 0;
-    }
-    const pruned = await pruneDone(store, keep, noPrune);
-    const all = (await store.list({})).items;
-    return renderMutation({
-      json,
-      confirm: `done ${id} already -> ${stateLabel(task.state)}${doneExtras(pr, report)}${prunedNote(pruned)}`,
-      already: true,
-      jsonPayload: {
-        ok: true,
-        action: "done",
-        already: true,
-        pruned,
-        task: taskToJson(task, all),
-      },
-      ...(changed
-        ? { detail: renderTaskDetail(task, all, false, showFullTextHint(task)) }
-        : {}),
-      suggestions: getSuggestions({
-        action: "done",
-        id,
-        state: task.state,
-        globals: context?.suggestionGlobals,
-      }),
-    });
-  }
-
-  const task = await store.transition(id, "done", opts);
+  const { task, already, changed } = await store.transition(id, "done", opts);
   const pruned = await pruneDone(store, keep, noPrune);
   const all = (await store.list({})).items;
 
   return renderMutation({
     json,
-    confirm: `done ${id} -> ${stateLabel(task.state)}${doneExtras(pr, report)}${prunedNote(pruned)}`,
+    confirm: `done ${id}${already ? " already" : ""} -> ${stateLabel(task.state)}${doneExtras(pr, report)}${prunedNote(pruned)}`,
+    ...(already ? { already: true } : {}),
     jsonPayload: {
       ok: true,
       action: "done",
+      ...(already ? { already: true } : {}),
       pruned,
       task: taskToJson(task, all),
     },
+    ...(already && changed
+      ? { detail: renderTaskDetail(task, all, false, showFullTextHint(task)) }
+      : {}),
     suggestions: getSuggestions({
       action: "done",
       id,
@@ -265,20 +232,6 @@ async function pruneDone(
   return result.archived;
 }
 
-function doneMetadataPatch(
-  pr: string | undefined,
-  report: string | undefined,
-  note: string | undefined,
-): TaskPatch {
-  const patch: TaskPatch = {};
-  const addLinks: TaskLink[] = [];
-  if (pr !== undefined) addLinks.push({ kind: "pr", url: pr });
-  if (report !== undefined) addLinks.push({ kind: "report", url: report });
-  if (addLinks.length > 0) patch.addLinks = addLinks;
-  if (note !== undefined) patch.addBodyLines = [note];
-  return patch;
-}
-
 export async function reopenCommand(
   rawArgs: string[],
   context?: TasksContext,
@@ -297,8 +250,7 @@ export async function reopenCommand(
   const current = await store.get(id);
   if (!current) throw notFound(id, { globals: context?.suggestionGlobals });
 
-  const already = current.state === "queued";
-  const task = already ? current : await store.transition(id, "queued");
+  const { task, already } = await store.transition(id, "queued");
   const all = (await store.list({})).items;
   return renderMutation({
     json,
