@@ -22,13 +22,7 @@ import {
 import { AxiError, notFound } from "../errors.js";
 import { formatCountLine } from "../format.js";
 import { validateDependencyId } from "../id.js";
-import type {
-  Dep,
-  Hold,
-  HoldKind,
-  Task,
-  TaskInput,
-} from "../model.js";
+import type { Dep, Hold, HoldKind, Task, TaskInput } from "../model.js";
 import { HOLD_KINDS } from "../model.js";
 import {
   PUBLIC_FOLLOWUP_KIND,
