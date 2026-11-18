@@ -8,6 +8,7 @@ import type {
   TaskUpdateResult,
   TaskQuery,
   TransitionOpts,
+  TransitionResult,
 } from "./model.js";
 
 /**
@@ -67,7 +68,15 @@ export interface Store {
   list(query: TaskQuery): Promise<{ items: Task[]; total: number }>;
 
   // state + dependencies
-  transition(id: string, to: State, opts?: TransitionOpts): Promise<Task>;
+  /**
+   * Move a task to `to`. Whether it was already there is decided under the
+   * write lock, so concurrent callers never both report a fresh transition.
+   */
+  transition(
+    id: string,
+    to: State,
+    opts?: TransitionOpts,
+  ): Promise<TransitionResult>;
   addDep(id: string, dep: Dep): Promise<boolean>;
   removeDep(id: string, dep: Dep): Promise<boolean>;
 

@@ -655,7 +655,7 @@ describe("MarkdownStore", () => {
     it("moves queued -> in_flight and stamps since", async () => {
       const b = makeBacklog();
       try {
-        const task = await b.store.transition("cert-cleanup", "in_flight");
+        const { task } = await b.store.transition("cert-cleanup", "in_flight");
         expect(task.state).toBe("in_flight");
         const read = b.read();
         // In-flight renders in firstmate's `- [ ]` checkbox form (same bullet as
@@ -669,7 +669,7 @@ describe("MarkdownStore", () => {
     it("carries a multi-paragraph body through start (queued -> in_flight)", async () => {
       const b = makeBacklog(multiParaQueued);
       try {
-        const task = await b.store.transition("multi-para", "in_flight");
+        const { task } = await b.store.transition("multi-para", "in_flight");
         expect(task.body).toContain("Second paragraph after a blank.");
         expect(task.body).toContain("## Intent");
         expect(task.body).toContain("final line");
@@ -717,7 +717,7 @@ describe("MarkdownStore", () => {
       ].join("\n");
       const b = makeBacklog(seeded);
       try {
-        const task = await b.store.transition("multi-para", "done", {
+        const { task } = await b.store.transition("multi-para", "done", {
           note: "closed note",
         });
         expect(task.body).toContain("Second paragraph after a blank.");
@@ -744,7 +744,7 @@ describe("MarkdownStore", () => {
     it("moves to done, records the pr link and a merged stamp", async () => {
       const b = makeBacklog();
       try {
-        const task = await b.store.transition("cert-cleanup", "done", {
+        const { task } = await b.store.transition("cert-cleanup", "done", {
           pr: "https://github.com/o/r/pull/7",
         });
         expect(task.state).toBe("done");
@@ -762,7 +762,7 @@ describe("MarkdownStore", () => {
         "# Backlog\n\n## Queued\n- [ ] task-q1 - title https://github.com/o/r/pull/10\n\n## Done\n",
       );
       try {
-        const task = await b.store.transition("task-q1", "done", {
+        const { task } = await b.store.transition("task-q1", "done", {
           pr: "https://github.com/o/r/pull/1",
         });
         expect(task.links).toContainEqual({
