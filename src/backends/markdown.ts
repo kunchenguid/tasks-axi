@@ -962,7 +962,6 @@ export class MarkdownStore implements Store {
     return withLock(this.path, () => {
       const loaded = this.loadForUpdate();
       const { doc } = loaded;
-      this.ensureSections(doc);
       const found = this.findEntry(doc, id);
       if (!found) throw new AxiError(`Task "${id}" not found`, "NOT_FOUND");
 
@@ -973,6 +972,7 @@ export class MarkdownStore implements Store {
         if (to !== "done") return { task, already: true, changed: false };
         return this.backfillDone(loaded, found.entry, opts);
       }
+      this.ensureSections(doc);
       if (isPublicFollowupTask(task)) {
         throw new AxiError(
           "Public-followup state cannot change through generic transitions",

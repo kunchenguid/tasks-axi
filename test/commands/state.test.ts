@@ -485,6 +485,24 @@ describe("state commands", () => {
         b.cleanup();
       }
     });
+
+    it("backfills an already-done note without adding missing sections", async () => {
+      const b = makeBacklog(
+        "# Backlog\n\n## Done\n- [x] done-q1 - title (done 2026-07-01)\n",
+      );
+      try {
+        const out = await doneCommand(
+          ["done-q1", "--note", "evidence", "--no-prune"],
+          b.ctx,
+        );
+        expect(out).toContain("already: true");
+        expect(b.read()).toBe(
+          "# Backlog\n\n## Done\n- [x] done-q1 - title (done 2026-07-01)\n  evidence\n",
+        );
+      } finally {
+        b.cleanup();
+      }
+    });
   });
 
   describe("reopen", () => {
